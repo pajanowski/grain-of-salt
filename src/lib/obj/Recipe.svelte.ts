@@ -23,6 +23,10 @@
 		constructor(body: string) {
 			this.body = body;
 		}
+
+    static Empty(): Direction {
+      return new Direction('')
+    }
 	}
 
 	export class Recipe {

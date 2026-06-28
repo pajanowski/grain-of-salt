@@ -1,1 +1,12 @@
 @import "tailwindcss";
+
+button {
+	@apply bg-amber-300;
+	@apply border-2;
+	@apply max-w-32;
+  @apply w-full;
+}
+
+input {
+  @apply border-2
+}
