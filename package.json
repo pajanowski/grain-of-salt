@@ -16,7 +16,7 @@
     "test": "npm run test:unit -- --run && npm run test:e2e",
     "test:e2e": "playwright install && playwright test",
     "db:start": "docker compose up",
-    "db:seed": "deno task db:seed",
+    "db:seed": "tsx scripts/seed.ts",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -26,10 +26,12 @@
     "@tailwindcss/vite": "^4.3.1",
     "bits-ui": "^2.18.1",
     "tailwindcss": "^4.3.1",
+    "typescript-svelte-plugin": "^0.3.52",
     "uuid": "^14.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "tsx": "^4.19.0",
     "@playwright/test": "^1.60.0",
     "@sveltejs/adapter-auto": "^7.0.1",
     "@sveltejs/kit": "^2.63.0",
