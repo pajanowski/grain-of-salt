@@ -9,7 +9,7 @@
 	<ul>
 		{#each recipes as rec}
 			<li>
-				<a href="/recipes/{rec}">{rec}</a>
+				<a href="/recipes/{rec.id}">{rec.name}</a>
 			</li>
 		{/each}
 	</ul>

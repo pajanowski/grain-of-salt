@@ -1,13 +1,11 @@
 import { readFileSync } from "fs";
 import type { Actions, PageServerLoad } from './$types';
 import { writeFile, readdir } from 'fs/promises';
+import {getCompleteRecipeById } from '$lib/server/db/queries';
 
 export const load: PageServerLoad = async ({ params }) => {
-  // const files = await readdir('src/lib/assets');
-  // const recipes = files.filter((f) => f.endsWith('.json'));
-  const recipeJson = readFileSync(`./src/lib/assets/${params.slug}`, 'utf8')
-  const recipe = JSON.parse(recipeJson);
-  return { recipe, fileName: params.slug }
+  const recipe = await getCompleteRecipeById(params.slug) as Recipe;
+  return { recipe, recipeId: recipe.id }
 };
 
 export const actions = {

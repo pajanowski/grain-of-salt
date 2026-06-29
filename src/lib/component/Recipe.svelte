@@ -3,7 +3,8 @@
 	import { Direction, Ingredient, Recipe } from '../obj/Recipe.svelte.ts';
 	import doughJson from '../assets/dough.json';
 
-	const { recipe, fileName } = $props();
+	const { recipe, recipeId } = $props();
+	console.log(recipe, recipeId);
 	let addingIngredient = $state(false);
 	let addingDirection = $state(false);
 	let newIngredient = $state(Ingredient.Empty());
