@@ -1,13 +1,10 @@
 <script lang="ts">
+	import { EmptyDirection, EmptyIngredient } from '$lib/obj/Recipe.svelte';
 	import { v4 as uuid } from 'uuid';
 
 	const { recipe } = $props();
-	const emptyIngredient = () => ({ id: uuid(), name: '', amount: 0, unit: '' });
-	const emptyDirection = () => ({ id: uuid(), body: '' });
 
-	let recipeData = $state(
-		JSON.parse(JSON.stringify(recipe))
-	);
+	let recipeData = $state(JSON.parse(JSON.stringify(recipe)));
 
 	$effect(() => {
 		recipeData = JSON.parse(JSON.stringify(recipe));
@@ -15,8 +12,8 @@
 	const recipeId = recipeData.id;
 	let addingIngredient = $state(false);
 	let addingDirection = $state(false);
-	let newIngredient = $state(emptyIngredient());
-	let newDirection = $state(emptyDirection());
+	let newIngredient = $state(EmptyIngredient());
+	let newDirection = $state(EmptyDirection());
 	let savePromise = $state(Promise.resolve());
 	let saveResolve: (value: void) => void;
 </script>
@@ -38,7 +35,7 @@
 		class="flat-button"
 		onclick={() => {
 			if (!addingIngredient) {
-				newIngredient = emptyIngredient();
+				newIngredient = EmptyIngredient();
 			}
 			addingIngredient = !addingIngredient;
 		}}>Add new ingredient</button
@@ -62,7 +59,7 @@
 				onclick={() => {
 					recipeData.ingredients.push(newIngredient);
 					addingIngredient = !addingIngredient;
-					newIngredient = emptyIngredient();
+					newIngredient = EmptyIngredient();
 				}}>Add</button
 			>
 		</form>
@@ -80,7 +77,7 @@
 		class="flat-button"
 		onclick={() => {
 			if (!addingDirection) {
-				newDirection = emptyDirection();
+				newDirection = EmptyDirection();
 			}
 			addingDirection = !addingDirection;
 		}}>Add new direction</button
@@ -96,7 +93,7 @@
 				onclick={() => {
 					recipeData.directions.push(newDirection);
 					addingDirection = !addingDirection;
-					newDirection = emptyDirection();
+					newDirection = EmptyDirection();
 				}}>Add</button
 			>
 		</form>

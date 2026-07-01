@@ -4,32 +4,26 @@ import { db } from './index';
 import { recipes, ingredients, directions } from './schema';
 import type { SelectRecipe } from './schema';
 import type { InferSelectModel } from 'drizzle-orm';
+import { type Ingredient, type Direction, type Recipe, NewIngredient, NewDirection, NewRecipe } from '$lib/obj/Recipe.svelte';
 
 export type RecipeDTO = InferSelectModel<typeof recipes>
 export type IngredientDTO = InferSelectModel<typeof ingredients>;
 export type DirectionDTO = InferSelectModel<typeof directions>;
 
-export type IngredientPOJO = { id: string; name: string; amount: number; unit: string };
-export type DirectionPOJO = { id: string; body: string };
-export type RecipePOJO = { id: string; name: string; ingredients: IngredientPOJO[]; directions: DirectionPOJO[] };
-
-function toUiIngredient(row: IngredientDTO) {
-  return {
-    id: row.id ?? uuid(),
-    name: row.name,
-    amount: row.amount != null ? Number(row.amount) : 0,
-    unit: row.unit ?? ''
-  };
+function toUiIngredient(row: IngredientDTO): Ingredient {
+  return NewIngredient(
+    row.id,
+    row.name,
+    row.amount != null ? Number(row.amount) : 0,
+    row.unit ?? ''
+  );
 }
 
-function toUiDirection(row: DirectionDTO) {
-  return {
-    id: row.id ?? uuid(),
-    body: row.body
-  };
+function toUiDirection(row: DirectionDTO): Direction {
+  return NewDirection(row.id, row.body);
 }
 
-function toDbIngredient(ing: IngredientPOJO, recipeId: string): IngredientDTO {
+function toDbIngredient(ing: Ingredient, recipeId: string): IngredientDTO {
   return {
     id: ing.id || null,
     recipeId,
@@ -39,7 +33,7 @@ function toDbIngredient(ing: IngredientPOJO, recipeId: string): IngredientDTO {
   };
 }
 
-function toDbDirection(dir: DirectionPOJO, recipeId: string): DirectionDTO {
+function toDbDirection(dir: Direction, recipeId: string): DirectionDTO {
   return {
     id: dir.id || null,
     recipeId,
@@ -55,12 +49,12 @@ export async function getRecipeById(id: string) {
   return db.select().from(recipes).where(eq(recipes.id, id)).limit(1);
 }
 
-export async function getIngredientsByRecipeId(recipeId: string): Promise<IngredientPOJO[]> {
+export async function getIngredientsByRecipeId(recipeId: string): Promise<Ingredient[]> {
   const result = await db.select().from(ingredients).where(eq(ingredients.recipeId, recipeId));
   return result.map(toUiIngredient);
 }
 
-export async function getDirectionsByRecipeId(recipeId: string): Promise<DirectionPOJO[]> {
+export async function getDirectionsByRecipeId(recipeId: string): Promise<Direction[]> {
   const result = await db.select().from(directions).where(eq(directions.recipeId, recipeId));
   return result.map(toUiDirection);
 }
@@ -83,12 +77,12 @@ export async function getCompleteRecipeById(id: string) {
   };
 }
 
-export async function saveRecipe(recipe: RecipePOJO): Promise<RecipePOJO> {
+export async function saveRecipe(recipe: Recipe): Promise<Recipe> {
   await db.delete(ingredients).where(eq(ingredients.recipeId, recipe.id));
   await db.delete(directions).where(eq(directions.recipeId, recipe.id));
 
-  const ingredientRows = recipe.ingredients.map((ing: IngredientPOJO) => toDbIngredient(ing, recipe.id));
-  const directionRows = recipe.directions.map((dir: DirectionPOJO) => toDbDirection(dir, recipe.id));
+  const ingredientRows = recipe.ingredients.map(ing => toDbIngredient(ing, recipe.id));
+  const directionRows = recipe.directions.map(dir => toDbDirection(dir, recipe.id));
 
   let insertedIngredients: IngredientDTO[] = [];
   let insertedDirections: DirectionDTO[] = [];
@@ -103,10 +97,10 @@ export async function saveRecipe(recipe: RecipePOJO): Promise<RecipePOJO> {
     insertedDirections = result;
   }
 
-  return {
-    id: recipe.id,
-    name: recipe.name,
-    ingredients: insertedIngredients.map(toUiIngredient),
-    directions: insertedDirections.map(toUiDirection)
-  };
+  return NewRecipe(
+    recipe.name,
+    recipe.id,
+    insertedIngredients.map(toUiIngredient),
+    insertedDirections.map(toUiDirection)
+  );
 }

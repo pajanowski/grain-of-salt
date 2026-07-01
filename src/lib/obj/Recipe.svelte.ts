@@ -1,47 +1,58 @@
 import { v4 as uuid } from 'uuid';
 
-export class Ingredient {
+export interface Ingredient {
   id: string;
   name: string;
   amount: number;
   unit: string;
 
-  constructor(id: string | null, name: string, amount: number, unit: string) {
-    this.id = id ?? uuid();
-    this.name = name;
-    this.amount = amount;
-    this.unit = unit;
-  }
+}
 
-  static Empty(): Ingredient {
-    return new Ingredient(null, '', 0, '');
+export function NewIngredient(id: string | null, name: string, amount: number, unit: string) {
+  return {
+    id: id ?? uuid(),
+    name,
+    amount,
+    unit
+
   }
 }
 
-export class Direction {
+export function EmptyIngredient(): Ingredient {
+  return NewIngredient(null, '', 0, '');
+}
+
+export interface Direction {
   id: string;
   body: string;
-
-  constructor(id: string | null, body: string) {
-    this.id = id ?? uuid();
-    this.body = body;
-  }
-
-  static Empty(): Direction {
-    return new Direction(null, '');
+}
+export function NewDirection(id: string | null, body: string) {
+  return {
+    id: id ?? uuid(),
+    body
   }
 }
 
-export class Recipe {
+export function EmptyDirection(): Direction {
+  return NewDirection(null, '');
+}
+
+export interface Recipe {
   id: string;
   name: string;
   ingredients: Ingredient[];
   directions: Direction[];
+}
 
-  constructor(name: string, id?: string, ingredients: Ingredient[] = [], directions: Direction[] = []) {
-    this.id = id ?? uuid();
-    this.name = name;
-    this.ingredients = ingredients;
-    this.directions = directions;
+export function NewRecipe(name: string, id?: string, ingredients: Ingredient[] = [], directions: Direction[] = []) {
+  return {
+    id: id ?? uuid(),
+    name,
+    ingredients,
+    directions
   }
+}
+
+export function EmptyRecipe(): Recipe {
+  return NewRecipe("");
 }
