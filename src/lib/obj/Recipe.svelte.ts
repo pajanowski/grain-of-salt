@@ -1,41 +1,47 @@
-	import { v4 as uuid } from 'uuid';
+import { v4 as uuid } from 'uuid';
 
-	export class Ingredient {
-		id: string = uuid();
-		name: string;
-		amount: number;
-		unit: string;
-		constructor(name: string, amount: number, unit: string) {
-			this.id = uuid();
-			this.name = name;
-			this.amount = amount;
-			this.unit = unit;
-		}
+export class Ingredient {
+  id: string;
+  name: string;
+  amount: number;
+  unit: string;
 
-		static Empty(): Ingredient {
-			return new Ingredient('', 0, '');
-		}
-	}
+  constructor(id: string | null, name: string, amount: number, unit: string) {
+    this.id = id ?? uuid();
+    this.name = name;
+    this.amount = amount;
+    this.unit = unit;
+  }
 
-	export class Direction {
-		id: string = uuid();
-		body: string;
-		constructor(body: string) {
-			this.body = body;
-		}
+  static Empty(): Ingredient {
+    return new Ingredient(null, '', 0, '');
+  }
+}
 
-    static Empty(): Direction {
-      return new Direction('')
-    }
-	}
+export class Direction {
+  id: string;
+  body: string;
 
-	export class Recipe {
-		id: string = uuid();
-		name: string;
-		ingredients: Ingredient[] = $state([]);
-		directions: Direction[] = [];
+  constructor(id: string | null, body: string) {
+    this.id = id ?? uuid();
+    this.body = body;
+  }
 
-		constructor(name: string) {
-			this.name = name;
-		}
-	}
+  static Empty(): Direction {
+    return new Direction(null, '');
+  }
+}
+
+export class Recipe {
+  id: string;
+  name: string;
+  ingredients: Ingredient[];
+  directions: Direction[];
+
+  constructor(name: string, id?: string, ingredients: Ingredient[] = [], directions: Direction[] = []) {
+    this.id = id ?? uuid();
+    this.name = name;
+    this.ingredients = ingredients;
+    this.directions = directions;
+  }
+}

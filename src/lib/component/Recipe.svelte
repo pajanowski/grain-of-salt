@@ -1,39 +1,32 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import { Direction, Ingredient, Recipe } from '../obj/Recipe.svelte.ts';
-	import doughJson from '../assets/dough.json';
+	import { v4 as uuid } from 'uuid';
 
-	const { recipe, recipeId } = $props();
-	console.log(recipe, recipeId);
+	const { recipe } = $props();
+	const emptyIngredient = () => ({ id: uuid(), name: '', amount: 0, unit: '' });
+	const emptyDirection = () => ({ id: uuid(), body: '' });
+
+	let recipeData = $state(
+		JSON.parse(JSON.stringify(recipe))
+	);
+
+	$effect(() => {
+		recipeData = JSON.parse(JSON.stringify(recipe));
+	});
+	const recipeId = recipeData.id;
 	let addingIngredient = $state(false);
 	let addingDirection = $state(false);
-	let newIngredient = $state(Ingredient.Empty());
-	let newDirection = $state(Direction.Empty());
+	let newIngredient = $state(emptyIngredient());
+	let newDirection = $state(emptyDirection());
 	let savePromise = $state(Promise.resolve());
 	let saveResolve: (value: void) => void;
-
-	function submitWhileSaving() {
-		return async ({ update }: { update: () => Promise<void> }) => {
-			savePromise = Promise.resolve();
-			await update();
-		};
-	}
-
-	function submitToSave() {
-		savePromise = new Promise((resolve) => (saveResolve = resolve));
-		return async ({ update }: { update: () => Promise<void> }) => {
-			saveResolve();
-			await update();
-		};
-	}
 </script>
 
 <div class="flex flex-col gap-2">
-	<h1>Recipe: {recipe.name}</h1>
+	<h1>Recipe: {recipeData.name}</h1>
 	<h2>Ingredients</h2>
 
 	<ol class="list-decimal list-inside">
-		{#each recipe.ingredients as ing (ing.id)}
+		{#each recipeData.ingredients as ing (ing.id)}
 			<li>
 				<span>{ing.name}</span>
 				<span>{ing.amount}</span>
@@ -45,7 +38,7 @@
 		class="flat-button"
 		onclick={() => {
 			if (!addingIngredient) {
-				newIngredient = Ingredient.Empty();
+				newIngredient = emptyIngredient();
 			}
 			addingIngredient = !addingIngredient;
 		}}>Add new ingredient</button
@@ -67,9 +60,9 @@
 			<button
 				type="button"
 				onclick={() => {
-					recipe.ingredients.push(newIngredient);
+					recipeData.ingredients.push(newIngredient);
 					addingIngredient = !addingIngredient;
-					newIngredient = Ingredient.Empty();
+					newIngredient = emptyIngredient();
 				}}>Add</button
 			>
 		</form>
@@ -77,7 +70,7 @@
 
 	<h2>Directions</h2>
 	<ol class="list-decimal list-inside">
-		{#each recipe.directions as dir (dir.id)}
+		{#each recipeData.directions as dir (dir.id)}
 			<li>
 				{dir.body}
 			</li>
@@ -87,7 +80,7 @@
 		class="flat-button"
 		onclick={() => {
 			if (!addingDirection) {
-				newDirection = Direction.Empty();
+				newDirection = emptyDirection();
 			}
 			addingDirection = !addingDirection;
 		}}>Add new direction</button
@@ -101,9 +94,9 @@
 			<button
 				type="button"
 				onclick={() => {
-					recipe.directions.push(newDirection);
+					recipeData.directions.push(newDirection);
 					addingDirection = !addingDirection;
-					newDirection = Direction.Empty();
+					newDirection = emptyDirection();
 				}}>Add</button
 			>
 		</form>
@@ -117,7 +110,7 @@
 				savePromise = new Promise((resolve) => (saveResolve = resolve));
 				fetch('/api/save', {
 					method: 'PUT',
-					body: new URLSearchParams({ recipe: JSON.stringify(recipe), fileName })
+					body: new URLSearchParams({ recipe: JSON.stringify(recipeData), recipeId })
 				}).then(() => {
 					saveResolve();
 				});

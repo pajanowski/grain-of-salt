@@ -6,14 +6,14 @@ export const task = pgTable('task', {
   priority: integer('priority').notNull().default(1)
 });
 
-export const recipe = pgTable('recipe', {
+export const recipes = pgTable('recipes', {
   id: uuid('id').primaryKey(),
   name: text('name').notNull(),
 })
 
 export const ingredients = pgTable('ingredients', {
   id: uuid().defaultRandom(),
-  recipeId: uuid().references(() => recipe.id),
+  recipeId: uuid().references(() => recipes.id),
   name: text('name').notNull(),
   amount: numeric('amount'),
   unit: text('unit'),
@@ -22,9 +22,9 @@ export const ingredients = pgTable('ingredients', {
 
 export const directions = pgTable('directions', {
   id: uuid().defaultRandom(),
-  recipeId: uuid().references(() => recipe.id),
+  recipeId: uuid().references(() => recipes.id),
   body: text('body').notNull(),
 })
 
-export type InsertRecipe = typeof recipe.$inferInsert;
-export type SelectRecipe = typeof recipe.$inferSelect;
+export type InsertRecipe = typeof recipes.$inferInsert;
+export type SelectRecipe = typeof recipes.$inferSelect;

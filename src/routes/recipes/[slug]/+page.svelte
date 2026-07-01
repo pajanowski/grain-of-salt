@@ -2,8 +2,10 @@
 	import Recipe from '$lib/component/Recipe.svelte';
 
 	const { data } = $props();
+	console.log(data);
+	let recipe = $derived(data.recipe);
 </script>
 
 <div class="max-w-200">
-	<Recipe recipe={data.recipe} fileName={data.fileName} />
+	<Recipe {recipe} />
 </div>

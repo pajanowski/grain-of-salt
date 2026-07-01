@@ -2,7 +2,7 @@ import 'dotenv/config';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { v4 as uuidv4 } from 'uuid';
-import { recipe, ingredients, directions } from '../src/lib/server/db/schema.js';
+import { ingredients, directions, recipes } from '../src/lib/server/db/schema.js';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error('DATABASE_URL is not set');
@@ -16,10 +16,10 @@ async function seed() {
   // Clear existing data
   await db.delete(directions);
   await db.delete(ingredients);
-  await db.delete(recipe);
+  await db.delete(recipes);
 
   // Create sample recipes
-  const recipes = [
+  const seedRecipes = [
     {
       id: uuidv4(),
       name: 'Classic Pancakes',
@@ -30,10 +30,10 @@ async function seed() {
     },
   ];
 
-  await db.insert(recipe).values(recipes);
+  await db.insert(recipes).values(seedRecipes);
 
-  const recipe1Id = recipes[0].id;
-  const recipe2Id = recipes[1].id;
+  const recipe1Id = seedRecipes[0].id;
+  const recipe2Id = seedRecipes[1].id;
 
   // Add ingredients
   const ingredientData = [

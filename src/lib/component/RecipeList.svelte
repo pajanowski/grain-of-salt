@@ -5,7 +5,7 @@
 </script>
 
 <div class="flex flex-col">
-	<h1>Recipe List</h1>
+	<h1><a href="/">Recipe List</a></h1>
 	<ul>
 		{#each recipes as rec}
 			<li>

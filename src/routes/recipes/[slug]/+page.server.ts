@@ -1,20 +1,17 @@
-import { readFileSync } from "fs";
-import type { Actions, PageServerLoad } from './$types';
-import { writeFile, readdir } from 'fs/promises';
-import {getCompleteRecipeById } from '../../../lib/server/db/queries';
+import type { PageServerLoad } from './$types';
+import { getCompleteRecipeById } from '../../../lib/server/db/queries';
 
-export const load: PageServerLoad = async ({ params }) => {
-  const recipe = await getCompleteRecipeById(params.slug) as Recipe;
-  return { recipe, recipeId: recipe.id }
+type RecipePOJO = {
+	id: string;
+	name: string;
+	ingredients: { id: string; name: string; amount: number; unit: string }[];
+	directions: { id: string; body: string }[];
 };
 
-export const actions = {
-  save: async ({ request }) => {
-    const data = await request.formData();
-    console.log(request)
-    const recipe = data.get('recipe') as string;
-    const fileName = data.get('fileName') as string;
-    await writeFile(`src/lib/assets/${fileName}`, recipe);
-    return { success: true };
+export const load: PageServerLoad = async ({ params }) => {
+  const recipe = await getCompleteRecipeById(params.slug);
+  if (!recipe) {
+    throw new Error('Recipe not found');
   }
-} satisfies Actions;
+  return { recipe: recipe as RecipePOJO };
+}
