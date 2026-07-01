@@ -77,6 +77,13 @@ export async function getCompleteRecipeById(id: string) {
   };
 }
 
+export async function saveNewRecipe(recipe: Recipe): Promise<Recipe> {
+  recipe.id = uuid();
+  const insertResult = await db.insert(recipes).values(recipe);
+  const ret = insertResult[0];
+  return ret;
+}
+
 export async function saveRecipe(recipe: Recipe): Promise<Recipe> {
   await db.delete(ingredients).where(eq(ingredients.recipeId, recipe.id));
   await db.delete(directions).where(eq(directions.recipeId, recipe.id));

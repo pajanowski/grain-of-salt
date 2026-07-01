@@ -1,11 +1,12 @@
 import type { RequestHandler } from './$types';
-import type { Recipe } from '$lib/obj/Recipe.svelte';
+import { NewRecipe, type Recipe } from '$lib/obj/Recipe.svelte';
 import { saveNewRecipe, updateRecipe } from '$lib/server/bo/recipesbo';
 
 export const POST: RequestHandler = async ({ request }) => {
   const data = await request.formData();
-  const recipe: Recipe = JSON.parse(data.get('recipe') as string)
-  const ret = await saveNewRecipe(recipe)
+  const recipeName = data.get('recipeName') as string;
+  const newRecipe = NewRecipe(recipeName)
+  const ret = await saveNewRecipe(newRecipe);
   return new Response(JSON.stringify(ret));
 }
 

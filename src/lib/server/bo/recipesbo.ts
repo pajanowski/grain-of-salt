@@ -1,9 +1,9 @@
 import type { Recipe } from "$lib/obj/Recipe.svelte";
-import { saveRecipe } from "../db/queries";
+import { saveRecipe, saveNewRecipe as saveNewRecipeDb } from "../db/queries";
 
 export async function saveNewRecipe(recipe: Recipe): Promise<Recipe> {
   recipe.id = ""
-  return await saveRecipe(recipe)
+  return await saveNewRecipeDb(recipe)
 }
 
 export async function updateRecipe(recipe: Recipe): Promise<Recipe> {

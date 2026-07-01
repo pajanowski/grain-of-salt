@@ -1,6 +1,4 @@
-import { readdir } from "fs/promises";
 import type { PageServerLoad } from "./$types";
-import { db } from "$lib/server/db";
 import { getAllRecipes } from "$lib/server/db/queries";
 
 export const load: PageServerLoad = async () => {
