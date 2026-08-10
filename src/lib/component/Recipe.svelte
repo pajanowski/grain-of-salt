@@ -106,7 +106,7 @@
 			onclick={() => {
 				savePromise = new Promise((resolve) => (saveResolve = resolve));
 				fetch('/api/save', {
-					method: 'POST',
+					method: 'PUT',
 					body: new URLSearchParams({ recipe: JSON.stringify(recipeData), recipeId })
 				}).then(() => {
 					saveResolve();

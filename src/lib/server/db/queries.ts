@@ -111,3 +111,9 @@ export async function saveRecipe(recipe: Recipe): Promise<Recipe> {
     insertedDirections.map(toUiDirection)
   );
 }
+
+export async function deleteRecipe(recipeId: string): Promise<void> {
+  await db.delete(ingredients).where(eq(ingredients.recipeId, recipeId));
+  await db.delete(directions).where(eq(directions.recipeId, recipeId));
+  await db.delete(recipes).where(eq(recipes.id, recipeId));
+}

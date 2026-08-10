@@ -23,3 +23,7 @@ export const PUT: RequestHandler = async ({ request }) => {
     })
   }
 };
+
+export const DELETE: RequestHandler = async ({ request }) => {
+  return new Response()
+};

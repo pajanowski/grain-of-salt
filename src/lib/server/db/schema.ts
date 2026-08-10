@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, uuid, foreignKey, numeric } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, text, uuid, foreignKey, numeric, type AnyPgColumn } from 'drizzle-orm/pg-core';
 
 export const task = pgTable('task', {
   id: serial('id').primaryKey(),
@@ -21,9 +21,15 @@ export const ingredients = pgTable('ingredients', {
 
 
 export const directions = pgTable('directions', {
-  id: uuid().defaultRandom(),
+  id: uuid().defaultRandom().primaryKey(),
   recipeId: uuid().references(() => recipes.id),
   body: text('body').notNull(),
+})
+
+export const recipeNodes = pgTable('recipe_nodes', {
+  id: uuid().defaultRandom(),
+  parentId: uuid().references((): AnyPgColumn => recipeNodes.id),
+  name: text('name').notNull(),
 })
 
 export type InsertRecipe = typeof recipes.$inferInsert;
