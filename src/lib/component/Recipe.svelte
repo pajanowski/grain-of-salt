@@ -9,7 +9,10 @@
 	$effect(() => {
 		recipeData = JSON.parse(JSON.stringify(recipe));
 	});
-	const recipeId = recipeData.id;
+	// recipeData.id is the root node id; recipeData.recipeId is the FK
+	// into the recipes table that updateRecipeState expects.
+	const rootNodeId = recipeData.id;
+	const recipeId = recipeData.recipeId;
 	let addingIngredient = $state(false);
 	let addingDirection = $state(false);
 	let newIngredient = $state(EmptyIngredient());
@@ -107,7 +110,11 @@
 				savePromise = new Promise((resolve) => (saveResolve = resolve));
 				fetch('/api/save', {
 					method: 'PUT',
-					body: new URLSearchParams({ recipe: JSON.stringify(recipeData), recipeId })
+					body: new URLSearchParams({
+						recipe: JSON.stringify(recipeData),
+						recipeId,
+						rootNodeId,
+					})
 				}).then(() => {
 					saveResolve();
 				});

@@ -1,4 +1,6 @@
-import { pgTable, serial, integer, text, uuid, foreignKey, numeric, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, text, uuid, timestamp, jsonb, type AnyPgColumn, check } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import type { IngredientChange, DirectionChange } from '../../obj/RecipeNode.svelte';
 
 export const task = pgTable('task', {
   id: serial('id').primaryKey(),
@@ -11,26 +13,42 @@ export const recipes = pgTable('recipes', {
   name: text('name').notNull(),
 })
 
-export const ingredients = pgTable('ingredients', {
-  id: uuid().defaultRandom(),
-  recipeId: uuid().references(() => recipes.id),
-  name: text('name').notNull(),
-  amount: numeric('amount'),
-  unit: text('unit'),
-})
-
-
-export const directions = pgTable('directions', {
-  id: uuid().defaultRandom().primaryKey(),
-  recipeId: uuid().references(() => recipes.id),
-  body: text('body').notNull(),
-})
-
+/**
+ * One node in a recipe's history. Forms a singly-linked list per recipe
+ * via parentId. The head (parentId = null) is the recipe's initial state.
+ *
+ * Hierarchy: a recipe's ROOT node may carry a `parentNodeId` pointing to
+ * the tail node of its parent recipe — making this recipe a "child" of
+ * that one. Null on top-level recipes and on non-root nodes.
+ *
+ * The `name` field is denormalized — every node in a recipe carries the
+ * same recipe name — so the API can answer "what recipe is this node
+ * part of?" without joining through the recipes table.
+ *
+ * NOTE: The `recipes` table and the `recipeId` column on this table are
+ * slated for removal in a future migration. Once that happens, a recipe's
+ * identity becomes the root node's id, and "list all recipes" becomes
+ * "select all nodes where parentId is null."
+ */
 export const recipeNodes = pgTable('recipe_nodes', {
-  id: uuid().defaultRandom(),
-  parentId: uuid().references((): AnyPgColumn => recipeNodes.id),
+  id: uuid('id').defaultRandom().primaryKey(),
+  recipeId: uuid('recipe_id').notNull().references(() => recipes.id, { onDelete: 'cascade' }),
+  parentId: uuid('parent_id').references((): AnyPgColumn => recipeNodes.id, { onDelete: 'cascade' }),
+  parentNodeId: uuid('parent_node_id').references((): AnyPgColumn => recipeNodes.id, { onDelete: 'set null' }),
   name: text('name').notNull(),
-})
+  label: text('label'),
+  timestamp: timestamp('timestamp', { withTimezone: true }).notNull().defaultNow(),
+  ingredientChanges: jsonb('ingredient_changes').$type<IngredientChange[]>().notNull().default([]),
+  directionChanges: jsonb('direction_changes').$type<DirectionChange[]>().notNull().default([]),
+}, (table) => ({
+  // parentNodeId may only be set on roots (parentId is null).
+  parentNodeOnlyOnRoot: check(
+    'parent_node_only_on_root',
+    sql`${table.parentNodeId} IS NULL OR ${table.parentId} IS NULL`,
+  ),
+}));
 
 export type InsertRecipe = typeof recipes.$inferInsert;
 export type SelectRecipe = typeof recipes.$inferSelect;
+export type InsertRecipeNode = typeof recipeNodes.$inferInsert;
+export type SelectRecipeNode = typeof recipeNodes.$inferSelect;

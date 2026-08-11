@@ -16,7 +16,7 @@
 
 <div class="flex flex-row gap-4 p-4">
 	<div class="flex flex-col gap-2">
-		<RecipeList recipes={data.recipes} />
+		<RecipeList recipeTree={data.recipeTree} />
 		{#if createRecipe}
 			<div class="flex flex-col gap-2">
 				<form>

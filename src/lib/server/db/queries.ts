@@ -1,45 +1,14 @@
 import { eq } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
 import { db } from './index';
-import { recipes, ingredients, directions } from './schema';
+import { recipes } from './schema';
 import type { SelectRecipe } from './schema';
-import type { InferSelectModel } from 'drizzle-orm';
-import { type Ingredient, type Direction, type Recipe, NewIngredient, NewDirection, NewRecipe } from '$lib/obj/Recipe.svelte';
-
-export type RecipeDTO = InferSelectModel<typeof recipes>
-export type IngredientDTO = InferSelectModel<typeof ingredients>;
-export type DirectionDTO = InferSelectModel<typeof directions>;
-
-function toUiIngredient(row: IngredientDTO): Ingredient {
-  return NewIngredient(
-    row.id,
-    row.name,
-    row.amount != null ? Number(row.amount) : 0,
-    row.unit ?? ''
-  );
-}
-
-function toUiDirection(row: DirectionDTO): Direction {
-  return NewDirection(row.id, row.body);
-}
-
-function toDbIngredient(ing: Ingredient, recipeId: string): IngredientDTO {
-  return {
-    id: ing.id || null,
-    recipeId,
-    name: ing.name,
-    amount: String(ing.amount),
-    unit: ing.unit || null
-  };
-}
-
-function toDbDirection(dir: Direction, recipeId: string): DirectionDTO {
-  return {
-    id: dir.id || null,
-    recipeId,
-    body: dir.body
-  };
-}
+import { type Recipe } from '$lib/obj/Recipe.svelte';
+import {
+  createRootRecipeNode,
+  getRecipeState,
+  type RecipeState,
+} from '../bo/recipenodesbo';
 
 export async function getAllRecipes(): Promise<SelectRecipe[]> {
   return db.select().from(recipes);
@@ -49,71 +18,47 @@ export async function getRecipeById(id: string) {
   return db.select().from(recipes).where(eq(recipes.id, id)).limit(1);
 }
 
-export async function getIngredientsByRecipeId(recipeId: string): Promise<Ingredient[]> {
-  const result = await db.select().from(ingredients).where(eq(ingredients.recipeId, recipeId));
-  return result.map(toUiIngredient);
-}
-
-export async function getDirectionsByRecipeId(recipeId: string): Promise<Direction[]> {
-  const result = await db.select().from(directions).where(eq(directions.recipeId, recipeId));
-  return result.map(toUiDirection);
-}
-
-export async function getCompleteRecipeById(id: string) {
-  const [recipeResult, ingredientsResult, directionsResult] = await Promise.all([
-    getRecipeById(id),
-    getIngredientsByRecipeId(id),
-    getDirectionsByRecipeId(id)
-  ]);
-
+/**
+ * Returns the recipe metadata plus the materialized state derived from
+ * replaying the recipe's node history.
+ */
+export async function getCompleteRecipeById(id: string): Promise<(SelectRecipe & RecipeState) | null> {
+  const recipeResult = await getRecipeById(id);
   const recipeData = recipeResult[0];
   if (!recipeData) return null;
 
+  const state = await getRecipeState(id);
   return {
-    id: recipeData.id,
-    name: recipeData.name,
-    ingredients: ingredientsResult,
-    directions: directionsResult
+    ...recipeData,
+    ingredients: state.ingredients,
+    directions: state.directions,
   };
 }
 
+/**
+ * Insert a new recipe row AND its initial (empty) root node, so the history
+ * is well-formed from the start.
+ */
 export async function saveNewRecipe(recipe: Recipe): Promise<Recipe> {
   recipe.id = uuid();
-  const insertResult = await db.insert(recipes).values(recipe);
-  const ret = insertResult[0];
-  return ret;
+  await db.insert(recipes).values({ id: recipe.id, name: recipe.name });
+  await createRootRecipeNode(recipe.id, recipe.name);
+  return recipe;
 }
 
-export async function saveRecipe(recipe: Recipe): Promise<Recipe> {
-  await db.delete(ingredients).where(eq(ingredients.recipeId, recipe.id));
-  await db.delete(directions).where(eq(directions.recipeId, recipe.id));
-
-  const ingredientRows = recipe.ingredients.map(ing => toDbIngredient(ing, recipe.id));
-  const directionRows = recipe.directions.map(dir => toDbDirection(dir, recipe.id));
-
-  let insertedIngredients: IngredientDTO[] = [];
-  let insertedDirections: DirectionDTO[] = [];
-
-  if (ingredientRows.length) {
-    const result = await db.insert(ingredients).values(ingredientRows).returning();
-    insertedIngredients = result;
-  }
-
-  if (directionRows.length) {
-    const result = await db.insert(directions).values(directionRows).returning();
-    insertedDirections = result;
-  }
-
-  return NewRecipe(
-    recipe.name,
-    recipe.id,
-    insertedIngredients.map(toUiIngredient),
-    insertedDirections.map(toUiDirection)
+/**
+ * @deprecated Update goes through `updateRecipeState` in recipenodesbo, which
+ * diffs the incoming recipe against the materialized current state and
+ * appends a node to the history. This stub is kept for type compatibility
+ * only.
+ */
+export async function saveRecipe(_recipe: Recipe): Promise<Recipe> {
+  throw new Error(
+    'saveRecipe is no longer the source of truth. Use updateRecipeState from $lib/server/bo/recipenodesbo.'
   );
 }
 
 export async function deleteRecipe(recipeId: string): Promise<void> {
-  await db.delete(ingredients).where(eq(ingredients.recipeId, recipeId));
-  await db.delete(directions).where(eq(directions.recipeId, recipeId));
+  // The ON DELETE CASCADE on recipe_nodes.recipe_id handles node cleanup.
   await db.delete(recipes).where(eq(recipes.id, recipeId));
 }
