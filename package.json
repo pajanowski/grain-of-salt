@@ -19,7 +19,7 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:migrate-to-nodes": "tsx scripts/migrate-to-recipe-nodes.ts",
     "db:drop-legacy-tables": "tsx scripts/drop-legacy-tables.ts",
-    "db:push": "drizzle-kit push",
+    "db:push": "drizzle-kit push --force",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio"

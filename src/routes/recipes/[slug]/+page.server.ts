@@ -97,7 +97,8 @@ async function resolveParentChain(root: RecipeNode): Promise<Array<{ id: string;
   return chain;
 }
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ depends, params }) => {
+  depends('app:recipe');
   const root = await resolveRoot(params.slug);
   if (!root) {
     throw new Error('Recipe not found');

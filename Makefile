@@ -85,6 +85,11 @@ db-fresh: db-push db-seed          ## push schema, then seed (assumes empty db)
 .PHONY: db-reset
 db-reset:                          ## drop and recreate the postgres volume, then push + seed
 	docker compose down -v
+	docker compose up -d
+	@echo "Waiting for postgres to accept connections..."
+	@until docker exec grain-of-salt-svelte-db-1 pg_isready -h localhost >/dev/null 2>&1; do \
+		sleep 1; \
+	done
 	pnpm db:push
 	pnpm db:seed
 
