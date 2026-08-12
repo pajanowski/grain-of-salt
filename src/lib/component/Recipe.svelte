@@ -12,9 +12,16 @@
 		recipeData = JSON.parse(JSON.stringify(recipe));
 	});
 	// recipeData.id is the root node id; recipeData.recipeId is the FK
-	// into the recipes table that updateRecipeState expects.
-	const rootNodeId = recipeData.id;
-	const recipeId = recipeData.recipeId;
+	// into the recipes table that updateRecipeState expects. These must be
+	// derived (not captured `const`s) because SvelteKit reuses the same
+	// Recipe component instance across SPA navigations between recipe
+	// pages; a captured `const` would point at whichever recipe was first
+	// loaded, and a Save issued after navigating to a different recipe
+	// would write its diff against the original recipe's id. Use $derived
+	// so the values re-resolve whenever recipeData is reassigned by the
+	// effect above.
+	const rootNodeId = $derived(recipeData.id);
+	const recipeId = $derived(recipeData.recipeId);
 	let addingIngredient = $state(false);
 	let addingDirection = $state(false);
 	let newIngredient = $state(EmptyIngredient());
@@ -61,7 +68,7 @@
 	<h1>Recipe: {recipeData.name}</h1>
 	<h2>Ingredients</h2>
 
-	<ol class="list-decimal list-inside">
+	<ol class="list-decimal list-inside" data-testid="ingredient-list">
 		{#each recipeData.ingredients as ing, i (ing.id)}
 			<IngredientRow
 				ingredient={ing}
@@ -86,15 +93,15 @@
 		<form class="flex flex-col">
 			<label>
 				Name
-				<input bind:value={newIngredient.name} />
+				<input placeholder="Name" aria-label="Name" bind:value={newIngredient.name} />
 			</label>
 			<label>
 				Amount
-				<input bind:value={newIngredient.amount} />
+				<input placeholder="Amount" aria-label="Amount" bind:value={newIngredient.amount} />
 			</label>
 			<label>
 				Unit
-				<input bind:value={newIngredient.unit} />
+				<input placeholder="Unit" aria-label="Unit" bind:value={newIngredient.unit} />
 			</label>
 			<button
 				type="button"
@@ -108,7 +115,7 @@
 	{/if}
 
 	<h2>Directions</h2>
-	<ol class="list-decimal list-inside">
+	<ol class="list-decimal list-inside" data-testid="direction-list">
 		{#each recipeData.directions as dir, i (dir.id)}
 			<DirectionRow
 				direction={dir}
@@ -133,7 +140,7 @@
 		<form class="flex flex-col gap-2">
 			<label>
 				Body
-				<input bind:value={newDirection.body} />
+				<input placeholder="Body" aria-label="Body" bind:value={newDirection.body} />
 			</label>
 			<button
 				type="button"
