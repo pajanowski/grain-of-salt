@@ -23,6 +23,9 @@ install:                           ## install dependencies
 dev:                               ## start the dev server
 	pnpm dev
 
+.PHONY: run
+run: dev                           ## alias for `make dev`
+
 .PHONY: build
 build:                             ## production build
 	pnpm build

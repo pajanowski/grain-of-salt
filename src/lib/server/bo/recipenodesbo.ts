@@ -407,12 +407,19 @@ export interface RecipeTreeNode extends RecipeSummary {
 }
 
 /**
- * Build the recipe hierarchy for the list UI. Each recipe's tail node id is
+ * Build the recipe hierarchy for the list UI. Each recipe's chain is
+ * identified by its root node id and its most recent (tail) node id is
  * included so child recipes (which point at parentNodeId) can be linked.
  *
+ * Children's `parentNodeId` may point at ANY node in the parent's chain,
+ * not just the tail. As a chain grows (via save), the tail changes but the
+ * old `parentNodeId` references still need to resolve. So we index every
+ * node id by its owning recipe id, then resolve each child's
+ * `parentNodeId` to the parent recipe via that index.
+ *
  * One query: SELECT root nodes (parentId IS NULL) plus a per-recipe latest
- * node lookup. For larger datasets, switch to a single query that fetches
- * all nodes and walks in memory.
+ * node lookup and a node-id → recipe-id lookup. For larger datasets,
+ * switch to a single query that fetches all nodes and walks in memory.
  */
 export async function getRecipeTree(): Promise<RecipeTreeNode[]> {
   const rows: SelectRecipeNode[] = await db
@@ -437,22 +444,34 @@ export async function getRecipeTree(): Promise<RecipeTreeNode[]> {
     }),
   );
 
-  // Index by tailId so we can wire up children by parentNodeId.
-  const byParentTailId = new Map<string, RecipeSummary>();
-  for (const s of summaries) {
-    if (s.tailId) byParentTailId.set(s.tailId, s);
+  // Index every node id by its owning recipe id. This lets us resolve a
+  // child's `parentNodeId` (which may point at any node in the parent's
+  // chain, including a stale tail) back to the parent recipe.
+  const nodeRows: SelectRecipeNode[] = await db
+    .select({ id: recipeNodes.id, recipeId: recipeNodes.recipeId })
+    .from(recipeNodes);
+  const nodeIdToRecipeId = new Map<string, string>();
+  for (const r of nodeRows) {
+    nodeIdToRecipeId.set(r.id, r.recipeId);
   }
 
-  // Group children under their parent.
+  // Index summaries by recipe id so we can resolve a parent recipe from
+  // a node id.
+  const summaryByRecipeId = new Map<string, RecipeSummary>();
+  for (const s of summaries) {
+    summaryByRecipeId.set(s.recipeId, s);
+  }
+
+  // Group children under their parent recipe.
   const childrenByParent = new Map<string, RecipeSummary[]>();
   const topLevel: RecipeSummary[] = [];
   for (const s of summaries) {
-    if (s.parentNodeId && byParentTailId.has(s.parentNodeId)) {
-      const parent = byParentTailId.get(s.parentNodeId)!;
-      const parentId = parent.tailId!;
-      const list = childrenByParent.get(parentId) ?? [];
+    const parentRecipeId = s.parentNodeId ? nodeIdToRecipeId.get(s.parentNodeId) : undefined;
+    const parent = parentRecipeId ? summaryByRecipeId.get(parentRecipeId) : undefined;
+    if (parent) {
+      const list = childrenByParent.get(parent.recipeId) ?? [];
       list.push(s);
-      childrenByParent.set(parentId, list);
+      childrenByParent.set(parent.recipeId, list);
     } else {
       topLevel.push(s);
     }
@@ -462,7 +481,7 @@ export async function getRecipeTree(): Promise<RecipeTreeNode[]> {
   function build(s: RecipeSummary): RecipeTreeNode {
     return {
       ...s,
-      children: (childrenByParent.get(s.tailId ?? '') ?? []).map(build),
+      children: (childrenByParent.get(s.recipeId) ?? []).map(build),
     };
   }
 

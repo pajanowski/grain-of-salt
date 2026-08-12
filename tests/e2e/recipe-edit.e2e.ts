@@ -1,0 +1,571 @@
+/**
+ * E2E tests for the recipe-edit UI on /recipes/[slug], covering add, edit,
+ * move, remove, and save for both ingredients and directions.
+ *
+ * The suite runs against the production build served by `vite preview`.
+ * The database is re-seeded before every test so the suite is hermetic —
+ * any test can mutate the DB without poisoning the next one.
+ *
+ * Two known bugs are explicitly asserted so they fail loudly when fixed:
+ *   - BUG #1 (indent regression): FIXED. The tree builder now resolves
+ *     each child's `parentNodeId` against any node in the parent's chain,
+ *     so a save that grows the chain no longer orphans child recipes.
+ *     The test "saving a recipe keeps its child recipes at the same
+ *     indent" guards the fix.
+ *   - BUG #2 (save reverts edits): the user reported that after a save,
+ *     a subsequent edit + save reverts the recipe. Tests for the
+ *     save-then-edit scenario guard the regression so any future change
+ *     that breaks the second-save flow is caught immediately.
+ */
+import { execSync } from 'node:child_process';
+import { expect, type Page, test } from '@playwright/test';
+
+// Hardcoded recipe names from scripts/seed.ts. We locate recipes by name on
+// the home page rather than by id because ids change every seed.
+const RECIPE = {
+	simple: 'Simple Omelette',
+	french: 'French Omelette',
+	cheese: 'Cheese Omelette',
+	denver: 'Denver Omelette'
+} as const;
+
+/**
+ * Re-seed the database. Each test mutates the DB, so we re-seed before
+ * every test to avoid one test's leftovers tainting the next one.
+ */
+test.beforeEach(() => {
+	execSync('pnpm db:seed', {
+		stdio: 'pipe',
+		env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL ?? '' }
+	});
+});
+
+/**
+ * When running against the dev server (PLAYWRIGHT_USE_DEV=1), individual
+ * actions can take noticeably longer than in preview mode due to on-demand
+ * compilation. Bump the per-test timeout so dev runs have a chance to
+ * complete.
+ */
+if (process.env.PLAYWRIGHT_USE_DEV) {
+	test.setTimeout(120_000);
+}
+
+async function readTreeIndent(page: Page, recipeName: string) {
+	await page.goto('/');
+	const row = page.locator('li', {
+		has: page.getByRole('link', { name: new RegExp(`^\\s*(↳\\s+)?${recipeName}\\b`) })
+	});
+	await expect(row).toBeVisible();
+	const style = await row.first().getAttribute('style');
+	// style looks like "padding-left: 1.25rem"
+	const match = style?.match(/padding-left:\s*([0-9.]+)rem/);
+	if (!match) {
+		throw new Error(`Could not parse indent from style: ${style}`);
+	}
+	return Number(match[1]);
+}
+
+// Open a recipe page by clicking its link in the recipe tree.
+async function openRecipe(page: Page, recipeName: string) {
+	await page.goto('/');
+	// Wait for the recipe tree to render before we try to click anything.
+	await expect(page.getByRole('heading', { name: 'Recipe List' })).toBeVisible();
+	const link = page.getByRole('link', { name: new RegExp(`^\\s*(↳\\s+)?${recipeName}\\b`) }).first();
+	await expect(link).toBeVisible();
+	await link.click();
+	await page.waitForURL(/\/recipes\//);
+	await expect(page.getByRole('heading', { name: `Recipe: ${recipeName}` })).toBeVisible();
+}
+
+/**
+ * The ingredient `<ol>` is scoped via its `data-testid` attribute (set in
+ * Recipe.svelte) so we don't accidentally match history entries that mention
+ * the same string.
+ */
+function ingredientList(page: Page) {
+	return page.getByTestId('ingredient-list');
+}
+
+function directionList(page: Page) {
+	return page.getByTestId('direction-list');
+}
+
+/**
+ * Locate a specific ingredient row by name. The row carries a
+ * `data-ingredient-name` attribute (set in IngredientRow.svelte) so the
+ * selector is stable across display ↔ edit toggles.
+ */
+function ingredientRow(page: Page, name: string) {
+	return ingredientList(page).locator(`li[data-ingredient-name="${name}"]`);
+}
+
+/**
+ * Locate a direction row by its 0-based index. The row carries a
+ * `data-direction-index` attribute (set in DirectionRow.svelte) so the
+ * selector is stable across display ↔ edit toggles.
+ */
+function directionRow(page: Page, index: number) {
+	return directionList(page).locator(`li[data-direction-index="${index}"]`);
+}
+
+/**
+ * The "Add new ingredient" / "Add new direction" forms are full-page forms
+ * (not scoped to a row). They have no placeholder attributes — inputs are
+ * bound directly with `<label>Name <input /></label>` markup. We target
+ * inputs by their wrapping label.
+ */
+function addIngredientForm(page: Page) {
+	return page.locator('form').filter({ has: page.getByRole('button', { name: 'Add', exact: true }) }).first();
+}
+
+async function fillAddIngredient(page: Page, name: string, amount: string, unit: string) {
+	const form = addIngredientForm(page);
+	await form.locator('label', { hasText: 'Name' }).locator('input').fill(name, { timeout: 120_000 });
+	await form.locator('label', { hasText: 'Amount' }).locator('input').fill(amount, { timeout: 120_000 });
+	await form.locator('label', { hasText: 'Unit' }).locator('input').fill(unit, { timeout: 120_000 });
+}
+
+async function fillAddDirection(page: Page, body: string) {
+	const form = addIngredientForm(page);
+	await form.locator('label', { hasText: 'Body' }).locator('input').fill(body);
+}
+
+async function clickSave(page: Page) {
+	// The page's Save button is disabled while the request is in flight
+	// and re-enabled when the response arrives (via the `await` block in
+	// Recipe.svelte: the `{#await savePromise}` branch renders the
+	// disabled button when the promise is pending). Wait for the
+	// ENABLE transition before clicking — that guarantees the previous
+	// save round-trip has finished, so the next click is a fresh save.
+	const save = page.getByRole('button', { name: 'Save', exact: true });
+	await expect(save).toBeEnabled();
+	await save.click();
+	// After clicking, the button is briefly disabled while the request
+	// runs. Wait for it to become enabled again — i.e. the save completed
+	// and the page was invalidated so the next save can be issued.
+	await expect(save).toBeEnabled();
+}
+
+async function clickRowAction(page: Page, row: ReturnType<typeof ingredientRow>, action: 'Edit' | 'Move up' | 'Move down' | 'Remove') {
+	await row.getByRole('button', { name: /^Actions for/ }).click();
+	await page.getByRole('menuitem', { name: action }).click();
+}
+
+test.describe('ingredient and direction mutations', () => {
+	test('adds an ingredient and saves it', async ({ page }) => {
+		await openRecipe(page, RECIPE.simple);
+		const ingredients = ingredientList(page);
+		await expect(ingredients.locator('li')).toHaveCount(3);
+
+		await page.getByRole('button', { name: 'Add new ingredient' }).click();
+		await fillAddIngredient(page, 'Pepper', '1', 'pinch');
+		await addIngredientForm(page).getByRole('button', { name: 'Add', exact: true }).click();
+
+		// Pepper is in the local list pre-save.
+		await expect(ingredientRow(page, 'Pepper')).toBeVisible();
+		await expect(ingredients.locator('li')).toHaveCount(4);
+
+		await clickSave(page);
+		await page.reload();
+
+		await expect(ingredientRow(page, 'Pepper')).toBeVisible();
+		await expect(ingredientList(page).locator('li')).toHaveCount(4);
+	});
+
+	test('adds a direction and saves it', async ({ page }) => {
+		await openRecipe(page, RECIPE.simple);
+		const directions = directionList(page);
+		await expect(directions.locator('li')).toHaveCount(4);
+
+		await page.getByRole('button', { name: 'Add new direction' }).click();
+		await fillAddDirection(page, 'Season with pepper.');
+		await addIngredientForm(page).getByRole('button', { name: 'Add', exact: true }).click();
+
+		// Verify the new direction is at the end of the list (index 4).
+		await expect(directionRow(page, 4)).toContainText('Season with pepper.');
+		await expect(directions.locator('li')).toHaveCount(5);
+
+		await clickSave(page);
+		await page.reload();
+
+		await expect(directionRow(page, 4)).toContainText('Season with pepper.');
+	});
+
+	test('edits an ingredient and saves the change', async ({ page }) => {
+		// Increase the butter amount from 1 tbsp to 3 tbsp.
+		await openRecipe(page, RECIPE.simple);
+
+		const butterRow = ingredientRow(page, 'Butter');
+		await clickRowAction(page, butterRow, 'Edit');
+
+		const form = butterRow.locator('form');
+		await form.getByPlaceholder('Amount').fill('3');
+		await form.getByRole('button', { name: 'Save', exact: true }).click();
+
+		// After clicking Save in the inline form, the row returns to display
+		// mode. The new amount is visible.
+		await expect(butterRow).toContainText('3');
+
+		await clickSave(page);
+		await page.reload();
+
+		await expect(ingredientRow(page, 'Butter')).toContainText('3');
+	});
+
+	test('edits a direction and saves the change', async ({ page }) => {
+		await openRecipe(page, RECIPE.simple);
+
+		const beatRow = directionRow(page, 0);
+		await beatRow.getByRole('button', { name: /^Actions for/ }).click();
+		await page.getByRole('menuitem', { name: 'Edit' }).click();
+
+		const form = beatRow.locator('form');
+		await form.getByRole('textbox').fill('Whisk eggs vigorously with salt.');
+		await form.getByRole('button', { name: 'Save', exact: true }).click();
+
+		await expect(beatRow).toContainText('Whisk eggs vigorously');
+
+		await clickSave(page);
+		await page.reload();
+
+		await expect(directionRow(page, 0)).toContainText('Whisk eggs vigorously');
+	});
+
+	test('moves an ingredient up and down', async ({ page }) => {
+		await openRecipe(page, RECIPE.simple);
+
+		const ingredients = ingredientList(page);
+		// Initial order: Eggs (0), Butter (1), Salt (2).
+		const eggs = ingredientRow(page, 'Eggs');
+		const butter = ingredientRow(page, 'Butter');
+
+		const eggsBefore = await eggs.boundingBox();
+		const butterBefore = await butter.boundingBox();
+		expect(eggsBefore && butterBefore && eggsBefore.y < butterBefore.y).toBe(true);
+
+		// Move Eggs down → Butter, Eggs, Salt.
+		await clickRowAction(page, eggs, 'Move down');
+
+		const eggsAfterMove = ingredientRow(page, 'Eggs');
+		const butterAfterMove = ingredientRow(page, 'Butter');
+		const eggsAfterBox = await eggsAfterMove.boundingBox();
+		const butterAfterBox = await butterAfterMove.boundingBox();
+		expect(butterAfterBox && eggsAfterBox && butterAfterBox.y < eggsAfterBox.y).toBe(true);
+
+		// Move Eggs back up.
+		await clickRowAction(page, eggsAfterMove, 'Move up');
+
+		const eggsFinal = ingredientRow(page, 'Eggs');
+		const butterFinal = ingredientRow(page, 'Butter');
+		const eggsFinalBox = await eggsFinal.boundingBox();
+		const butterFinalBox = await butterFinal.boundingBox();
+		expect(eggsFinalBox && butterFinalBox && eggsFinalBox.y < butterFinalBox.y).toBe(true);
+	});
+
+	test('moves a direction up and down', async ({ page }) => {
+		await openRecipe(page, RECIPE.simple);
+
+		const beat = directionRow(page, 0);
+		const melt = directionRow(page, 1);
+
+		const beatBefore = await beat.boundingBox();
+		const meltBefore = await melt.boundingBox();
+		expect(beatBefore && meltBefore && beatBefore.y < meltBefore.y).toBe(true);
+
+		// Move "Beat" down → Melt, Beat, ...
+		await beat.getByRole('button', { name: /^Actions for/ }).click();
+		await page.getByRole('menuitem', { name: 'Move down' }).click();
+
+		const beatAfter = directionRow(page, 1);
+		const meltAfter = directionRow(page, 0);
+		const beatAfterBox = await beatAfter.boundingBox();
+		const meltAfterBox = await meltAfter.boundingBox();
+		expect(meltAfterBox && beatAfterBox && meltAfterBox.y < beatAfterBox.y).toBe(true);
+
+		// Move it back up.
+		await beatAfter.getByRole('button', { name: /^Actions for/ }).click();
+		await page.getByRole('menuitem', { name: 'Move up' }).click();
+
+		const beatFinal = directionRow(page, 0);
+		const meltFinal = directionRow(page, 1);
+		const beatFinalBox = await beatFinal.boundingBox();
+		const meltFinalBox = await meltFinal.boundingBox();
+		expect(beatFinalBox && meltFinalBox && beatFinalBox.y < meltFinalBox.y).toBe(true);
+	});
+
+	test('removes an ingredient and saves the deletion', async ({ page }) => {
+		await openRecipe(page, RECIPE.simple);
+
+		// Confirm the "Remove" prompt; we accept it.
+		page.once('dialog', (d) => d.accept());
+
+		await clickRowAction(page, ingredientRow(page, 'Salt'), 'Remove');
+
+		// Salt is gone from the local list immediately.
+		await expect(ingredientRow(page, 'Salt')).toHaveCount(0);
+
+		await clickSave(page);
+		await page.reload();
+
+		await expect(ingredientRow(page, 'Salt')).toHaveCount(0);
+	});
+
+	test('removes a direction and saves the deletion', async ({ page }) => {
+		await openRecipe(page, RECIPE.simple);
+
+		page.once('dialog', (d) => d.accept());
+
+		// The last direction is "Fold in half and serve." (index 3).
+		await clickRowAction(page, directionRow(page, 3), 'Remove');
+
+		await expect(directionList(page).locator('li')).toHaveCount(3);
+
+		await clickSave(page);
+		await page.reload();
+
+		await expect(directionList(page).locator('li')).toHaveCount(3);
+	});
+
+	test('cancelling a remove dialog keeps the ingredient', async ({ page }) => {
+		await openRecipe(page, RECIPE.simple);
+
+		page.once('dialog', (d) => d.dismiss());
+
+		await clickRowAction(page, ingredientRow(page, 'Salt'), 'Remove');
+
+		// Salt is still there.
+		await expect(ingredientRow(page, 'Salt')).toBeVisible();
+	});
+
+	test('cancelling an edit reverts the row', async ({ page }) => {
+		await openRecipe(page, RECIPE.simple);
+
+		const butterRow = ingredientRow(page, 'Butter');
+		await clickRowAction(page, butterRow, 'Edit');
+
+		const form = butterRow.locator('form');
+		await form.getByPlaceholder('Amount').fill('99');
+		await form.getByRole('button', { name: 'Cancel' }).click();
+
+		// The form is gone — the row is back to display mode and the new
+		// "99" value is not persisted.
+		await expect(butterRow.locator('form')).toHaveCount(0);
+		await expect(butterRow).not.toContainText('99');
+	});
+});
+
+test.describe('known bugs', () => {
+	// The tests in this block assert the CURRENT (buggy) behaviour for
+	// bug #1, and the desired (passing) behaviour for bug #2. They are
+	// deliberately written so any future change that regresses the
+	// underlying flow is caught immediately.
+
+	test('saving a recipe keeps its child recipes at the same indent', async ({ page }) => {
+		// Regression test for the indent-regression bug. After saving a
+		// recipe (which appends a new node to the chain) the tree should
+		// still render the same hierarchy it had before the save. The fix
+		// resolves each child's `parentNodeId` against ANY node in the
+		// parent's chain, not just the latest tail.
+		const initialSimple = await readTreeIndent(page, RECIPE.simple);
+		const initialFrench = await readTreeIndent(page, RECIPE.french);
+		const initialCheese = await readTreeIndent(page, RECIPE.cheese);
+		const initialDenver = await readTreeIndent(page, RECIPE.denver);
+		expect(initialSimple).toBeCloseTo(0, 1);
+		expect(initialFrench).toBeCloseTo(1.25, 1);
+		expect(initialCheese).toBeCloseTo(1.25, 1);
+		expect(initialDenver).toBeCloseTo(2.5, 1);
+
+		// To trigger a node append, the save must include a change;
+		// `updateRecipeState` short-circuits on no-op saves. We add an
+		// ingredient and then save.
+		await openRecipe(page, RECIPE.cheese);
+		await page.getByRole('button', { name: 'Add new ingredient' }).click();
+		await fillAddIngredient(page, 'Chili flakes', '1', 'pinch');
+		await addIngredientForm(page).getByRole('button', { name: 'Add', exact: true }).click();
+		await clickSave(page);
+
+		// After the save, every recipe should still be at its original
+		// depth — the hierarchy is preserved.
+		const afterSimple = await readTreeIndent(page, RECIPE.simple);
+		const afterFrench = await readTreeIndent(page, RECIPE.french);
+		const afterCheese = await readTreeIndent(page, RECIPE.cheese);
+		const afterDenver = await readTreeIndent(page, RECIPE.denver);
+		expect(afterSimple).toBeCloseTo(initialSimple, 1);
+		expect(afterFrench).toBeCloseTo(initialFrench, 1);
+		expect(afterCheese).toBeCloseTo(initialCheese, 1);
+		expect(afterDenver).toBeCloseTo(initialDenver, 1);
+	});
+
+	test('saving then editing a different recipe persists the edit (bug #2 guard)', async ({ page }) => {
+		// User-reported scenario: "add peanut butter, save successfully.
+		// Then add salt to another recipe, save. The second recipe reverts;
+		// it will still say peanut butter."
+		//
+		// In its strict form this is:
+		//   1. Save recipe A (no changes).
+		//   2. Navigate to recipe B.
+		//   3. Add an ingredient to B locally.
+		//   4. Save B.
+		//   5. Reload B — the ingredient must still be there.
+		//
+		// If the second save ever reverts B to its pre-step-3 state, this
+		// test fails. (Currently the save works correctly; the test guards
+		// the regression so any future change that breaks the second-save
+		// flow is caught immediately.)
+
+		// Recipe A: Simple Omelette. Save it (no changes) — the trigger
+		// the user described as the wiring-up of the broken state.
+		await openRecipe(page, RECIPE.simple);
+		await clickSave(page);
+
+		// Recipe B: French Omelette. Add an ingredient and save.
+		// (French already has Salt from the Simple Omelette base, so we
+		// pick a name that isn't present.)
+		await openRecipe(page, RECIPE.french);
+		await page.getByRole('button', { name: 'Add new ingredient' }).click();
+		await fillAddIngredient(page, 'Tarragon', '1', 'tsp');
+		await addIngredientForm(page).getByRole('button', { name: 'Add', exact: true }).click();
+
+		await expect(ingredientRow(page, 'Tarragon')).toBeVisible();
+
+		await clickSave(page);
+
+		// Reload to confirm the edit persisted — this bypasses the local
+		// proxy and reads straight from the server.
+		await page.reload();
+		await expect(ingredientRow(page, 'Tarragon')).toBeVisible();
+
+		// Sanity: the original ingredient list of French still includes its
+		// chives — the save didn't accidentally wipe unrelated rows.
+		await expect(ingredientRow(page, 'Chives')).toBeVisible();
+	});
+});
+
+test.describe('user scenarios', () => {
+	test('adding cheese to French Omelette after editing Simple Omelette persists', async ({ page }) => {
+		// First, add peanut butter to Simple Omelette and save.
+		await openRecipe(page, RECIPE.simple);
+		await page.getByRole('button', { name: 'Add new ingredient' }).click();
+		await fillAddIngredient(page, 'Peanut Butter', '2', 'tbsp');
+		await addIngredientForm(page).getByRole('button', { name: 'Add', exact: true }).click();
+		await clickSave(page);
+
+		// Then navigate to French Omelette. (French already has Cheddar
+		// from the Simple base, so we add a different cheese to avoid a
+		// duplicate `data-ingredient-name` collision.)
+		await openRecipe(page, RECIPE.french);
+		await page.getByRole('button', { name: 'Add new ingredient' }).click();
+		await fillAddIngredient(page, 'Gruyere', '30', 'g');
+		await addIngredientForm(page).getByRole('button', { name: 'Add', exact: true }).click();
+
+		// Pre-save: the ingredient is in the local list.
+		await expect(ingredientRow(page, 'Gruyere')).toBeVisible();
+
+		await clickSave(page);
+
+		// Hard reload to confirm the edit persisted against the server.
+		await page.reload();
+		await expect(ingredientRow(page, 'Gruyere')).toBeVisible();
+	});
+
+	test('saving an ingredient on a child recipe does not affect the parent', async ({ page }) => {
+		// User-reported symptom: "when I save an ingredient on a child
+		// recipe, it seems to save to the parent recipe. That's where it
+		// displays anyway."
+		//
+		// The child recipe is French Omelette (whose chain starts from
+		// Simple Omelette). Adding an ingredient to French and saving
+		// must only modify French's chain — Simple's chain must remain
+		// untouched. If the save accidentally writes to Simple's recipeId
+		// or rootNodeId, the new ingredient will appear on Simple's page
+		// after reload.
+
+		// Sanity: Simple starts with 3 ingredients (Eggs, Butter, Salt).
+		await openRecipe(page, RECIPE.simple);
+		await expect(ingredientList(page).locator('li')).toHaveCount(3);
+
+		// Add Tomato to French and save.
+		await openRecipe(page, RECIPE.french);
+		await page.getByRole('button', { name: 'Add new ingredient' }).click();
+		await fillAddIngredient(page, 'Tomato', '1', '');
+		await addIngredientForm(page).getByRole('button', { name: 'Add', exact: true }).click();
+		await clickSave(page);
+
+		// French's page shows the new ingredient.
+		await page.reload();
+		await expect(ingredientRow(page, 'Tomato')).toBeVisible();
+
+		// Simple's page is unchanged — it must still have just the 3
+		// original ingredients. If the save leaked to the parent, this
+		// assertion fails.
+		await openRecipe(page, RECIPE.simple);
+		await expect(ingredientList(page).locator('li')).toHaveCount(3);
+		await expect(ingredientRow(page, 'Tomato')).toHaveCount(0);
+	});
+
+	test('saving an ingredient on a grandchild recipe does not affect grandparent (bug #3)', async ({ page }) => {
+		// User-reported symptom: "I open simple omelette, add peanut, save.
+		// Then open denver omelette from the recipes list, add butter,
+		// save. Ingredient doesn't display on Denver Omelette, but does
+		// display when I go to Simple Omelette, in place of where peanut
+		// should be displayed."
+		//
+		// The hierarchy is Simple → Cheese → Denver. Navigating between
+		// recipes via SvelteKit's client-side router reuses the same
+		// Recipe component instance. The component captures `recipeId`
+		// and `rootNodeId` in `const` bindings at the top of the script,
+		// so if those captures happen before the first save and the
+		// component is reused for a different recipe, the save request
+		// ends up targeting the wrong recipe.
+		//
+		// This test forces that scenario: save on Simple first, then click
+		// the Denver link in the recipe list (SPA navigation, no full
+		// reload), then add and save. The new ingredient must show on
+		// Denver — not on Simple.
+
+		// Step 1: Open Simple, add Peanut Butter, save.
+		await openRecipe(page, RECIPE.simple);
+		await expect(ingredientList(page).locator('li')).toHaveCount(3);
+
+		await page.getByRole('button', { name: 'Add new ingredient' }).click();
+		await fillAddIngredient(page, 'Peanut Butter', '2', 'tbsp');
+		await addIngredientForm(page).getByRole('button', { name: 'Add', exact: true }).click();
+		await clickSave(page);
+
+		// Step 2: SPA navigation back to the recipe list and then to Denver.
+		// We deliberately do NOT call page.goto() here — the user clicks
+		// the in-app links, which triggers SvelteKit's client-side router.
+		// The Recipe component instance is reused across the navigation.
+		// We reach the home page by clicking the "Recipe List" header
+		// link (also in-app).
+		await page.getByRole('link', { name: 'Recipe List' }).click();
+		await expect(page.getByRole('heading', { name: 'Recipe List' })).toBeVisible();
+		await page.getByRole('link', { name: /Denver Omelette/ }).click();
+		await page.waitForURL(/\/recipes\//);
+		await expect(page.getByRole('heading', { name: 'Recipe: Denver Omelette' })).toBeVisible();
+
+		// Step 3: Add a new ingredient and save. We use a unique name
+		// ("Walnuts") rather than "Butter" because Denver's chain
+		// already inherits Butter from the Simple base — adding another
+		// Butter would create two rows with the same data-ingredient-name
+		// and break locator strict mode. The bug we're testing is about
+		// which recipe the save targets, not the ingredient name.
+		await page.getByRole('button', { name: 'Add new ingredient' }).click();
+		await fillAddIngredient(page, 'Walnuts', '30', 'g');
+		await addIngredientForm(page).getByRole('button', { name: 'Add', exact: true }).click();
+		await clickSave(page);
+
+		// Step 4: Hard reload Denver and check that the new ingredient is
+		// there. The user's reported symptom is that the ingredient
+		// doesn't display on Denver — this assertion captures that.
+		await page.reload();
+		await expect(ingredientRow(page, 'Walnuts')).toBeVisible();
+
+		// Step 5: Navigate to Simple and verify Peanut Butter is still
+		// there. The user said the new ingredient "displays on Simple in
+		// place of peanut" — this assertion catches that.
+		await openRecipe(page, RECIPE.simple);
+		await expect(ingredientRow(page, 'Peanut Butter')).toBeVisible();
+		await expect(ingredientRow(page, 'Walnuts')).toHaveCount(0);
+	});
+});

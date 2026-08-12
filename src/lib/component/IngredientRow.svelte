@@ -52,7 +52,7 @@
 	]);
 </script>
 
-<li class="flex items-center gap-2">
+<li class="flex items-center gap-2" data-testid="ingredient-row" data-ingredient-name={ingredient.name}>
 	{#if editing}
 		<form
 			class="flex flex-wrap items-center gap-2 flex-1"

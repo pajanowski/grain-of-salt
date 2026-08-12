@@ -52,7 +52,7 @@
 	]);
 </script>
 
-<li class="flex items-start gap-2">
+<li class="flex items-start gap-2" data-testid="direction-row" data-direction-index={index}>
 	{#if editing}
 		<form
 			class="flex flex-col gap-2 flex-1"
