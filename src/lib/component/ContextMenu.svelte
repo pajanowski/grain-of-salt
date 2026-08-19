@@ -10,7 +10,7 @@
 	 */
 
 	export type MenuItem =
-		| { label: string; onSelect: () => void; disabled?: boolean; title?: string; danger?: boolean }
+		| { label: string; onSelect: () => void | Promise<void>; disabled?: boolean; title?: string; danger?: boolean }
 		| { label: string; disabled: true; title?: string };
 
 	let { items, label = 'Actions' }: { items: MenuItem[]; label?: string } = $props();

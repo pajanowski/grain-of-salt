@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { eq } from 'drizzle-orm';
-import { deleteRecipe } from '$lib/server/bo/recipesbo';
+import { deleteRecipe, renameRecipe } from '$lib/server/bo/recipesbo';
 import { db } from '$lib/server/db';
 import { recipeNodes } from '$lib/server/db/schema';
 
@@ -34,3 +34,30 @@ export const DELETE: RequestHandler = async ({ params }) => {
   }
 };
 
+export const PATCH: RequestHandler = async ({ params, request }) => {
+  const recipeId = await nodeIdToRecipeId(params.id);
+  if (!recipeId) {
+    return new Response('Recipe not found', { status: 404 });
+  }
+
+  let body: { name?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return new Response('Invalid JSON', { status: 400 });
+  }
+
+  if (typeof body.name !== 'string' || body.name.trim().length === 0) {
+    return new Response('Name is required', { status: 400 });
+  }
+
+  try {
+    await renameRecipe(recipeId, body.name);
+    return new Response(JSON.stringify({ name: body.name.trim() }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  } catch (e) {
+    return new Response((e as Error).message, { status: 500 });
+  }
+};

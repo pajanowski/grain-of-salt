@@ -38,11 +38,14 @@ export async function getCompleteRecipeById(id: string): Promise<(SelectRecipe &
 /**
  * Insert a new recipe row AND its initial (empty) root node, so the history
  * is well-formed from the start.
+ *
+ * @param parentNodeId - when non-null, the new root node's parentNodeId points
+ *   to an existing node, establishing this recipe as a fork/child of another.
  */
-export async function saveNewRecipe(recipe: Recipe): Promise<Recipe> {
+export async function saveNewRecipe(recipe: Recipe, parentNodeId: string | null = null): Promise<Recipe> {
   recipe.id = uuid();
   await db.insert(recipes).values({ id: recipe.id, name: recipe.name });
-  await createRootRecipeNode(recipe.id, recipe.name);
+  await createRootRecipeNode(recipe.id, recipe.name, parentNodeId);
   return recipe;
 }
 

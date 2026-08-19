@@ -2,7 +2,9 @@
 	import { EmptyDirection, EmptyIngredient, type Ingredient, type Direction } from '$lib/obj/Recipe.svelte';
 	import IngredientRow from './IngredientRow.svelte';
 	import DirectionRow from './DirectionRow.svelte';
-	import { invalidateAll } from '$app/navigation';
+	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
+	import Modal from './Modal.svelte';
+	import { invalidateAll, goto } from '$app/navigation';
 
 	const { recipe } = $props();
 
@@ -11,17 +13,12 @@
 	$effect(() => {
 		recipeData = JSON.parse(JSON.stringify(recipe));
 	});
+
 	// recipeData.id is the root node id; recipeData.recipeId is the FK
-	// into the recipes table that updateRecipeState expects. These must be
-	// derived (not captured `const`s) because SvelteKit reuses the same
-	// Recipe component instance across SPA navigations between recipe
-	// pages; a captured `const` would point at whichever recipe was first
-	// loaded, and a Save issued after navigating to a different recipe
-	// would write its diff against the original recipe's id. Use $derived
-	// so the values re-resolve whenever recipeData is reassigned by the
-	// effect above.
+	// into the recipes table that updateRecipeState expects.
 	const rootNodeId = $derived(recipeData.id);
 	const recipeId = $derived(recipeData.recipeId);
+
 	let addingIngredient = $state(false);
 	let addingDirection = $state(false);
 	let newIngredient = $state(EmptyIngredient());
@@ -29,9 +26,89 @@
 	let savePromise = $state(Promise.resolve());
 	let saveResolve: (value: void) => void;
 
+	// ---- rename modal state ----
+	let showRenameModal = $state(false);
+	let renameName = $state('');
+	let renameBusy = $state(false);
+
+	function openRename() {
+		renameName = recipeData.name;
+		showRenameModal = true;
+	}
+
+	async function confirmRename() {
+		const trimmed = renameName.trim();
+		if (!trimmed || renameBusy) return;
+		renameBusy = true;
+		try {
+			const res = await fetch(`/api/recipe/${rootNodeId}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: trimmed }),
+			});
+			if (!res.ok) {
+				alert(`Rename failed: ${await res.text()}`);
+				return;
+			}
+			showRenameModal = false;
+			await invalidateAll();
+		} finally {
+			renameBusy = false;
+		}
+	}
+
+	// ---- fork modal state ----
+	let showForkModal = $state(false);
+	let forkName = $state('');
+	let forkBusy = $state(false);
+
+	function openFork() {
+		forkName = recipeData.name + ' (fork)';
+		showForkModal = true;
+	}
+
+	async function confirmFork() {
+		const trimmed = forkName.trim();
+		if (!trimmed || forkBusy) return;
+		forkBusy = true;
+		try {
+			const res = await fetch(`/api/recipe/${rootNodeId}/fork`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: trimmed }),
+			});
+			if (!res.ok) {
+				alert(`Fork failed: ${await res.text()}`);
+				return;
+			}
+			const newRecipe = await res.json();
+			showForkModal = false;
+			await goto(`/recipes/${newRecipe.id}`);
+		} catch (e) {
+			alert(`Fork failed: ${(e as Error).message}`);
+		} finally {
+			forkBusy = false;
+		}
+	}
+
+	// ---- delete ----
+	async function confirmDelete() {
+		if (!confirm(`Delete "${recipeData.name}"? This cannot be undone.`)) return;
+		const res = await fetch(`/api/recipe/${rootNodeId}`, { method: 'DELETE' });
+		if (!res.ok) {
+			alert(`Delete failed: ${await res.text()}`);
+			return;
+		}
+		await goto('/');
+	}
+
+	const menuItems: MenuItem[] = $derived([
+		{ label: 'Rename recipe', onSelect: openRename },
+		{ label: 'Fork recipe', onSelect: openFork },
+		{ label: 'Delete recipe', onSelect: confirmDelete, danger: true },
+	]);
+
 	// ---- per-row mutation handlers -----------------------------------------
-	// These mutate recipeData in place; the global Save button below
-	// commits the whole recipe state in one PUT.
 
 	function updateIngredientAt(index: number, next: Ingredient) {
 		recipeData.ingredients[index] = next;
@@ -65,9 +142,12 @@
 </script>
 
 <div class="flex flex-col gap-2">
-	<h1>Recipe: {recipeData.name}</h1>
-	<h2>Ingredients</h2>
+	<div class="flex items-center gap-2">
+		<h1>Recipe: {recipeData.name}</h1>
+		<ContextMenu items={menuItems} label="Recipe actions" />
+	</div>
 
+	<h2>Ingredients</h2>
 	<ol class="list-decimal list-inside" data-testid="ingredient-list">
 		{#each recipeData.ingredients as ing, i (ing.id)}
 			<IngredientRow
@@ -152,6 +232,7 @@
 			>
 		</form>
 	{/if}
+
 	{#await savePromise}
 		<button type="submit" disabled>Save</button>
 	{:then}
@@ -165,14 +246,12 @@
 						recipe: JSON.stringify(recipeData),
 						recipeId,
 						rootNodeId,
-					})
+					}),
 				}).then(async (res) => {
 					if (!res.ok) {
 						const msg = await res.text();
 						alert(`Save failed: ${msg}`);
 					} else {
-						// Refresh the page so the new history entry and the
-						// updated recipe state are visible.
 						await invalidateAll();
 					}
 					saveResolve();
@@ -183,3 +262,75 @@
 		</button>
 	{/await}
 </div>
+
+<Modal bind:showModal={showRenameModal}>
+	{#snippet header()}
+		<h2>Rename recipe</h2>
+	{/snippet}
+	<form
+		class="flex flex-col gap-2"
+		onsubmit={(e) => {
+			e.preventDefault();
+			confirmRename();
+		}}
+	>
+		<label class="flex flex-col gap-1">
+			Name
+			<input
+				data-testid="rename-name-input"
+				bind:value={renameName}
+				disabled={renameBusy}
+				autocomplete="off"
+			/>
+		</label>
+		<div class="flex gap-2 justify-end">
+			<button
+				type="button"
+				data-testid="rename-cancel"
+				onclick={() => (showRenameModal = false)}
+				disabled={renameBusy}>Cancel</button
+			>
+			<button
+				type="submit"
+				data-testid="rename-save"
+				disabled={!renameName.trim() || renameBusy}>Save</button
+			>
+		</div>
+	</form>
+</Modal>
+
+<Modal bind:showModal={showForkModal}>
+	{#snippet header()}
+		<h2>Fork recipe</h2>
+	{/snippet}
+	<form
+		class="flex flex-col gap-2"
+		onsubmit={(e) => {
+			e.preventDefault();
+			confirmFork();
+		}}
+	>
+		<label class="flex flex-col gap-1">
+			New recipe name
+			<input
+				data-testid="fork-name-input"
+				bind:value={forkName}
+				disabled={forkBusy}
+				autocomplete="off"
+			/>
+		</label>
+		<div class="flex gap-2 justify-end">
+			<button
+				type="button"
+				data-testid="fork-cancel"
+				onclick={() => (showForkModal = false)}
+				disabled={forkBusy}>Cancel</button
+			>
+			<button
+				type="submit"
+				data-testid="fork-save"
+				disabled={!forkName.trim() || forkBusy}>Save</button
+			>
+		</div>
+	</form>
+</Modal>

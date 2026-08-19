@@ -4,7 +4,8 @@
 	let dialog = $state(); // HTMLDialogElement
 
 	$effect(() => {
-		if (showModal) dialog.showModal();
+		if (showModal && dialog && !dialog.open) dialog.showModal();
+		else if (!showModal && dialog?.open) dialog.close();
 	});
 </script>
 
