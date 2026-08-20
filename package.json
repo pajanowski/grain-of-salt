@@ -17,7 +17,6 @@
     "test:e2e": "playwright install && playwright test",
     "db:start": "docker compose up",
     "db:seed": "tsx scripts/seed.ts",
-    "db:migrate-to-nodes": "tsx scripts/migrate-to-recipe-nodes.ts",
     "db:drop-legacy-tables": "tsx scripts/drop-legacy-tables.ts",
     "db:push": "drizzle-kit push --force",
     "db:generate": "drizzle-kit generate",

@@ -13,14 +13,9 @@ export const POST: RequestHandler = async ({ request }) => {
 export const PUT: RequestHandler = async ({ request }) => {
   const data = await request.formData();
   const recipe: Recipe = JSON.parse(data.get('recipe') as string)
-  // recipeId is the FK into the recipes table (what the BO needs); if the
-  // form didn't include it, fall back to recipe.id, which is the root node
-  // id in the new model.
-  const explicitRecipeId = data.get('recipeId') as string | null;
-  if (explicitRecipeId && explicitRecipeId.trim().length > 0) {
-    recipe.id = explicitRecipeId;
-  }
-
+  // recipe.id IS the root node id, which is the recipe's identity in the
+  // node-only model. updateRecipeState diffs against the chain rooted by
+  // this id and appends a node on save.
   try {
     const ret = await updateRecipe(recipe)
     return new Response(JSON.stringify(ret));

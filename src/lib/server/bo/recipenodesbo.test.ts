@@ -30,11 +30,10 @@ function direction(partial: { id: string; body: string }): Direction {
 }
 
 function node(
-  partial: Partial<RecipeNode> & { id: string; recipeId: string },
+  partial: Partial<RecipeNode> & { id: string },
 ): RecipeNode {
   return {
     id: partial.id,
-    recipeId: partial.recipeId,
     name: partial.name ?? 'Test Recipe',
     parentId: partial.parentId ?? null,
     parentNodeId: partial.parentNodeId ?? null,
@@ -74,7 +73,7 @@ describe('applyNodes', () => {
     });
 
     it('returns empty state for a node with no changes', () => {
-      const state = applyNodes([node({ id: 'n1', recipeId: 'r1' })]);
+      const state = applyNodes([node({ id: 'n1' })]);
       expect(state.ingredients).toEqual([]);
       expect(state.directions).toEqual([]);
     });
@@ -86,7 +85,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'c1',
@@ -107,7 +105,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({ id: 'c1', changeType: 'add', body: flour }),
             ingredientChange({ id: 'c2', changeType: 'add', body: milk }),
@@ -126,7 +123,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'change-id',
@@ -146,7 +142,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'fallback-id',
@@ -167,7 +162,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'c1',
@@ -178,7 +172,6 @@ describe('applyNodes', () => {
         }),
         node({
           id: 'n2',
-          recipeId: 'r1',
           parentId: 'n1',
           ingredientChanges: [
             ingredientChange({
@@ -202,7 +195,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'c1',
@@ -213,7 +205,6 @@ describe('applyNodes', () => {
         }),
         node({
           id: 'n2',
-          recipeId: 'r1',
           parentId: 'n1',
           ingredientChanges: [
             ingredientChange({
@@ -236,7 +227,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'c1',
@@ -258,7 +248,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'c1',
@@ -274,7 +263,6 @@ describe('applyNodes', () => {
         }),
         node({
           id: 'n2',
-          recipeId: 'r1',
           parentId: 'n1',
           ingredientChanges: [
             ingredientChange({
@@ -295,7 +283,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'c1',
@@ -316,7 +303,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           directionChanges: [
             directionChange({
               id: 'c1',
@@ -332,7 +318,6 @@ describe('applyNodes', () => {
         }),
         node({
           id: 'n2',
-          recipeId: 'r1',
           parentId: 'n1',
           directionChanges: [
             directionChange({
@@ -361,7 +346,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'c1',
@@ -372,7 +356,6 @@ describe('applyNodes', () => {
         }),
         node({
           id: 'n2',
-          recipeId: 'r1',
           parentId: 'n1',
           ingredientChanges: [
             ingredientChange({
@@ -385,7 +368,6 @@ describe('applyNodes', () => {
         }),
         node({
           id: 'n3',
-          recipeId: 'r1',
           parentId: 'n2',
           ingredientChanges: [
             ingredientChange({
@@ -412,7 +394,6 @@ describe('applyNodes', () => {
       const singleNode: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({ id: 'c1', changeType: 'add', body: flour }),
             ingredientChange({ id: 'c2', changeType: 'add', body: milk }),
@@ -424,14 +405,12 @@ describe('applyNodes', () => {
       const manyNodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({ id: 'c1', changeType: 'add', body: flour }),
           ],
         }),
         node({
           id: 'n2',
-          recipeId: 'r1',
           parentId: 'n1',
           ingredientChanges: [
             ingredientChange({ id: 'c2', changeType: 'add', body: milk }),
@@ -439,7 +418,6 @@ describe('applyNodes', () => {
         }),
         node({
           id: 'n3',
-          recipeId: 'r1',
           parentId: 'n2',
           ingredientChanges: [
             ingredientChange({ id: 'c3', changeType: 'add', body: sugar }),
@@ -458,7 +436,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             // First: add i1
             ingredientChange({
@@ -470,7 +447,6 @@ describe('applyNodes', () => {
         }),
         node({
           id: 'n2',
-          recipeId: 'r1',
           parentId: 'n1',
           ingredientChanges: [
             // Edit then remove: remove wins, i1 gone.
@@ -498,7 +474,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'c1',
@@ -525,7 +500,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({ id: 'c1', changeType: 'add', body: null }),
           ],
@@ -540,7 +514,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'c1',
@@ -560,7 +533,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'c1',
@@ -580,7 +552,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({ id: 'c1', changeType: 'remove', targetId: null }),
           ],
@@ -597,7 +568,6 @@ describe('applyNodes', () => {
       const nodes: RecipeNode[] = [
         node({
           id: 'n1',
-          recipeId: 'r1',
           ingredientChanges: [
             ingredientChange({
               id: 'c1',
@@ -722,7 +692,6 @@ function simpleOmeletteRootChanges() {
 
 function seedNode(
   id: string,
-  recipeId: string,
   parentId: string | null,
   label: string,
   changes: {
@@ -733,7 +702,6 @@ function seedNode(
 ): RecipeNode {
   return {
     id,
-    recipeId,
     name,
     parentId,
     parentNodeId: null,
@@ -752,7 +720,7 @@ describe('omelette history scenarios (seed parity)', () => {
   describe('Simple Omelette', () => {
     it('materializes to eggs, butter, salt and four directions', () => {
       const nodes: RecipeNode[] = [
-        seedNode('n1', 'r-simple', null, 'initial recipe', simpleOmeletteRootChanges()),
+        seedNode('n1', null, 'initial recipe', simpleOmeletteRootChanges()),
       ];
       const state = applyNodes(nodes);
 
@@ -768,8 +736,8 @@ describe('omelette history scenarios (seed parity)', () => {
 
   describe('French Omelette', () => {
     const frenchNodes: RecipeNode[] = [
-      seedNode('fr1', 'r-french', null, 'start from simple omelette', simpleOmeletteRootChanges()),
-      seedNode('fr2', 'r-french', 'fr1', 'bump butter, add chives; cook low and slow, no browning', {
+      seedNode('fr1', null, 'start from simple omelette', simpleOmeletteRootChanges()),
+      seedNode('fr2', 'fr1', 'bump butter, add chives; cook low and slow, no browning', {
         ingredientChanges: [
           seedIngredientEdit(SIMPLE_INGREDIENT_IDS.butter, { name: 'Butter', amount: 2, unit: 'tbsp' }),
           seedIngredientAdd(FRENCH_INGREDIENT_IDS.chives, { name: 'Chives', amount: 1, unit: 'tbsp' }),
@@ -828,8 +796,8 @@ describe('omelette history scenarios (seed parity)', () => {
   describe('Cheese Omelette', () => {
     it('adds cheddar and rewrites the fold step', () => {
       const nodes: RecipeNode[] = [
-        seedNode('n1', 'r-cheese', null, 'start from simple omelette', simpleOmeletteRootChanges()),
-        seedNode('n2', 'r-cheese', 'n1', 'add cheese, fold with cheese inside', {
+        seedNode('n1', null, 'start from simple omelette', simpleOmeletteRootChanges()),
+        seedNode('n2', 'n1', 'add cheese, fold with cheese inside', {
           ingredientChanges: [
             seedIngredientAdd(CHEESE_INGREDIENT_ID, { name: 'Cheddar', amount: 50, unit: 'g' }),
           ],
@@ -862,8 +830,8 @@ describe('omelette history scenarios (seed parity)', () => {
 
     it('preserves direction ids across the edit (no duplicate directions)', () => {
       const nodes: RecipeNode[] = [
-        seedNode('n1', 'r-cheese', null, 'start from simple omelette', simpleOmeletteRootChanges()),
-        seedNode('n2', 'r-cheese', 'n1', 'add cheese, fold with cheese inside', {
+        seedNode('n1', null, 'start from simple omelette', simpleOmeletteRootChanges()),
+        seedNode('n2', 'n1', 'add cheese, fold with cheese inside', {
           ingredientChanges: [seedIngredientAdd(CHEESE_INGREDIENT_ID, { name: 'Cheddar', amount: 50, unit: 'g' })],
           directionChanges: [
             seedDirectionEdit(SIMPLE_DIRECTION_IDS.foldServe, 'When almost set, sprinkle cheese over half, fold and serve.'),
@@ -877,14 +845,14 @@ describe('omelette history scenarios (seed parity)', () => {
 
   describe('Denver Omelette', () => {
     const denverNodes: RecipeNode[] = [
-      seedNode('dn1', 'r-denver', null, 'start from simple omelette', simpleOmeletteRootChanges()),
-      seedNode('dn2', 'r-denver', 'dn1', 'add cheese, fold with cheese inside', {
+      seedNode('dn1', null, 'start from simple omelette', simpleOmeletteRootChanges()),
+      seedNode('dn2', 'dn1', 'add cheese, fold with cheese inside', {
         ingredientChanges: [seedIngredientAdd(CHEESE_INGREDIENT_ID, { name: 'Cheddar', amount: 50, unit: 'g' })],
         directionChanges: [
           seedDirectionEdit(SIMPLE_DIRECTION_IDS.foldServe, 'When almost set, sprinkle cheese over half, fold and serve.'),
         ],
       }),
-      seedNode('dn3', 'r-denver', 'dn2', 'add diced ham, bell pepper, and onion', {
+      seedNode('dn3', 'dn2', 'add diced ham, bell pepper, and onion', {
         ingredientChanges: [
           seedIngredientAdd(DENVER_INGREDIENT_IDS.ham, { name: 'Ham', amount: 50, unit: 'g' }),
           seedIngredientAdd(DENVER_INGREDIENT_IDS.pepper, { name: 'Bell pepper', amount: 1, unit: '' }),

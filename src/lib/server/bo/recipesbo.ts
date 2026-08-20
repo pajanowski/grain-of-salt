@@ -1,28 +1,38 @@
 import type { Recipe } from "$lib/obj/Recipe.svelte";
-import { NewRecipe } from "$lib/obj/Recipe.svelte";
-import { saveNewRecipe as saveNewRecipeDb, deleteRecipe as deleteRecipeDb } from "../db/queries";
-import { updateRecipeState } from "./recipenodesbo";
 import { eq } from "drizzle-orm";
 import { db } from "../db/index";
-import { recipes, recipeNodes } from "../db/schema";
+import { recipeNodes } from "../db/schema";
+import {
+  createRootRecipeNode,
+  getRecipeNodesByRecipeId,
+  updateRecipeState,
+} from "./recipenodesbo";
+import type { RecipeNode } from "$lib/obj/RecipeNode.svelte";
 
 /**
  * Create a new recipe. The initial root node is created in the same flow so
  * the history is well-formed from the start.
+ *
+ * After creation, the recipe's identity is the new root node's id, which is
+ * what `recipe.id` is set to.
  */
-export async function saveNewRecipe(recipe: Recipe, parentNodeId: string | null = null): Promise<Recipe> {
+export async function saveNewRecipe(
+  recipe: Recipe,
+  parentNodeId: string | null = null,
+): Promise<Recipe> {
   recipe.id = "";
-  return await saveNewRecipeDb(recipe, parentNodeId);
+  const root = await createRootRecipeNode(recipe.name, parentNodeId);
+  recipe.id = root.id;
+  return recipe;
 }
 
 /**
- * Create a new recipe forked from an existing one. The new root node's
- * parentNodeId points to the original recipe's root node — establishing
- * the "forked from" relationship at the recipe hierarchy level.
+ * Create a new recipe forked from an existing one. The new recipe's root
+ * has parentNodeId pointing to the source's root node — establishing the
+ * "forked from" relationship at the recipe hierarchy level.
  */
-export async function forkRecipe(fromRootNodeId: string, newName: string): Promise<Recipe> {
-  const recipe = NewRecipe(newName);
-  return await saveNewRecipeDb(recipe, fromRootNodeId);
+export async function forkRecipe(fromRootNodeId: string, newName: string): Promise<RecipeNode> {
+  return await createRootRecipeNode(newName, fromRootNodeId);
 }
 
 /**
@@ -37,31 +47,38 @@ export async function updateRecipe(recipe: Recipe): Promise<Recipe> {
   return recipe;
 }
 
-export async function deleteRecipe(recipeId: string) {
-  if (!recipeId || recipeId.trim().length === 0) {
+/**
+ * Delete a recipe by deleting its root node. The ON DELETE CASCADE on
+ * recipe_nodes.parent_id removes the rest of the chain in one statement.
+ */
+export async function deleteRecipe(rootNodeId: string) {
+  if (!rootNodeId || rootNodeId.trim().length === 0) {
     throw new Error("Invalid Recipe ID");
   }
-  return await deleteRecipeDb(recipeId);
+  await db.delete(recipeNodes).where(eq(recipeNodes.id, rootNodeId));
 }
 
 /**
- * Update the name on the recipe row and every node in its history. The
- * recipe's name is denormalized onto each node so history labels stay
- * meaningful after edits.
+ * Update the name on every node in the recipe's history. The recipe's name
+ * is denormalized onto each node so history labels stay meaningful after
+ * edits.
  */
-export async function renameRecipe(recipeId: string, newName: string): Promise<void> {
+export async function renameRecipe(rootNodeId: string, newName: string): Promise<void> {
   const trimmed = newName.trim();
-  if (!recipeId || recipeId.trim().length === 0) {
+  if (!rootNodeId || rootNodeId.trim().length === 0) {
     throw new Error("Invalid Recipe ID");
   }
   if (!trimmed) {
     throw new Error("Recipe name cannot be empty");
   }
+  const nodes = await getRecipeNodesByRecipeId(rootNodeId);
   await db.transaction(async (tx) => {
-    await tx.update(recipes).set({ name: trimmed }).where(eq(recipes.id, recipeId));
-    await tx
-      .update(recipeNodes)
-      .set({ name: trimmed })
-      .where(eq(recipeNodes.recipeId, recipeId));
+    for (const node of nodes) {
+      await tx
+        .update(recipeNodes)
+        .set({ name: trimmed })
+        .where(eq(recipeNodes.id, node.id));
+    }
   });
 }
+

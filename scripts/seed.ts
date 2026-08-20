@@ -2,7 +2,7 @@ import 'dotenv/config';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { v4 as uuidv4 } from 'uuid';
-import { recipes, recipeNodes } from '../src/lib/server/db/schema.js';
+import { recipeNodes } from '../src/lib/server/db/schema.js';
 import type { IngredientChange, DirectionChange } from '../src/lib/obj/RecipeNode.svelte.js';
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -40,25 +40,9 @@ const FRENCH_INGREDIENT_IDS = {
 async function seed() {
   console.log('🌱 Seeding database...');
 
-  // Idempotent: clear before re-seeding. recipe_nodes cascades when its
-  // recipe rows are deleted, so delete recipes last (after nodes).
+  // Idempotent: clear before re-seeding. parentId ON DELETE CASCADE handles
+  // chain descendants when we delete the root.
   await db.delete(recipeNodes);
-  await db.delete(recipes);
-
-  // -------------------------------------------------------------------------
-  // Insert the recipe rows first so recipe_nodes.recipeId FKs resolve.
-  // -------------------------------------------------------------------------
-  const simpleRecipeId = uuidv4();
-  const frenchRecipeId = uuidv4();
-  const cheeseRecipeId = uuidv4();
-  const denverRecipeId = uuidv4();
-
-  await db.insert(recipes).values([
-    { id: simpleRecipeId, name: 'Simple Omelette' },
-    { id: frenchRecipeId, name: 'French Omelette' },
-    { id: cheeseRecipeId, name: 'Cheese Omelette' },
-    { id: denverRecipeId, name: 'Denver Omelette' },
-  ]);
 
   // -------------------------------------------------------------------------
   // Simple Omelette — top-level recipe (parentNodeId = null on its root).
@@ -79,7 +63,6 @@ async function seed() {
 
   const simpleChain: string[] = [];
   for (const row of chainRows({
-    recipeId: simpleRecipeId,
     name: 'Simple Omelette',
     parentTailId: null,
     specs: [{ label: 'initial recipe', changes: simpleChanges }],
@@ -95,7 +78,6 @@ async function seed() {
   // -------------------------------------------------------------------------
   const frenchChain: string[] = [];
   for (const row of chainRows({
-    recipeId: frenchRecipeId,
     name: 'French Omelette',
     parentTailId: simpleTail,
     specs: [
@@ -143,7 +125,6 @@ async function seed() {
   // -------------------------------------------------------------------------
   const cheeseChain: string[] = [];
   for (const row of chainRows({
-    recipeId: cheeseRecipeId,
     name: 'Cheese Omelette',
     parentTailId: simpleTail,
     specs: [
@@ -174,7 +155,6 @@ async function seed() {
   // -------------------------------------------------------------------------
   const denverChain: string[] = [];
   for (const row of chainRows({
-    recipeId: denverRecipeId,
     name: 'Denver Omelette',
     parentTailId: cheeseTail,
     specs: [
@@ -239,7 +219,6 @@ interface NodeSpec {
 }
 
 interface ChainArgs {
-  recipeId: string;
   name: string;
   parentTailId: string | null;
   specs: NodeSpec[];
@@ -247,7 +226,6 @@ interface ChainArgs {
 
 type ChainRow = {
   id: string;
-  recipeId: string;
   parentId: string | null;
   parentNodeId: string | null;
   name: string;
@@ -268,7 +246,6 @@ function* chainRows(args: ChainArgs): Generator<ChainRow> {
     const id = uuidv4();
     yield {
       id,
-      recipeId: args.recipeId,
       parentId: prevId,
       parentNodeId: isFirst ? args.parentTailId : null,
       name: args.name,

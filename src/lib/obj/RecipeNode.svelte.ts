@@ -27,17 +27,15 @@ export type IngredientChange = Change<Ingredient>;
 export type DirectionChange = Change<Direction>;
 
 export interface RecipeNode {
-  /** Own id. */
+  /** Own id. Doubles as the recipe's identity on root nodes. */
   id: string;
-  /** Owning recipe id. (Slated for removal alongside the recipes table.) */
-  recipeId: string;
   /** Recipe name. Denormalized so any node knows which recipe it belongs to. */
   name: string;
   /** Parent node id within the same recipe. null only on the root node. */
   parentId: string | null;
   /**
-   * Hierarchy pointer. On a recipe root, points to the tail node of the
-   * parent recipe — making this recipe a "child" of that one. Null on
+   * Hierarchy pointer. On a recipe root, points to a node in the parent
+   * recipe's chain — making this recipe a "child" of that one. Null on
    * non-root nodes and on top-level recipe roots.
    */
   parentNodeId: string | null;

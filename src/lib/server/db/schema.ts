@@ -8,14 +8,10 @@ export const task = pgTable('task', {
   priority: integer('priority').notNull().default(1)
 });
 
-export const recipes = pgTable('recipes', {
-  id: uuid('id').primaryKey(),
-  name: text('name').notNull(),
-})
-
 /**
  * One node in a recipe's history. Forms a singly-linked list per recipe
- * via parentId. The head (parentId = null) is the recipe's initial state.
+ * via parentId. The head (parentId = null) is the recipe's root and
+ * doubles as the recipe's identity — there is no separate recipes table.
  *
  * Hierarchy: a recipe's ROOT node may carry a `parentNodeId` pointing to
  * the tail node of its parent recipe — making this recipe a "child" of
@@ -23,16 +19,10 @@ export const recipes = pgTable('recipes', {
  *
  * The `name` field is denormalized — every node in a recipe carries the
  * same recipe name — so the API can answer "what recipe is this node
- * part of?" without joining through the recipes table.
- *
- * NOTE: The `recipes` table and the `recipeId` column on this table are
- * slated for removal in a future migration. Once that happens, a recipe's
- * identity becomes the root node's id, and "list all recipes" becomes
- * "select all nodes where parentId is null."
+ * part of?" without joining through a recipes table.
  */
 export const recipeNodes = pgTable('recipe_nodes', {
   id: uuid('id').defaultRandom().primaryKey(),
-  recipeId: uuid('recipe_id').notNull().references(() => recipes.id, { onDelete: 'cascade' }),
   parentId: uuid('parent_id').references((): AnyPgColumn => recipeNodes.id, { onDelete: 'cascade' }),
   parentNodeId: uuid('parent_node_id').references((): AnyPgColumn => recipeNodes.id, { onDelete: 'set null' }),
   name: text('name').notNull(),
@@ -48,7 +38,5 @@ export const recipeNodes = pgTable('recipe_nodes', {
   ),
 }));
 
-export type InsertRecipe = typeof recipes.$inferInsert;
-export type SelectRecipe = typeof recipes.$inferSelect;
 export type InsertRecipeNode = typeof recipeNodes.$inferInsert;
 export type SelectRecipeNode = typeof recipeNodes.$inferSelect;

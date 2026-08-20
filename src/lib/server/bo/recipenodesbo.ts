@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
+import { asc, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/index';
 import { recipeNodes } from '../db/schema';
 import type { InsertRecipeNode, SelectRecipeNode } from '../db/schema';
@@ -19,12 +19,15 @@ export interface RecipeState {
  * Create a root node for a brand-new recipe.
  * The root node has parentId = null and an empty change list — it represents
  * the recipe's initial state (which callers may then append child nodes to).
+ *
+ * `parentNodeId`, when set, points to a node in a parent recipe's chain —
+ * establishing this recipe as a "child" of that one.
  */
-export async function createRootRecipeNode(recipeId: string, name: string, parentNodeId: string | null = null): Promise<RecipeNode> {
-  const id = uuid();
+export async function createRootRecipeNode(
+  name: string,
+  parentNodeId: string | null = null,
+): Promise<RecipeNode> {
   const row: InsertRecipeNode = {
-    id,
-    recipeId,
     parentId: null,
     parentNodeId,
     name,
@@ -32,18 +35,8 @@ export async function createRootRecipeNode(recipeId: string, name: string, paren
     ingredientChanges: [],
     directionChanges: [],
   };
-  await db.insert(recipeNodes).values(row);
-  return {
-    id,
-    recipeId,
-    name,
-    parentId: null,
-    parentNodeId,
-    label: null,
-    timestamp: Date.now(),
-    ingredientChanges: [],
-    directionChanges: [],
-  };
+  const [inserted] = await db.insert(recipeNodes).values(row).returning();
+  return toUiRecipeNode(inserted);
 }
 
 /**
@@ -51,17 +44,13 @@ export async function createRootRecipeNode(recipeId: string, name: string, paren
  * the first node of a recipe, use createRootRecipeNode.
  */
 export async function appendRecipeNode(
-  recipeId: string,
   parentId: string,
   name: string,
   ingredientChanges: IngredientChange[],
   directionChanges: DirectionChange[],
   label: string | null = null,
 ): Promise<RecipeNode> {
-  const id = uuid();
   const row: InsertRecipeNode = {
-    id,
-    recipeId,
     parentId,
     parentNodeId: null,
     name,
@@ -69,31 +58,42 @@ export async function appendRecipeNode(
     ingredientChanges,
     directionChanges,
   };
-  await db.insert(recipeNodes).values(row);
-  return {
-    id,
-    recipeId,
-    name,
-    parentId,
-    parentNodeId: null,
-    label,
-    timestamp: Date.now(),
-    ingredientChanges,
-    directionChanges,
-  };
+  const [inserted] = await db.insert(recipeNodes).values(row).returning();
+  return toUiRecipeNode(inserted);
 }
 
 /**
- * Fetch every node for a recipe, oldest first.
- * One round trip; suitable for recipes with bounded history depth.
+ * Fetch every node in the chain rooted by rootNodeId, oldest first.
+ *
+ * The chain is a linked list via `parentId`: each non-root node's parentId
+ * points to its predecessor. We walk forward from the root until we hit a
+ * leaf — bounded by history depth, so the per-chain query count is
+ * proportional to chain length.
  */
-export async function getRecipeNodesByRecipeId(recipeId: string): Promise<RecipeNode[]> {
-  const rows: SelectRecipeNode[] = await db
-    .select()
-    .from(recipeNodes)
-    .where(eq(recipeNodes.recipeId, recipeId))
-    .orderBy(asc(recipeNodes.timestamp));
-  return rows.map(toUiRecipeNode);
+export async function getRecipeNodesByRecipeId(rootNodeId: string): Promise<RecipeNode[]> {
+  const nodes: RecipeNode[] = [];
+  let cursor: string | null = rootNodeId;
+  const visited = new Set<string>();
+  while (cursor !== null) {
+    if (visited.has(cursor)) break; // cycle guard
+    visited.add(cursor);
+    const rows = await db
+      .select()
+      .from(recipeNodes)
+      .where(eq(recipeNodes.id, cursor))
+      .limit(1);
+    const row = rows[0];
+    if (!row) break;
+    nodes.push(toUiRecipeNode(row));
+    const next = await db
+      .select({ id: recipeNodes.id })
+      .from(recipeNodes)
+      .where(eq(recipeNodes.parentId, cursor))
+      .orderBy(asc(recipeNodes.timestamp))
+      .limit(1);
+    cursor = next[0]?.id ?? null;
+  }
+  return nodes;
 }
 
 /**
@@ -103,20 +103,29 @@ export async function getRecipeNodesByRecipeId(recipeId: string): Promise<Recipe
 export const getRecipeHistory = getRecipeNodesByRecipeId;
 
 /**
- * Fetch the head (root) node for a recipe. Returns null if none exists.
+ * Resolve any node id in a chain to the chain's root (the node whose
+ * parentId is null). Returns null if no node with that id exists.
  */
-export async function getRootRecipeNode(recipeId: string): Promise<RecipeNode | null> {
-  const rows = await db
-    .select()
-    .from(recipeNodes)
-    .where(and(eq(recipeNodes.recipeId, recipeId), isNull(recipeNodes.parentId)))
-    .limit(1);
-  const row = rows[0];
-  return row ? toUiRecipeNode(row) : null;
+export async function getRootRecipeNode(nodeId: string): Promise<RecipeNode | null> {
+  let cursorId: string | null = nodeId;
+  const visited = new Set<string>();
+  let cursor: SelectRecipeNode | null = null;
+  while (cursorId !== null) {
+    if (visited.has(cursorId)) break;
+    visited.add(cursorId);
+    const rows: SelectRecipeNode[] = await db
+      .select()
+      .from(recipeNodes)
+      .where(eq(recipeNodes.id, cursorId))
+      .limit(1);
+    const row: SelectRecipeNode | undefined = rows[0];
+    if (!row) return null;
+    cursor = row;
+    cursorId = row.parentId;
+  }
+  return cursor ? toUiRecipeNode(cursor) : null;
 }
-
 /**
- * Materialize a recipe's current state by replaying every node in order.
  *
  * Ordering rules:
  *  - Nodes are applied in ascending timestamp order (oldest first).
@@ -128,8 +137,8 @@ export async function getRootRecipeNode(recipeId: string): Promise<RecipeNode | 
  * 'add' inserts a new row, 'edit' replaces the row by targetId, 'remove'
  * deletes the row by targetId.
  */
-export async function getRecipeState(recipeId: string): Promise<RecipeState> {
-  const nodes = await getRecipeNodesByRecipeId(recipeId);
+export async function getRecipeState(rootNodeId: string): Promise<RecipeState> {
+  const nodes = await getRecipeNodesByRecipeId(rootNodeId);
   return applyNodes(nodes);
 }
 
@@ -209,7 +218,6 @@ function applyDirectionChange(
 function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
   return {
     id: row.id,
-    recipeId: row.recipeId,
     name: row.name,
     parentId: row.parentId,
     parentNodeId: row.parentNodeId,
@@ -251,14 +259,13 @@ export async function updateRecipeState(recipe: Recipe, label: string | null = n
   let parentId: string;
   const tail = await getLatestRecipeNode(recipe.id);
   if (!tail) {
-    const created = await createRootRecipeNode(recipe.id, recipe.name);
+    const created = await createRootRecipeNode(recipe.name);
     parentId = created.id;
   } else {
     parentId = tail.id;
   }
 
   await appendRecipeNode(
-    recipe.id,
     parentId,
     recipe.name,
     ingredientChanges,
@@ -270,18 +277,13 @@ export async function updateRecipeState(recipe: Recipe, label: string | null = n
 }
 
 /**
- * Fetch the most recently created node for a recipe (the tail of the list).
- * Returns null if the recipe has no nodes.
+ * Fetch the most recently created node in the chain rooted by rootNodeId
+ * (the tail of the list). Returns null if the recipe has no nodes.
  */
-async function getLatestRecipeNode(recipeId: string): Promise<RecipeNode | null> {
-  const rows = await db
-    .select()
-    .from(recipeNodes)
-    .where(eq(recipeNodes.recipeId, recipeId))
-    .orderBy(desc(recipeNodes.timestamp))
-    .limit(1);
-  const row = rows[0];
-  return row ? toUiRecipeNode(row) : null;
+async function getLatestRecipeNode(rootNodeId: string): Promise<RecipeNode | null> {
+  const chain = await getRecipeNodesByRecipeId(rootNodeId);
+  if (chain.length === 0) return null;
+  return chain[chain.length - 1];
 }
 
 function diffIngredients(
@@ -393,8 +395,6 @@ function ingredientEqual(a: Ingredient, b: Ingredient): boolean {
 export interface RecipeSummary {
   /** Root node id. Doubles as the recipe's identity. */
   id: string;
-  /** FK into the recipes table (kept for the future migration to drop it). */
-  recipeId: string;
   name: string;
   /** Tail node id (the most recent node in this recipe's chain). */
   tailId: string | null;
@@ -407,85 +407,96 @@ export interface RecipeTreeNode extends RecipeSummary {
 }
 
 /**
- * Build the recipe hierarchy for the list UI. Each recipe's chain is
- * identified by its root node id and its most recent (tail) node id is
- * included so child recipes (which point at parentNodeId) can be linked.
+ * Build the recipe hierarchy for the list UI.
  *
- * Children's `parentNodeId` may point at ANY node in the parent's chain,
- * not just the tail. As a chain grows (via save), the tail changes but the
- * old `parentNodeId` references still need to resolve. So we index every
- * node id by its owning recipe id, then resolve each child's
- * `parentNodeId` to the parent recipe via that index.
+ * Roots are nodes with parentId IS NULL. Each root owns a chain connected
+ * via parentId (root → tail). Children's `parentNodeId` points to a node
+ * in their parent's chain; we resolve that back to the parent recipe by
+ * walking parentId pointers until we hit a root.
  *
- * One query: SELECT root nodes (parentId IS NULL) plus a per-recipe latest
- * node lookup and a node-id → recipe-id lookup. For larger datasets,
- * switch to a single query that fetches all nodes and walks in memory.
+ * One query: fetch every node, then process in memory. For larger
+ * datasets, switch to per-recipe recursive CTEs.
  */
 export async function getRecipeTree(): Promise<RecipeTreeNode[]> {
-  const rows: SelectRecipeNode[] = await db
-    .select()
-    .from(recipeNodes)
-    .where(isNull(recipeNodes.parentId))
-    .orderBy(asc(recipeNodes.timestamp));
+  const allRows: SelectRecipeNode[] = await db.select().from(recipeNodes);
 
-  const roots = rows.map(toUiRecipeNode);
+  // Index every node by id and by parentId so chain walks are O(1).
+  const byId = new Map<string, SelectRecipeNode>();
+  for (const row of allRows) byId.set(row.id, row);
 
-  // For each root, find its tail (the last node in the chain by timestamp).
-  const summaries: RecipeSummary[] = await Promise.all(
-    roots.map(async (root) => {
-      const tail = await getLatestRecipeNode(root.recipeId);
-      return {
-        id: root.id,
-        recipeId: root.recipeId,
-        name: root.name,
-        tailId: tail?.id ?? null,
-        parentNodeId: root.parentNodeId,
-      };
-    }),
-  );
-
-  // Index every node id by its owning recipe id. This lets us resolve a
-  // child's `parentNodeId` (which may point at any node in the parent's
-  // chain, including a stale tail) back to the parent recipe.
-  const nodeRows: SelectRecipeNode[] = await db
-    .select({ id: recipeNodes.id, recipeId: recipeNodes.recipeId })
-    .from(recipeNodes);
-  const nodeIdToRecipeId = new Map<string, string>();
-  for (const r of nodeRows) {
-    nodeIdToRecipeId.set(r.id, r.recipeId);
+  // child of a parent = the next node in that chain (linked list). For
+  // a single chain, each parent has at most one child. If we ever store
+  // branches, this map would need to become a list.
+  const childByParentId = new Map<string, SelectRecipeNode>();
+  for (const row of allRows) {
+    if (row.parentId !== null) {
+      childByParentId.set(row.parentId, row);
+    }
   }
 
-  // Index summaries by recipe id so we can resolve a parent recipe from
-  // a node id.
-  const summaryByRecipeId = new Map<string, RecipeSummary>();
-  for (const s of summaries) {
-    summaryByRecipeId.set(s.recipeId, s);
+  // Walk forward from root via parentId to find the tail.
+  function tailOf(rootId: string): string {
+    let cursorId: string | null = rootId;
+    const visited = new Set<string>();
+    while (cursorId !== null) {
+      if (visited.has(cursorId)) break;
+      visited.add(cursorId);
+      const next = childByParentId.get(cursorId);
+      if (!next) return cursorId;
+      cursorId = next.id;
+    }
+    return cursorId ?? rootId;
   }
 
-  // Group children under their parent recipe.
+  // Walk backward via parentId to find the root of the chain containing nodeId.
+  function rootOf(nodeId: string): string {
+    let cursorId: string | null = nodeId;
+    const visited = new Set<string>();
+    while (cursorId !== null) {
+      const node = byId.get(cursorId);
+      if (!node || node.parentId === null) return cursorId ?? nodeId;
+      if (visited.has(cursorId)) return cursorId;
+      visited.add(cursorId);
+      cursorId = node.parentId;
+    }
+    return nodeId;
+  }
+
+  const rootRows = allRows
+    .filter((r) => r.parentId === null)
+    .sort((a, b) => +a.timestamp - +b.timestamp);
+
+  const summaries: RecipeSummary[] = rootRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    tailId: tailOf(row.id),
+    parentNodeId: row.parentNodeId,
+  }));
+
+  // Group children under their parent recipe (resolved via parentNodeId).
+  const summaryByRootId = new Map<string, RecipeSummary>();
+  for (const s of summaries) summaryByRootId.set(s.id, s);
+
   const childrenByParent = new Map<string, RecipeSummary[]>();
   const topLevel: RecipeSummary[] = [];
   for (const s of summaries) {
-    const parentRecipeId = s.parentNodeId ? nodeIdToRecipeId.get(s.parentNodeId) : undefined;
-    const parent = parentRecipeId ? summaryByRecipeId.get(parentRecipeId) : undefined;
+    const parentRootId = s.parentNodeId ? rootOf(s.parentNodeId) : null;
+    const parent = parentRootId ? summaryByRootId.get(parentRootId) : null;
     if (parent) {
-      const list = childrenByParent.get(parent.recipeId) ?? [];
+      const list = childrenByParent.get(parent.id) ?? [];
       list.push(s);
-      childrenByParent.set(parent.recipeId, list);
+      childrenByParent.set(parent.id, list);
     } else {
       topLevel.push(s);
     }
   }
 
-  // Recursive build — depth is bounded by the hierarchy, not the chain.
   function build(s: RecipeSummary): RecipeTreeNode {
     return {
       ...s,
-      children: (childrenByParent.get(s.recipeId) ?? []).map(build),
+      children: (childrenByParent.get(s.id) ?? []).map(build),
     };
   }
 
   return topLevel.map(build);
 }
-
-// getLatestRecipeNode is defined earlier in the file and reused here.

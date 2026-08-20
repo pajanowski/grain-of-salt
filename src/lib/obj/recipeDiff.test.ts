@@ -47,11 +47,10 @@ function directionRemove(targetId: string, note: string | null = null): Directio
 }
 
 function node(
-  partial: Partial<RecipeNode> & { id: string; recipeId: string },
+  partial: Partial<RecipeNode> & { id: string },
 ): RecipeNode {
   return {
     id: partial.id,
-    recipeId: partial.recipeId,
     name: partial.name ?? 'Test',
     parentId: partial.parentId ?? null,
     parentNodeId: partial.parentNodeId ?? null,
@@ -157,7 +156,6 @@ describe('formatChain', () => {
     const nodes: RecipeNode[] = [
       node({
         id: 'n1',
-        recipeId: 'r1',
         ingredientChanges: [ingredientAdd('i1', { name: 'Flour', amount: 200, unit: 'g' })],
       }),
     ];
@@ -172,12 +170,10 @@ describe('formatChain', () => {
     const nodes: RecipeNode[] = [
       node({
         id: 'n1',
-        recipeId: 'r1',
         ingredientChanges: [ingredientAdd('i1', { name: 'Butter', amount: 1, unit: 'tbsp' })],
       }),
       node({
         id: 'n2',
-        recipeId: 'r1',
         parentId: 'n1',
         ingredientChanges: [ingredientEdit('i1', { name: 'Butter', amount: 2, unit: 'tbsp' })],
       }),
@@ -190,18 +186,15 @@ describe('formatChain', () => {
     const nodes: RecipeNode[] = [
       node({
         id: 'n1',
-        recipeId: 'r1',
         ingredientChanges: [ingredientAdd('i1', { name: 'Flour', amount: 200, unit: 'g' })],
       }),
       node({
         id: 'n2',
-        recipeId: 'r1',
         parentId: 'n1',
         ingredientChanges: [ingredientEdit('i1', { name: 'Flour', amount: 250, unit: 'g' })],
       }),
       node({
         id: 'n3',
-        recipeId: 'r1',
         parentId: 'n2',
         ingredientChanges: [ingredientRemove('i1')],
       }),
@@ -215,12 +208,10 @@ describe('formatChain', () => {
     const nodes: RecipeNode[] = [
       node({
         id: 'n1',
-        recipeId: 'r1',
         ingredientChanges: [ingredientAdd('i1', { name: 'Butter', amount: 1, unit: 'tbsp' })],
       }),
       node({
         id: 'n2',
-        recipeId: 'r1',
         parentId: 'n1',
         ingredientChanges: [ingredientEdit('i1', { name: 'Butter', amount: 2, unit: 'tbsp' })],
       }),
@@ -234,13 +225,11 @@ describe('formatChain', () => {
     const nodes: RecipeNode[] = [
       node({
         id: 'n1',
-        recipeId: 'r1',
         ingredientChanges: [ingredientAdd('i1', { name: 'Flour', amount: 200, unit: 'g' })],
         directionChanges: [directionAdd('d1', 'Mix flour.')],
       }),
       node({
         id: 'n2',
-        recipeId: 'r1',
         parentId: 'n1',
         ingredientChanges: [ingredientEdit('i1', { name: 'Flour', amount: 250, unit: 'g' })],
         directionChanges: [directionEdit('d1', 'Whisk flour.')],
@@ -263,12 +252,10 @@ describe('formatChain', () => {
     const nodes: RecipeNode[] = [
       node({
         id: 'n1',
-        recipeId: 'r1',
         ingredientChanges: [ingredientAdd('i1', { name: 'Butter', amount: 1, unit: 'tbsp' })],
       }),
       node({
         id: 'n2',
-        recipeId: 'r1',
         parentId: 'n1',
         ingredientChanges: [noteChange],
       }),
@@ -283,7 +270,6 @@ describe('formatChain', () => {
     const nodes: RecipeNode[] = [
       node({
         id: 'fr1',
-        recipeId: 'r-fr',
         ingredientChanges: [
           ingredientAdd('sim-eggs', { name: 'Eggs', amount: 3, unit: '' }),
           ingredientAdd('sim-butter', { name: 'Butter', amount: 1, unit: 'tbsp' }),
@@ -298,7 +284,6 @@ describe('formatChain', () => {
       }),
       node({
         id: 'fr2',
-        recipeId: 'r-fr',
         parentId: 'fr1',
         ingredientChanges: [
           ingredientEdit('sim-butter', { name: 'Butter', amount: 2, unit: 'tbsp' }),
@@ -337,7 +322,6 @@ describe('formatNode', () => {
   it('uses the supplied prior state for edit diffs', () => {
     const nd: RecipeNode = node({
       id: 'n1',
-      recipeId: 'r1',
       ingredientChanges: [ingredientEdit('i1', { name: 'Butter', amount: 2, unit: 'tbsp' })],
     });
     const prior = emptyMaps();
@@ -349,7 +333,6 @@ describe('formatNode', () => {
   it('does not mutate the supplied prior state maps', () => {
     const nd: RecipeNode = node({
       id: 'n1',
-      recipeId: 'r1',
       ingredientChanges: [
         ingredientAdd('i1', { name: 'Flour', amount: 200, unit: 'g' }),
         ingredientEdit('i1', { name: 'Flour', amount: 250, unit: 'g' }),

@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { EmptyDirection, EmptyIngredient, type Ingredient, type Direction } from '$lib/obj/Recipe.svelte';
+	import {
+		EmptyDirection,
+		EmptyIngredient,
+		type Ingredient,
+		type Direction
+	} from '$lib/obj/Recipe.svelte';
 	import IngredientRow from './IngredientRow.svelte';
 	import DirectionRow from './DirectionRow.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
@@ -14,10 +19,8 @@
 		recipeData = JSON.parse(JSON.stringify(recipe));
 	});
 
-	// recipeData.id is the root node id; recipeData.recipeId is the FK
-	// into the recipes table that updateRecipeState expects.
-	const rootNodeId = $derived(recipeData.id);
-	const recipeId = $derived(recipeData.recipeId);
+// recipeData.id is the root node id, which IS the recipe's identity.
+const rootNodeId = $derived(recipeData.id);
 
 	let addingIngredient = $state(false);
 	let addingDirection = $state(false);
@@ -44,7 +47,7 @@
 			const res = await fetch(`/api/recipe/${rootNodeId}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ name: trimmed }),
+				body: JSON.stringify({ name: trimmed })
 			});
 			if (!res.ok) {
 				alert(`Rename failed: ${await res.text()}`);
@@ -75,13 +78,14 @@
 			const res = await fetch(`/api/recipe/${rootNodeId}/fork`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ name: trimmed }),
+				body: JSON.stringify({ name: trimmed })
 			});
 			if (!res.ok) {
 				alert(`Fork failed: ${await res.text()}`);
 				return;
 			}
 			const newRecipe = await res.json();
+			console.log(JSON.stringify(newRecipe));
 			showForkModal = false;
 			await goto(`/recipes/${newRecipe.id}`);
 		} catch (e) {
@@ -105,7 +109,7 @@
 	const menuItems: MenuItem[] = $derived([
 		{ label: 'Rename recipe', onSelect: openRename },
 		{ label: 'Fork recipe', onSelect: openFork },
-		{ label: 'Delete recipe', onSelect: confirmDelete, danger: true },
+		{ label: 'Delete recipe', onSelect: confirmDelete, danger: true }
 	]);
 
 	// ---- per-row mutation handlers -----------------------------------------
@@ -243,10 +247,8 @@
 				fetch('/api/save', {
 					method: 'PUT',
 					body: new URLSearchParams({
-						recipe: JSON.stringify(recipeData),
-						recipeId,
-						rootNodeId,
-					}),
+						recipe: JSON.stringify(recipeData)
+					})
 				}).then(async (res) => {
 					if (!res.ok) {
 						const msg = await res.text();
@@ -290,10 +292,8 @@
 				onclick={() => (showRenameModal = false)}
 				disabled={renameBusy}>Cancel</button
 			>
-			<button
-				type="submit"
-				data-testid="rename-save"
-				disabled={!renameName.trim() || renameBusy}>Save</button
+			<button type="submit" data-testid="rename-save" disabled={!renameName.trim() || renameBusy}
+				>Save</button
 			>
 		</div>
 	</form>
@@ -326,10 +326,8 @@
 				onclick={() => (showForkModal = false)}
 				disabled={forkBusy}>Cancel</button
 			>
-			<button
-				type="submit"
-				data-testid="fork-save"
-				disabled={!forkName.trim() || forkBusy}>Save</button
+			<button type="submit" data-testid="fork-save" disabled={!forkName.trim() || forkBusy}
+				>Save</button
 			>
 		</div>
 	</form>
