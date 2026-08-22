@@ -1,63 +1,52 @@
 import type { PageServerLoad } from './$types';
-import { getRecipeState, getRecipeNodesByRecipeId, getRootRecipeNode, getRecipeNodesByRecipeIdV2 } from '$lib/server/bo/recipenodesbo';
+import { getRecipeNodesByRecipeIdV2, applyNodes } from '$lib/server/bo/recipenodesbo';
 import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
 
 /**
- * The page URL is `/recipes/[slug]`, where `slug` is the ROOT NODE id of a
- * recipe. We resolve that root, fetch the materialized state, and load the
- * full chain for the history view.
+ * The page URL is `/recipes/[slug]`, where `slug` is any recipe node id.
  *
- * If `slug` is the id of any node in a recipe (not just the root), we
- * still navigate "up" to the root of that recipe so the user lands on the
- * recipe page. (Handy if someone shares a deep link to a non-root node.)
+ * We walk up the parentId chain to the root, then replay all nodes forward
+ * (root → ... → current) to build the materialized recipe state. The
+ * `parentChain` shows ancestor recipes for breadcrumb navigation.
  */
-async function resolveParentChain(root: RecipeNode): Promise<Array<{ id: string; name: string }>> {
-  // Walk up via parentNodeId: root -> parent's chain node -> that node's
-  // chain's root -> that root's parentNodeId -> ...
-  const chain: Array<{ id: string; name: string }> = [];
-  let currentRoot: RecipeNode = root;
-  const visited = new Set<string>();
-  while (currentRoot.parentNodeId) {
-    if (visited.has(currentRoot.parentNodeId)) break; // cycle guard
-    visited.add(currentRoot.parentNodeId);
-    const parentRoot = await getRootRecipeNode(currentRoot.parentNodeId);
-    if (!parentRoot) break;
-    chain.unshift({ id: parentRoot.id, name: parentRoot.name });
-    currentRoot = parentRoot;
-  }
-  return chain;
-}
-
 export const load: PageServerLoad = async ({ depends, params }) => {
-  // try {
   depends('app:recipe');
   const recipeNodeId = params.slug;
-  const recipeNodes = await getRecipeNodesByRecipeIdV2(recipeNodeId)
-  console.log(recipeNodes)
-  //   const root = await getRootRecipeNode(recipeNodeId);
-  //   if (!root) {
-  //     throw new Error('Recipe not found');
-  //   }
-  //
-  //   console.log(root);
-  //   const [state, history, parentChain] = await Promise.all([
-  //     getRecipeState(root.id),
-  //     getRecipeNodesByRecipeId(root.id),
-  //     resolveParentChain(root),
-  //   ]);
-  //
-  //   return {
-  //     recipe: {
-  //       id: root.id,
-  //       name: root.name,
-  //       ingredients: state.ingredients,
-  //       directions: state.directions,
-  //     },
-  //     history,
-  //     parentChain,
-  //   };
-  // } catch (err) {
-  //   console.error('[Recipe slug load error]', err);
-  //   throw err;
-  // }
+
+  // Fetch the chain from current node back to root.
+  const chainBackwards = await getRecipeNodesByRecipeIdV2(recipeNodeId);
+
+  // Reverse so we have root → ... → current (oldest first, needed for replay).
+  const history = [...chainBackwards].reverse();
+
+  if (history.length === 0) {
+    throw new Error('Recipe not found');
+  }
+
+  // The root is the first element after reversing.
+  const root = history[0];
+  // The current node is the last element.
+  const current = history[history.length - 1];
+
+  // Materialize the full recipe state by replaying all nodes.
+  const state = applyNodes(history);
+
+  // Build the parent breadcrumb chain: ancestor recipes (not including self).
+  // Skip the first entry (root) — we don't include the recipe itself in the chain.
+  // Then skip the last entry (current) — that's the page we're on.
+  const parentChain = history
+    .slice(1) // drop root
+    .slice(0, -1) // drop current
+    .map((node: RecipeNode) => ({ id: node.id, name: node.name }));
+
+  return {
+    recipe: {
+      id: current.id,
+      name: current.name,
+      ingredients: state.ingredients,
+      directions: state.directions,
+    },
+    history, // full node chain for the history UI
+    parentChain,
+  };
 };

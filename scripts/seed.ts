@@ -47,7 +47,13 @@ async function seed() {
   // -------------------------------------------------------------------------
   // Simple Omelette — top-level recipe (parentNodeId = null on its root).
   // -------------------------------------------------------------------------
-  const simpleChanges = {
+  const simpleNodeId = uuidv4();
+  await db.insert(recipeNodes).values({
+    id: simpleNodeId,
+    parentId: null,
+    parentNodeId: null,
+    name: 'Simple Omelette',
+    label: 'initial recipe',
     ingredientChanges: [
       ingredientAdd(SIMPLE_INGREDIENT_IDS.eggs, { name: 'Eggs', amount: 3, unit: '' }),
       ingredientAdd(SIMPLE_INGREDIENT_IDS.butter, { name: 'Butter', amount: 1, unit: 'tbsp' }),
@@ -59,204 +65,105 @@ async function seed() {
       directionAdd(SIMPLE_DIRECTION_IDS.cookEggs, 'Pour in eggs, cook, stirring gently until set.'),
       directionAdd(SIMPLE_DIRECTION_IDS.foldServe, 'Fold in half and serve.'),
     ],
-  };
-
-  const simpleChain: string[] = [];
-  for (const row of chainRows({
-    name: 'Simple Omelette',
-    parentTailId: null,
-    specs: [{ label: 'initial recipe', changes: simpleChanges }],
-  })) {
-    await db.insert(recipeNodes).values(row);
-    simpleChain.push(row.id);
-  }
-  const simpleTail = simpleChain[simpleChain.length - 1];
+  });
 
   // -------------------------------------------------------------------------
-  // French Omelette — parent recipe is Simple's tail. Classic French style:
+  // French Omelette — parent recipe is Simple's node. Classic French style:
   // more butter (used for basting), low heat, constant stirring, no browning.
+  // Only the changes (deltas) from Simple are stored here.
   // -------------------------------------------------------------------------
-  const frenchChain: string[] = [];
-  for (const row of chainRows({
+  await db.insert(recipeNodes).values({
+    id: uuidv4(),
+    parentId: simpleNodeId,
+    parentNodeId: null,
     name: 'French Omelette',
-    parentTailId: simpleTail,
-    specs: [
-      { label: 'start from simple omelette', changes: simpleChanges },
-      {
-        label: 'bump butter, add chives; cook low and slow, no browning',
-        changes: {
-          ingredientChanges: [
-            ingredientEdit(
-              SIMPLE_INGREDIENT_IDS.butter,
-              { name: 'Butter', amount: 2, unit: 'tbsp' },
-              'Double the butter: half for the pan, half for basting with a spoon while the eggs set.',
-            ),
-            ingredientAdd(
-              FRENCH_INGREDIENT_IDS.chives,
-              { name: 'Chives', amount: 1, unit: 'tbsp' },
-              'Optional — fines herbes work too (parsley, tarragon, chervil).',
-            ),
-          ],
-          directionChanges: [
-            directionEdit(
-              SIMPLE_DIRECTION_IDS.meltButter,
-              'Melt butter over low heat until foamy.',
-              'Low heat is non-negotiable. High heat browns the eggs before the curds form.',
-            ),
-            directionEdit(
-              SIMPLE_DIRECTION_IDS.cookEggs,
-              'Pour in eggs and stir constantly with the flat of a fork, keeping the curds moving. Do not brown.',
-            ),
-            directionEdit(
-              SIMPLE_DIRECTION_IDS.foldServe,
-              'When surface is just set and still creamy, fold in thirds and slide onto a plate.',
-            ),
-          ],
-        },
-      },
+    label: 'bump butter, add chives; cook low and slow, no browning',
+    ingredientChanges: [
+      ingredientEdit(
+        SIMPLE_INGREDIENT_IDS.butter,
+        { name: 'Butter', amount: 2, unit: 'tbsp' },
+        'Double the butter: half for the pan, half for basting with a spoon while the eggs set.',
+      ),
+      ingredientAdd(
+        FRENCH_INGREDIENT_IDS.chives,
+        { name: 'Chives', amount: 1, unit: 'tbsp' },
+        'Optional — fines herbes work too (parsley, tarragon, chervil).',
+      ),
     ],
-  })) {
-    await db.insert(recipeNodes).values(row);
-    frenchChain.push(row.id);
-  }
+    directionChanges: [
+      directionEdit(
+        SIMPLE_DIRECTION_IDS.meltButter,
+        'Melt butter over low heat until foamy.',
+        'Low heat is non-negotiable. High heat browns the eggs before the curds form.',
+      ),
+      directionEdit(
+        SIMPLE_DIRECTION_IDS.cookEggs,
+        'Pour in eggs and stir constantly with the flat of a fork, keeping the curds moving. Do not brown.',
+      ),
+      directionEdit(
+        SIMPLE_DIRECTION_IDS.foldServe,
+        'When surface is just set and still creamy, fold in thirds and slide onto a plate.',
+      ),
+    ],
+  });
 
   // -------------------------------------------------------------------------
-  // Cheese Omelette — parent recipe is Simple's tail.
+  // Cheese Omelette — parent recipe is Simple's node.
   // -------------------------------------------------------------------------
-  const cheeseChain: string[] = [];
-  for (const row of chainRows({
+  const cheeseNodeId = uuidv4();
+  await db.insert(recipeNodes).values({
+    id: cheeseNodeId,
+    parentId: simpleNodeId,
+    parentNodeId: null,
     name: 'Cheese Omelette',
-    parentTailId: simpleTail,
-    specs: [
-      { label: 'start from simple omelette', changes: simpleChanges },
-      {
-        label: 'add cheese, fold with cheese inside',
-        changes: {
-          ingredientChanges: [
-            ingredientAdd(CHEESE_INGREDIENT_ID, { name: 'Cheddar', amount: 50, unit: 'g' }),
-          ],
-          directionChanges: [
-            directionEdit(
-              SIMPLE_DIRECTION_IDS.foldServe,
-              'When almost set, sprinkle cheese over half, fold and serve.',
-            ),
-          ],
-        },
-      },
+    label: 'add cheese, fold with cheese inside',
+    ingredientChanges: [
+      ingredientAdd(CHEESE_INGREDIENT_ID, { name: 'Cheddar', amount: 50, unit: 'g' }),
     ],
-  })) {
-    await db.insert(recipeNodes).values(row);
-    cheeseChain.push(row.id);
-  }
-  const cheeseTail = cheeseChain[cheeseChain.length - 1];
+    directionChanges: [
+      directionEdit(
+        SIMPLE_DIRECTION_IDS.foldServe,
+        'When almost set, sprinkle cheese over half, fold and serve.',
+      ),
+    ],
+  });
 
   // -------------------------------------------------------------------------
-  // Denver Omelette — parent recipe is Cheese's tail.
+  // Denver Omelette — parent recipe is Cheese Omelette.
   // -------------------------------------------------------------------------
-  const denverChain: string[] = [];
-  for (const row of chainRows({
+  await db.insert(recipeNodes).values({
+    id: uuidv4(),
+    parentId: cheeseNodeId,
+    parentNodeId: null,
     name: 'Denver Omelette',
-    parentTailId: cheeseTail,
-    specs: [
-      { label: 'start from simple omelette', changes: simpleChanges },
-      {
-        label: 'add cheese, fold with cheese inside',
-        changes: {
-          ingredientChanges: [
-            ingredientAdd(CHEESE_INGREDIENT_ID, { name: 'Cheddar', amount: 50, unit: 'g' }),
-          ],
-          directionChanges: [
-            directionEdit(
-              SIMPLE_DIRECTION_IDS.foldServe,
-              'When almost set, sprinkle cheese over half, fold and serve.',
-            ),
-          ],
-        },
-      },
-      {
-        label: 'add diced ham, bell pepper, and onion',
-        changes: {
-          ingredientChanges: [
-            ingredientAdd(
-              DENVER_INGREDIENT_IDS.ham,
-              { name: 'Ham', amount: 50, unit: 'g' },
-              'Diced deli ham works fine. Skip if you want a vegetarian version.',
-            ),
-            ingredientAdd(DENVER_INGREDIENT_IDS.pepper, { name: 'Bell pepper', amount: 1, unit: '' }),
-            ingredientAdd(DENVER_INGREDIENT_IDS.onion, { name: 'Onion', amount: 0.5, unit: '' }),
-          ],
-          directionChanges: [
-            directionEdit(
-              SIMPLE_DIRECTION_IDS.meltButter,
-              'Sauté diced onion and bell pepper in butter until soft.',
-            ),
-            directionEdit(
-              SIMPLE_DIRECTION_IDS.cookEggs,
-              'Add diced ham, then pour in beaten eggs and cook gently.',
-            ),
-          ],
-        },
-      },
+    label: 'add diced ham, bell pepper, and onion',
+    ingredientChanges: [
+      ingredientAdd(
+        DENVER_INGREDIENT_IDS.ham,
+        { name: 'Ham', amount: 50, unit: 'g' },
+        'Diced deli ham works fine. Skip if you want a vegetarian version.',
+      ),
+      ingredientAdd(DENVER_INGREDIENT_IDS.pepper, { name: 'Bell pepper', amount: 1, unit: '' }),
+      ingredientAdd(DENVER_INGREDIENT_IDS.onion, { name: 'Onion', amount: 0.5, unit: '' }),
     ],
-  })) {
-    await db.insert(recipeNodes).values(row);
-    denverChain.push(row.id);
-  }
+    directionChanges: [
+      directionEdit(
+        SIMPLE_DIRECTION_IDS.meltButter,
+        'Sauté diced onion and bell pepper in butter until soft.',
+      ),
+      directionEdit(
+        SIMPLE_DIRECTION_IDS.cookEggs,
+        'Add diced ham, then pour in beaten eggs and cook gently.',
+      ),
+    ],
+  });
 
   console.log(
-    `✅ Seeded 4 recipes (Simple / French / Cheese / Denver) with chained history and hierarchy.`,
+    `✅ Seeded 4 recipes (Simple / French / Cheese / Denver) with correct parent-child relationships.`,
   );
 }
 
 // --- helpers ---------------------------------------------------------------
-
-interface NodeSpec {
-  label: string;
-  changes: {
-    ingredientChanges: IngredientChange[];
-    directionChanges: DirectionChange[];
-  };
-}
-
-interface ChainArgs {
-  name: string;
-  parentTailId: string | null;
-  specs: NodeSpec[];
-}
-
-type ChainRow = {
-  id: string;
-  parentId: string | null;
-  parentNodeId: string | null;
-  name: string;
-  label: string;
-  ingredientChanges: IngredientChange[];
-  directionChanges: DirectionChange[];
-};
-
-/**
- * Build the chain of RecipeNode row values for one recipe. The first node
- * has parentId = null and parentNodeId = parentTailId. Subsequent nodes
- * have parentId = previous node's id and parentNodeId = null.
- */
-function* chainRows(args: ChainArgs): Generator<ChainRow> {
-  let prevId: string | null = null;
-  let isFirst = true;
-  for (const spec of args.specs) {
-    const id = uuidv4();
-    yield {
-      id,
-      parentId: prevId,
-      parentNodeId: isFirst ? args.parentTailId : null,
-      name: args.name,
-      label: spec.label,
-      ingredientChanges: spec.changes.ingredientChanges,
-      directionChanges: spec.changes.directionChanges,
-    };
-    prevId = id;
-    isFirst = false;
-  }
-}
 
 function ingredientAdd(
   id: string,

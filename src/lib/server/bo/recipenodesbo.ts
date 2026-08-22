@@ -18,19 +18,18 @@ export interface RecipeState {
 
 /**
  * Create a root node for a brand-new recipe.
- * The root node has parentId = null and an empty change list — it represents
- * the recipe's initial state (which callers may then append child nodes to).
+ * The root node has parentId = null.
  *
- * `parentNodeId`, when set, points to a node in a parent recipe's chain —
- * establishing this recipe as a "child" of that one.
+ * `parentId`, when set, points to a node in the parent recipe — establishing
+ * this recipe as a "child" of that one (e.g. a fork or a derived recipe).
  */
 export async function createRootRecipeNode(
   name: string,
-  parentNodeId: string | null = null,
+  parentId: string | null = null,
 ): Promise<RecipeNode> {
   const row: InsertRecipeNode = {
-    parentId: null,
-    parentNodeId,
+    parentId,
+    parentNodeId: null,
     name,
     label: null,
     ingredientChanges: [],
@@ -403,18 +402,14 @@ function ingredientEqual(a: Ingredient, b: Ingredient): boolean {
 }
 
 /**
- * A recipe as it appears in the list/tree UI. A "recipe" is identified by
- * its root node id; the rest of the recipe's chain is hidden behind the
- * applyNodes replay.
+ * A recipe as it appears in the list/tree UI. Each RecipeNode is its own
+ * recipe; parentId points to the parent recipe's node.
  */
 export interface RecipeSummary {
-  /** Root node id. Doubles as the recipe's identity. */
   id: string;
   name: string;
-  /** Tail node id (the most recent node in this recipe's chain). */
-  tailId: string | null;
-  /** Hierarchy pointer. Null for top-level recipes. */
-  parentNodeId: string | null;
+  /** Null for top-level (root) recipes. */
+  parentId: string | null;
 }
 
 export interface RecipeTreeNode extends RecipeSummary {
@@ -424,10 +419,10 @@ export interface RecipeTreeNode extends RecipeSummary {
 /**
  * Build the recipe hierarchy for the list UI.
  *
- * Roots are nodes with parentId IS NULL. Each root owns a chain connected
- * via parentId (root → tail). Children's `parentNodeId` points to a node
- * in their parent's chain; we resolve that back to the parent recipe by
- * walking parentId pointers until we hit a root.
+ * Every node is a recipe. The tree is rooted at nodes with parentId = null.
+ * Each node's direct parent is identified by its parentId; we only add a
+ * node to the tree if its parent already exists as a node (otherwise it
+ * bubbles up to top-level).
  *
  * One query: fetch every node, then process in memory. For larger
  * datasets, switch to per-recipe recursive CTEs.
@@ -435,83 +430,29 @@ export interface RecipeTreeNode extends RecipeSummary {
 export async function getRecipeTree(): Promise<RecipeTreeNode[]> {
   const allRows: SelectRecipeNode[] = await db.select().from(recipeNodes);
 
-  // Index every node by id and by parentId so chain walks are O(1).
-  const byId = new Map<string, SelectRecipeNode>();
-  for (const row of allRows) byId.set(row.id, row);
-
-  // child of a parent = the next node in that chain (linked list). For
-  // a single chain, each parent has at most one child. If we ever store
-  // branches, this map would need to become a list.
-  const childByParentId = new Map<string, SelectRecipeNode>();
+  // Index every node by id for O(1) lookups and for building the tree in-place.
+  const nodeMap = new Map<string, RecipeTreeNode>();
   for (const row of allRows) {
-    if (row.parentId !== null) {
-      childByParentId.set(row.parentId, row);
-    }
+    nodeMap.set(row.id, { id: row.id, name: row.name, parentId: row.parentId, children: [] });
   }
 
-  // Walk forward from root via parentId to find the tail.
-  function tailOf(rootId: string): string {
-    let cursorId: string | null = rootId;
-    const visited = new Set<string>();
-    while (cursorId !== null) {
-      if (visited.has(cursorId)) break;
-      visited.add(cursorId);
-      const next = childByParentId.get(cursorId);
-      if (!next) return cursorId;
-      cursorId = next.id;
-    }
-    return cursorId ?? rootId;
-  }
+  const topLevel: RecipeTreeNode[] = [];
 
-  // Walk backward via parentId to find the root of the chain containing nodeId.
-  function rootOf(nodeId: string): string {
-    let cursorId: string | null = nodeId;
-    const visited = new Set<string>();
-    while (cursorId !== null) {
-      const node = byId.get(cursorId);
-      if (!node || node.parentId === null) return cursorId ?? nodeId;
-      if (visited.has(cursorId)) return cursorId;
-      visited.add(cursorId);
-      cursorId = node.parentId;
-    }
-    return nodeId;
-  }
-
-  const rootRows = allRows
-    .filter((r) => r.parentId === null)
-    .sort((a, b) => +a.timestamp - +b.timestamp);
-
-  const summaries: RecipeSummary[] = rootRows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    tailId: tailOf(row.id),
-    parentNodeId: row.parentNodeId,
-  }));
-
-  // Group children under their parent recipe (resolved via parentNodeId).
-  const summaryByRootId = new Map<string, RecipeSummary>();
-  for (const s of summaries) summaryByRootId.set(s.id, s);
-
-  const childrenByParent = new Map<string, RecipeSummary[]>();
-  const topLevel: RecipeSummary[] = [];
-  for (const s of summaries) {
-    const parentRootId = s.parentNodeId ? rootOf(s.parentNodeId) : null;
-    const parent = parentRootId ? summaryByRootId.get(parentRootId) : null;
-    if (parent) {
-      const list = childrenByParent.get(parent.id) ?? [];
-      list.push(s);
-      childrenByParent.set(parent.id, list);
+  // Add each node as a child of its direct parent. If the parent is not in
+  // nodeMap (shouldn't happen), treat it as top-level.
+  for (const node of nodeMap.values()) {
+    if (node.parentId === null) {
+      topLevel.push(node);
     } else {
-      topLevel.push(s);
+      const parent = nodeMap.get(node.parentId);
+      if (parent) {
+        parent.children.push(node);
+      } else {
+        // Orphaned node — treat as top-level.
+        topLevel.push(node);
+      }
     }
   }
 
-  function build(s: RecipeSummary): RecipeTreeNode {
-    return {
-      ...s,
-      children: (childrenByParent.get(s.id) ?? []).map(build),
-    };
-  }
-
-  return topLevel.map(build);
+  return topLevel;
 }
