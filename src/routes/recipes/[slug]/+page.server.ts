@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { getRecipeState, getRecipeNodesByRecipeId, getRootRecipeNode } from '$lib/server/bo/recipenodesbo';
+import { getRecipeState, getRecipeNodesByRecipeId, getRootRecipeNode, getRecipeNodesByRecipeIdV2 } from '$lib/server/bo/recipenodesbo';
 import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
 
 /**
@@ -29,31 +29,35 @@ async function resolveParentChain(root: RecipeNode): Promise<Array<{ id: string;
 }
 
 export const load: PageServerLoad = async ({ depends, params }) => {
-  try {
-    depends('app:recipe');
-    const root = await getRootRecipeNode(params.slug);
-    if (!root) {
-      throw new Error('Recipe not found');
-    }
-
-    const [state, history, parentChain] = await Promise.all([
-      getRecipeState(root.id),
-      getRecipeNodesByRecipeId(root.id),
-      resolveParentChain(root),
-    ]);
-
-    return {
-      recipe: {
-        id: root.id,
-        name: root.name,
-        ingredients: state.ingredients,
-        directions: state.directions,
-      },
-      history,
-      parentChain,
-    };
-  } catch (err) {
-    console.error('[Recipe slug load error]', err);
-    throw err;
-  }
+  // try {
+  depends('app:recipe');
+  const recipeNodeId = params.slug;
+  const recipeNodes = await getRecipeNodesByRecipeIdV2(recipeNodeId)
+  console.log(recipeNodes)
+  //   const root = await getRootRecipeNode(recipeNodeId);
+  //   if (!root) {
+  //     throw new Error('Recipe not found');
+  //   }
+  //
+  //   console.log(root);
+  //   const [state, history, parentChain] = await Promise.all([
+  //     getRecipeState(root.id),
+  //     getRecipeNodesByRecipeId(root.id),
+  //     resolveParentChain(root),
+  //   ]);
+  //
+  //   return {
+  //     recipe: {
+  //       id: root.id,
+  //       name: root.name,
+  //       ingredients: state.ingredients,
+  //       directions: state.directions,
+  //     },
+  //     history,
+  //     parentChain,
+  //   };
+  // } catch (err) {
+  //   console.error('[Recipe slug load error]', err);
+  //   throw err;
+  // }
 };

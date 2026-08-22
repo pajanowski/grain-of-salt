@@ -42,7 +42,7 @@ export interface RecipeNode {
   /** Optional human-readable label ("added garlic", "doubled the salt"). */
   label: string | null;
   /** Unix epoch milliseconds. */
-  timestamp: number;
+  timestamp: Date;
   ingredientChanges: IngredientChange[];
   directionChanges: DirectionChange[];
 }

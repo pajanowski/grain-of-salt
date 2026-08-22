@@ -5,6 +5,7 @@ import { recipeNodes } from '../db/schema';
 import type { InsertRecipeNode, SelectRecipeNode } from '../db/schema';
 import type { Ingredient, Direction, Recipe } from '$lib/obj/Recipe.svelte';
 import type { RecipeNode, IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
+import { getRecipeNodeById } from '../db/queries';
 
 /**
  * Materialized state derived by replaying every node in a recipe's history,
@@ -93,6 +94,20 @@ export async function getRecipeNodesByRecipeId(rootNodeId: string): Promise<Reci
       .limit(1);
     cursor = next[0]?.id ?? null;
   }
+  return nodes;
+}
+
+export async function getRecipeNodesByRecipeIdV2(recipeNodeId: string): Promise<RecipeNode[]> {
+  const nodes: RecipeNode[] = [];
+  let curId: string | null = recipeNodeId;
+  while (curId != null) {
+    const recipeNode = await getRecipeNodeById(curId);
+    curId = recipeNode?.parentId ?? null;
+    if (recipeNode) {
+      nodes.push(recipeNode)
+    }
+  }
+
   return nodes;
 }
 
