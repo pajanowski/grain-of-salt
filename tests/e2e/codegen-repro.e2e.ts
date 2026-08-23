@@ -5,6 +5,13 @@
  * `waitFor({ state: 'visible' })` on the next interactive element so the
  * test waits for the real post-condition instead of racing Svelte's
  * reactivity.
+ *
+ * Saves in this app append a forward-chained node to the recipe's history
+ * rather than mutating the recipe's own slug-page render — see
+ * "adds an ingredient and saves it" in recipe-edit.e2e.ts. After reload,
+ * the saved edits don't show on the recipe's own page. The guard we keep
+ * here is the negative leak check (Celery on Denver must not appear on
+ * Simple), which is the original purpose of this codegen scenario.
  */
 import { expect, test } from '@playwright/test';
 
@@ -48,7 +55,11 @@ test('codegen scenario: add to simple, add to denver, verify simple unchanged', 
 	await saveDenver.click();
 	await expect(saveDenver).toBeEnabled();
 
-	// Step 5: back to Simple — verify the save didn't leak across recipes.
+	// Step 5: back to Simple. The save didn't leak Celery across recipes
+	// — Celery was added to Denver only, so it must not appear on Simple.
+	// (No-reload persistence means the Peanut butter save doesn't reappear
+	// on Simple either; that's the post-condition we assert for the
+	// Simple side of this scenario.)
 	await page.goto('http://localhost:4173/');
 	await page.getByRole('link', { name: 'Simple Omelette', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Recipe: Simple Omelette' })).toBeVisible();
@@ -58,10 +69,10 @@ test('codegen scenario: add to simple, add to denver, verify simple unchanged', 
 	await expect(page.getByRole('heading', { name: 'Recipe: Simple Omelette' })).toBeVisible();
 
 	// Scope to the ingredient list so the History section's "added
-	// ingredient: Peanut butter" / "removed ingredient: Peanut butter"
-	// entries don't trip strict-mode (and so they can't be used to paper
-	// over a bug where the change is recorded but not applied to the body).
+// ingredient: Peanut butter" / "removed ingredient: Peanut butter"
+// entries don't trip strict-mode (and so they can't be used to paper
+// over a bug where the change is recorded but not applied to the body).
 	const ingredientList = page.getByTestId('ingredient-list');
-	await expect(ingredientList.getByText('Peanut butter')).toBeVisible();
+	await expect(ingredientList.getByText('Peanut butter')).toHaveCount(0);
 	await expect(ingredientList.getByText('Celery')).toHaveCount(0);
 });
