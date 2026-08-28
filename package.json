@@ -24,6 +24,8 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.5",
+    "@supabase/supabase-js": "^2.112.4",
     "@tailwindcss/vite": "^4.3.1",
     "bits-ui": "^2.18.1",
     "tailwindcss": "^4.3.1",
@@ -32,7 +34,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "tsx": "^4.19.0",
     "@playwright/test": "^1.60.0",
     "@sveltejs/adapter-auto": "^7.0.1",
     "@sveltejs/kit": "^2.63.0",
@@ -51,6 +52,7 @@
     "prettier-plugin-svelte": "^4.1.0",
     "svelte": "^5.56.1",
     "svelte-check": "^4.6.0",
+    "tsx": "^4.19.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.1",
     "vite": "^8.0.16",

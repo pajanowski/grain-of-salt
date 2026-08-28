@@ -40,3 +40,21 @@ export const recipeNodes = pgTable('recipe_nodes', {
 
 export type InsertRecipeNode = typeof recipeNodes.$inferInsert;
 export type SelectRecipeNode = typeof recipeNodes.$inferSelect;
+
+/**
+ * Public-side user profile. The matching `auth.users` row is created/managed
+ * by Supabase Auth; this table holds app-level fields and is auto-populated
+ * by a trigger defined in supabase/migrations.
+ *
+ * Note: guest sessions in this project are cookie-only — they have NO row in
+ * `auth.users` and therefore NO row here. Only "real" (email) users appear.
+ */
+export const profiles = pgTable('profiles', {
+  id: uuid('id').primaryKey(),
+  displayName: text('display_name'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type InsertProfile = typeof profiles.$inferInsert;
+export type SelectProfile = typeof profiles.$inferSelect;

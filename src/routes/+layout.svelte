@@ -3,6 +3,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import RecipeList from '$lib/component/RecipeList.svelte';
 	import { invalidateAll } from '$app/navigation';
+	import { enhance } from '$app/forms';
 
 	let { data, children } = $props();
 
@@ -13,6 +14,23 @@
 <svelte:head>
 	<link rel="icon" href={favicon} />
 </svelte:head>
+<header class="flex items-center justify-end gap-3 border-b border-gray-200 bg-white px-4 py-2 text-sm">
+	{#if data.user}
+		<span class="text-gray-700">Signed in as <strong>{data.user.email}</strong></span>
+		<form method="POST" action="/auth?/logout" use:enhance>
+			<button type="submit" class="rounded border px-2 py-1 hover:bg-gray-100">Sign out</button>
+		</form>
+	{:else if data.isGuest}
+		<span class="rounded bg-yellow-100 px-2 py-0.5 text-xs">Guest</span>
+		<a href="/auth" class="rounded border px-2 py-1 hover:bg-gray-100">Sign in</a>
+		<form method="POST" action="/auth?/guestClear" use:enhance>
+			<button type="submit" class="text-xs text-gray-500 underline">End guest session</button>
+		</form>
+	{:else}
+		<a href="/auth" class="rounded bg-black px-3 py-1 text-white">Sign in</a>
+	{/if}
+</header>
+
 
 <div class="flex flex-row gap-4 p-4">
 	<div class="flex flex-col gap-2">

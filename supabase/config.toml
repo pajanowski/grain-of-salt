@@ -1,0 +1,127 @@
+# For detailed configuration reference documentation, visit:
+# https://supabase.com/docs/guides/local-development/cli/config
+project_id = "grain-of-salt-svelte"
+
+[api]
+enabled = true
+# Port to use for the API URL.
+port = 54321
+# Schemas to expose in your API. Tables, views and stored procedures in this
+# schema will get API endpoints. public and graphql_public schemas are included
+# by default.
+schemas = ["public", "graphql_public"]
+# Extra schemas to add to the search_path of every request. public is always added.
+extra_search_path = ["public", "extensions"]
+# The maximum number of rows returns from a view, table, or stored procedure.
+# Limits payload size for accidental or malicious requests.
+max_rows = 1000
+
+[db]
+# Port to use for the local database URL.
+port = 54322
+# Port used by db diff command to initialize the shadow database.
+shadow_port = 54320
+# The database major version to use. This must match the version used by your
+# remote database.
+major_version = 17
+
+[db.pooler]
+enabled = false
+# Port to use for the local connection pooler.
+port = 54329
+
+[realtime]
+enabled = true
+# Bind on localhost only to avoid exposing the websocket to the network.
+ip_version = "ipv4"
+
+[studio]
+enabled = true
+# Port to use for Supabase Studio.
+port = 54323
+# External URL of the API server that frontend connects to.
+api_url = "http://127.0.0.1"
+
+# Email testing server. Emails sent with the local dev setup are not actually sent -
+# instead, they are monitored, and you can view the emails that would have been sent
+# in the UI.
+[inbucket]
+enabled = true
+# Port to use for the email testing server web interface.
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[storage]
+enabled = true
+# The maximum file size allowed (e.g. "5MB", "500KB").
+file_size_limit = "50MiB"
+
+[storage.image_transformation]
+enabled = true
+# How many images are allowed to be transformed per request
+per_request = 5
+
+[auth]
+enabled = true
+# The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
+# in emails.
+site_url = "http://localhost:5173"
+# A list of exact URLs that auth providers are permitted to redirect to post authentication.
+additional_redirect_urls = ["https://localhost:5173"]
+# How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
+jwt_expiry = 3600
+# Allow/disallow new user signups to your project.
+enable_signup = true
+# Allow/disallow anonymous sign-ins to your project.
+enable_anonymous_sign_ins = false
+# Allow/disallow testing manual linking of accounts
+enable_manual_linking = true
+
+[auth.email]
+# Allow/disallow new user signups via email to your project.
+enable_signup = true
+# If enabled, a user will be required to confirm any email change on both the old, and new email
+# addresses. If disabled, only the new email is required to confirm.
+double_confirm_changes = true
+# If enabled, users need to confirm their email address before signing in.
+# Disabled because we use OTP codes sent to email; the code itself is confirmation.
+confirm_email = false
+# If enabled, users can sign in with magic links (passwordless, via OTP email).
+# Used for OTP login.
+enable_confirmations = false
+# Controls the minimum allowable password length.
+minimum_password_length = 6
+
+[auth.sms]
+# Allow/disallow new user signups via SMS to your project.
+enable_signup = false
+# If enabled, users must confirm their phone number before signing in.
+confirm_phone = false
+
+# Use pre-defined map of phone number to OTP for testing.
+# https://supabase.com/docs/guides/local-development/auth/auth-phone#test-otp
+[auth.sms.test_otp]
+code = "123456"
+
+# This config setting will apply to all email templates (including magic link, OTP, etc.)
+[auth.email.template.confirm_email]
+subject = "Confirm your email"
+
+[auth.email.template.magic_link]
+subject = "Your login code for Grain of Salt"
+
+[auth.email.template.reauthentication]
+subject = "Reauthenticate"
+
+[auth.email.template.reset_password]
+subject = "Reset your password"
+
+[edge_runtime]
+enabled = false
+inspector_port = 8083
+
+[analytics]
+enabled = false
+port = 54327
+backend = "postgres"
