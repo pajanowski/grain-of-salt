@@ -51,13 +51,18 @@ function requestCookies(event: RequestEvent): CookieMethodsServer {
 	return {
 		getAll: () => event.cookies.getAll(),
 		setAll: async (cookies, headers) => {
+			const isHttps = event.url.protocol === 'https:';
 			for (const { name, value, options } of cookies) {
-				event.cookies.set(name, value, { ...options, path: '/' });
-			}
-			// Apply auth-required no-cache headers (Cache-Control, etc.) so CDNs
-			// never serve one user's session to another.
-			for (const [key, value] of Object.entries(headers)) {
-				event.setHeaders({ [key]: value });
+				event.cookies.set(name, value, {
+					...options,
+					path: '/',
+					// SvelteKit defaults secure:true for any host other than
+					// literal `localhost` on HTTP. That drops auth cookies in
+					// containerized e2e tests (where the URL is host.docker.internal
+					// or some other non-localhost hostname). Force secure:false
+					// on HTTP unless we're behind a real HTTPS proxy.
+					secure: isHttps && options?.secure !== false
+				});
 			}
 		}
 	};

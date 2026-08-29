@@ -65,14 +65,22 @@ test-e2e:                          ## install playwright browsers and run e2e
 	pnpm test:e2e
 
 # --- database ---------------------------------------------------------------
+# All DB state lives inside the local Supabase stack
+# (https://supabase.com/docs/guides/local-development). It bundles
+# Postgres + Auth (GoTrue) + Storage + Realtime + Mailpit (for OTP emails)
+# + Studio. Drizzle owns the public.* schema; Supabase owns auth.*.
 
 .PHONY: db-up
-db-up:                             ## start the postgres container
+db-up:                             ## start the supabase local stack
 	pnpm db:start
 
 .PHONY: db-down
-db-down:                           ## stop the postgres container
-	docker compose down
+db-down:                           ## stop the supabase local stack
+	pnpm db:stop
+
+.PHONY: db-status
+db-status:                         ## print supabase stack status + creds
+	pnpm db:status
 
 .PHONY: db-push
 db-push:                           ## apply the drizzle schema to the db
@@ -83,16 +91,11 @@ db-seed:                           ## seed the dev db with sample recipes
 	pnpm db:seed
 
 .PHONY: db-fresh
-db-fresh: db-push db-seed          ## push schema, then seed (assumes empty db)
+db-fresh: db-reset db-seed         ## full reset + seed (drops data, reapplies schema, seeds)
 
 .PHONY: db-reset
-db-reset:                          ## drop and recreate the postgres volume, then push + seed
-	docker compose down -v
-	docker compose up -d
-	@echo "Waiting for postgres to accept connections..."
-	@until docker exec grain-of-salt-svelte-db-1 pg_isready -h localhost >/dev/null 2>&1; do \
-		sleep 1; \
-	done
+db-reset:                          ## drop + recreate the supabase db, then push schema + seed
+	pnpm db:reset
 	pnpm db:push
 	pnpm db:seed
 

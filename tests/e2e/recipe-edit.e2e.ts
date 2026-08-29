@@ -17,8 +17,9 @@
  *     save-then-edit scenario guard the regression so any future change
  *     that breaks the second-save flow is caught immediately.
  */
-import { execSync } from 'node:child_process';
 import { expect, type Page, test } from '@playwright/test';
+import { signInAsTestUser } from './helpers/auth';
+import { resetTestUserRecipes } from './helpers/setup';
 
 // Hardcoded recipe names from scripts/seed.ts. We locate recipes by name on
 // the home page rather than by id because ids change every seed.
@@ -30,16 +31,13 @@ const RECIPE = {
 } as const;
 
 /**
- * Re-seed the database. Each test mutates the DB, so we re-seed before
- * every test to avoid one test's leftovers tainting the next one.
+ * Reset the DB and sign the test's `page` in as the test user before each
+ * test. The OTP round-trip is fast (~1s locally).
  */
-test.beforeEach(() => {
-	execSync('pnpm db:seed', {
-		stdio: 'pipe',
-		env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL ?? '' }
-	});
+test.beforeEach(async ({ page }) => {
+	await resetTestUserRecipes();
+	await signInAsTestUser(page);
 });
-
 /**
  * When running against the dev server (PLAYWRIGHT_USE_DEV=1), individual
  * actions can take noticeably longer than in preview mode due to on-demand

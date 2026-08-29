@@ -14,10 +14,15 @@
  * Simple), which is the original purpose of this codegen scenario.
  */
 import { expect, test } from '@playwright/test';
+import { signInAsTestUser } from './helpers/auth';
+import { resetTestUserRecipes } from './helpers/setup';
+
+test.beforeEach(async ({ page }) => {
+	await resetTestUserRecipes();
+	await signInAsTestUser(page);
+});
 
 test('codegen scenario: add to simple, add to denver, verify simple unchanged', async ({ page }) => {
-	await page.goto('http://localhost:4173/');
-
 	// Step 1: open Simple Omelette.
 	await page.getByRole('link', { name: 'Simple Omelette' }).click();
 	await page.waitForURL(/\/recipes\//);
@@ -57,10 +62,9 @@ test('codegen scenario: add to simple, add to denver, verify simple unchanged', 
 
 	// Step 5: back to Simple. The save didn't leak Celery across recipes
 	// — Celery was added to Denver only, so it must not appear on Simple.
-	// (No-reload persistence means the Peanut butter save doesn't reappear
+	await page.goto('/');
 	// on Simple either; that's the post-condition we assert for the
 	// Simple side of this scenario.)
-	await page.goto('http://localhost:4173/');
 	await page.getByRole('link', { name: 'Simple Omelette', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Recipe: Simple Omelette' })).toBeVisible();
 

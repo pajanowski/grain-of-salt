@@ -1,5 +1,6 @@
-import { execSync } from 'node:child_process';
 import { test, expect, type Page } from '@playwright/test';
+import { signInAsTestUser } from './helpers/auth';
+import { resetTestUserRecipes } from './helpers/setup';
 
 const RECIPE = {
   simple: 'Simple Omelette',
@@ -8,11 +9,14 @@ const RECIPE = {
   denver: 'Denver Omelette',
 } as const;
 
-test.beforeEach(() => {
-  execSync('pnpm db:seed', {
-    stdio: 'pipe',
-    env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL ?? '' },
-  });
+/**
+ * Reset the DB and sign the test's `page` in as the test user before each
+ * test. The OTP round-trip is fast (~1s locally); if this becomes a
+ * bottleneck, switch to a cached `storageState` per worker.
+ */
+test.beforeEach(async ({ page }) => {
+  await resetTestUserRecipes();
+  await signInAsTestUser(page);
 });
 
 if (process.env.PLAYWRIGHT_USE_DEV) {

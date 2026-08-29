@@ -2,7 +2,9 @@ import 'dotenv/config';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { v4 as uuidv4 } from 'uuid';
+import { sql } from 'drizzle-orm';
 import { recipeNodes } from '../src/lib/server/db/schema.js';
+import { DEMO_USER_ID } from '../src/lib/server/db/schema.js';
 import type { IngredientChange, DirectionChange } from '../src/lib/obj/RecipeNode.svelte.js';
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -37,8 +39,46 @@ const FRENCH_INGREDIENT_IDS = {
   chives: uuidv4(),
 };
 
+/**
+ * Ensure the demo user exists in auth.users. The recipes migration also
+ * provisions this row on a fresh DB, but seed.ts may be invoked against a
+ * DB that was created with `db:push` only (no migrations), so we make this
+ * idempotent here too.
+ */
+async function ensureDemoUser() {
+  await db.execute(sql`
+    insert into auth.users (
+      instance_id, id, aud, role, email,
+      encrypted_password, email_confirmed_at,
+      raw_app_meta_data, raw_user_meta_data,
+      created_at, updated_at, confirmation_token,
+      email_change, email_change_token_new, recovery_token
+    )
+    values (
+      '00000000-0000-0000-0000-000000000000',
+      ${DEMO_USER_ID}::uuid,
+      'authenticated',
+      'authenticated',
+      'demo@grain-of-salt.local',
+      crypt('demo-password-not-used', gen_salt('bf')),
+      now(),
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"display_name":"Demo User"}'::jsonb,
+      now(),
+      now(),
+      '',
+      '',
+      '',
+      ''
+    )
+    on conflict (id) do nothing
+  `);
+}
+
 async function seed() {
   console.log('🌱 Seeding database...');
+
+  await ensureDemoUser();
 
   // Idempotent: clear before re-seeding. parentId ON DELETE CASCADE handles
   // chain descendants when we delete the root.
@@ -52,6 +92,7 @@ async function seed() {
     id: simpleNodeId,
     parentId: null,
     parentNodeId: null,
+    ownerId: DEMO_USER_ID,
     name: 'Simple Omelette',
     label: 'initial recipe',
     ingredientChanges: [
@@ -76,6 +117,7 @@ async function seed() {
     id: uuidv4(),
     parentId: simpleNodeId,
     parentNodeId: null,
+    ownerId: DEMO_USER_ID,
     name: 'French Omelette',
     label: 'bump butter, add chives; cook low and slow, no browning',
     ingredientChanges: [
@@ -115,6 +157,7 @@ async function seed() {
     id: cheeseNodeId,
     parentId: simpleNodeId,
     parentNodeId: null,
+    ownerId: DEMO_USER_ID,
     name: 'Cheese Omelette',
     label: 'add cheese, fold with cheese inside',
     ingredientChanges: [
@@ -135,6 +178,7 @@ async function seed() {
     id: uuidv4(),
     parentId: cheeseNodeId,
     parentNodeId: null,
+    ownerId: DEMO_USER_ID,
     name: 'Denver Omelette',
     label: 'add diced ham, bell pepper, and onion',
     ingredientChanges: [

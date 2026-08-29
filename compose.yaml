@@ -1,14 +1,5 @@
-services:
-  db:
-    image: postgres
-    restart: always
-    ports:
-      - 5432:5432
-    environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: mysecretpassword
-      POSTGRES_DB: local
-    volumes:
-      - pgdata:/var/lib/postgresql
-volumes:
-  pgdata:
+# This project no longer runs a standalone Postgres container. The DB lives
+# inside the Supabase local stack — start it with `pnpm db:start` (or
+# `supabase start`) and stop it with `pnpm db:stop` (or `supabase stop`).
+#
+# See README.md and supabase/config.toml for details.

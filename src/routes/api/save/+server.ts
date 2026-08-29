@@ -1,31 +1,55 @@
 import type { RequestHandler } from './$types';
 import { NewRecipe, type Recipe } from '$lib/obj/Recipe.svelte';
 import { saveNewRecipe, updateRecipe } from '$lib/server/bo/recipesbo';
+import { DEMO_USER_ID } from '$lib/server/db/schema';
 
-export const POST: RequestHandler = async ({ request }) => {
-  const data = await request.formData();
-  const recipeName = data.get('recipeName') as string;
-  const newRecipe = NewRecipe(recipeName)
-  const ret = await saveNewRecipe(newRecipe);
-  return new Response(JSON.stringify(ret));
+/**
+ * Resolve the request's effective owner:
+ *  - Authenticated Supabase user -> their own id.
+ *  - Guest cookie only -> DEMO_USER_ID. Guests can save new demo recipes,
+ *    but they will be owned by the demo user. (Demo tree is shared across
+ *    all guests — see the trade-off note in `+layout.server.ts`.)
+ *
+ * Returns null if neither is set; the caller should reject in that case.
+ */
+function resolveOwnerId(
+	locals: App.Locals,
+	cookies: { get: (name: string) => string | undefined }
+): string | null {
+	if (locals.user?.id) return locals.user.id;
+	if (cookies.get('guest') === '1') return DEMO_USER_ID;
+	return null;
 }
 
-export const PUT: RequestHandler = async ({ request }) => {
-  const data = await request.formData();
-  const recipe: Recipe = JSON.parse(data.get('recipe') as string)
-  // recipe.id IS the root node id, which is the recipe's identity in the
-  // node-only model. updateRecipeState diffs against the chain rooted by
-  // this id and appends a node on save.
-  try {
-    const ret = await updateRecipe(recipe)
-    return new Response(JSON.stringify(ret));
-  } catch (e) {
-    return new Response((e as Error).message, {
-      status: 500
-    })
-  }
+export const POST: RequestHandler = async ({ request, locals, cookies }) => {
+	const ownerId = resolveOwnerId(locals, cookies);
+	if (!ownerId) {
+		return new Response('Sign in or continue as guest first', { status: 401 });
+	}
+
+	const data = await request.formData();
+	const recipeName = data.get('recipeName') as string;
+	const newRecipe = NewRecipe(recipeName);
+	const ret = await saveNewRecipe(newRecipe, ownerId);
+	return new Response(JSON.stringify(ret));
 };
 
-export const DELETE: RequestHandler = async ({ request }) => {
-  return new Response()
+export const PUT: RequestHandler = async ({ request, locals, cookies }) => {
+	const ownerId = resolveOwnerId(locals, cookies);
+	if (!ownerId) {
+		return new Response('Sign in or continue as guest first', { status: 401 });
+	}
+
+	const data = await request.formData();
+	const recipe: Recipe = JSON.parse(data.get('recipe') as string);
+	try {
+		const ret = await updateRecipe(recipe, ownerId);
+		return new Response(JSON.stringify(ret));
+	} catch (e) {
+		return new Response((e as Error).message, { status: 500 });
+	}
+};
+
+export const DELETE: RequestHandler = async () => {
+	return new Response();
 };

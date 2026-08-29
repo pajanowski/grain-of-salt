@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { signInAsTestUser } from './helpers/auth';
+
+test.beforeEach(async ({ page }) => {
+	await signInAsTestUser(page);
+});
 
 test('debug fork flow', async ({ page }) => {
 	// Capture network requests

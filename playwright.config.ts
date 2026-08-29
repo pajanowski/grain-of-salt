@@ -3,14 +3,12 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Playwright configuration for end-to-end tests.
  *
- * Runs against a production build served by `vite preview` so tests exercise
- * the same bundle we ship. The webServer is only started when the URL is not
- * already reachable, which lets CI start the server itself (e.g. via a
- * service container) when desired.
+ * Tests run inside the Playwright Docker image (see
+ * scripts/run-e2e-docker.sh). The host is expected to already be running
+ * `vite preview` on PORT (or `vite dev` when PLAYWRIGHT_USE_DEV=1) — we
+ * therefore use `reuseExistingServer=true` and never spawn a server here.
  *
- * Local dev: `pnpm test:e2e` will build + preview automatically.
- * CI: the workflow starts a postgres service, pushes the schema, starts the
- * preview server, and runs the tests headlessly.
+ * The container reaches the host's preview server via host.docker.internal.
  */
 const PORT = 4173;
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
@@ -52,24 +50,4 @@ export default defineConfig({
 		}
 	],
 
-	webServer: {
-		// CI builds the app itself and starts preview separately; locally we
-		// build on demand so a fresh checkout can run tests without a manual
-		// build step.
-		//
-		// To run the tests against the dev server (useful for catching
-		// dev-only hydration/state issues), set `PLAYWRIGHT_USE_DEV=1`.
-		// The preview server is what we ship, so by default we test the
-		// production bundle.
-		command: process.env.PLAYWRIGHT_USE_DEV
-			? `pnpm dev --port ${PORT}`
-			: process.env.CI
-				? `pnpm preview --port ${PORT}`
-				: `pnpm build && pnpm preview --port ${PORT}`,
-		port: PORT,
-		reuseExistingServer: !process.env.CI,
-		timeout: 180_000,
-		stdout: 'ignore',
-		stderr: 'pipe'
-	}
 });

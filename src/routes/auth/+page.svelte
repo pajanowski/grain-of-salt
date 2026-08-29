@@ -4,8 +4,8 @@
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
-	let step: 'request' | 'verify' = $state(form?.step === 'verify' ? 'verify' : 'request');
-	let email = $state<string>(form?.email ?? '');
+	let step: 'request' | 'verify' = $derived(form?.step === 'verify' ? 'verify' : 'request');
+	let email = $derived(form?.email ?? '');
 	let token = $state<string>('');
 	const otpPattern = '[0-9]{6}';
 </script>

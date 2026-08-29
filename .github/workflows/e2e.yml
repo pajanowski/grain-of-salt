@@ -13,25 +13,16 @@ jobs:
   test:
     name: Playwright e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     env:
-      DATABASE_URL: postgres://root:mysecretpassword@localhost:5432/local
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: root
-          POSTGRES_PASSWORD: mysecretpassword
-          POSTGRES_DB: local
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U root -d local"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+      # Supabase local defaults — printed by `supabase start` in CI logs.
+      PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:54322/postgres
+      MAILPIT_URL: http://127.0.0.1:54324
+      CI: '1'
 
     steps:
       - uses: actions/checkout@v4
@@ -50,8 +41,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+      # Install Supabase CLI to bring up the local stack (Postgres + GoTrue
+      # + Mailpit for OTP capture + Studio).
+      - name: Install Supabase CLI
+        run: |
+          curl -fsSL "https://github.com/supabase/cli/releases/download/v2.6.8/supabase_linux_amd64.tar.gz" \
+            | tar -xz -C /tmp
+          install -m 0755 /tmp/supabase /usr/local/bin/supabase
+          supabase --version
+
+      - name: Start Supabase stack
+        run: supabase start
 
       - name: Apply database schema
         run: pnpm db:push
@@ -59,8 +59,13 @@ jobs:
       - name: Build app
         run: pnpm build
 
-      - name: Run Playwright tests
-        run: pnpm exec playwright test
+      - name: Start preview server
+        run: pnpm preview --port 4173 --host &
+        # Give vite preview a moment to bind; the docker runner will retry
+        # until the URL is reachable anyway.
+
+      - name: Run Playwright tests in Docker
+        run: bash scripts/run-e2e-docker.sh
 
       - name: Upload Playwright report
         if: always()
@@ -77,3 +82,7 @@ jobs:
           name: playwright-results
           path: test-results/
           retention-days: 14
+
+      - name: Stop Supabase stack
+        if: always()
+        run: supabase stop --no-backup || true
