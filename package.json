@@ -5,11 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev --open",
-    "start": "bash scripts/start.sh app",
-    "start:dev": "bash scripts/start.sh dev",
-    "start:all": "bash scripts/start.sh all",
-    "start:fresh": "bash scripts/start.sh fresh",
-    "start:status": "bash scripts/start.sh status",
+    "start": "vite preview",
     "build": "vite build",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",

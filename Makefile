@@ -1,12 +1,10 @@
-# Grain of Salt — developer commands.
-#
 # Usage:
 #   make help         list available targets
-#   make dev          start the dev server
+#   make start        build + preview production app (default)
+#   make start:all    bootstrap from scratch (deps, supabase, db, seed)
+#   make start:fresh  hard reset + bootstrap
 #   make db-fresh     drop, push schema, and re-seed
 #   make test         run all tests
-#
-# Package manager: pnpm.
 
 .PHONY: help
 help:                              ## show this help
@@ -31,10 +29,45 @@ build:                             ## production build
 	pnpm build
 
 .PHONY: preview
-preview:                           ## preview the production build
+preview:                           ## preview the production build (no build step)
 	pnpm preview
 
-.PHONY: check
+# --- one-shot startup flows ---------------------------------------------------
+# These wrap the per-step targets above into a single command for new
+# contributors and CI cold starts. Use:
+#   make start            — build + preview the production app (default)
+#   make start:dev        — vite dev
+#   make start:all        — install + supabase up + db push + seed + preview
+#   make start:fresh      — like start:all but drops + recreates the db first
+#   make start:status     — print supabase stack status + service URLs
+
+.PHONY: start start-dev start-all start-fresh start-status
+start: build preview               ## build the production bundle and serve it
+start-dev:                         ## vite dev (with --open)
+	pnpm dev
+
+# Skip install if node_modules already exists.
+INSTALL_TARGET := $(shell test -d node_modules && echo skip-install || echo install)
+start-all:                        ## bootstrap from scratch: deps, supabase, push, seed, preview
+	@if [ "$(INSTALL_TARGET)" != "skip-install" ]; then $(MAKE) install; fi
+	$(MAKE) db-up
+	$(MAKE) db-push
+	$(MAKE) db-seed
+	$(MAKE) build
+	$(MAKE) preview
+
+start-fresh:                      ## hard reset: drop db, bootstrap, seed, preview
+	$(MAKE) install
+	$(MAKE) db-up
+	pnpm supabase db reset
+	$(MAKE) db-push
+	$(MAKE) db-seed
+	$(MAKE) build
+	$(MAKE) preview
+
+start-status:                     ## print supabase stack status + creds
+	pnpm db:status
+
 check:                             ## type-check the project
 	pnpm check
 
