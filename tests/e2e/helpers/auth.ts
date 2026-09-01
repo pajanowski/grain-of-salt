@@ -61,9 +61,9 @@ async function fetchLatestCodeFor(toEmail: string): Promise<string> {
 	const msg = (await detail.json()) as InbucketMessageDetail;
 
 	const haystack = `${msg.body.html ?? ''}\n${msg.body.text ?? ''}`;
-	const match = haystack.match(/\b(\d{6})\b/);
+	const match = haystack.match(/\b(\d{8})\b/);
 	if (!match) {
-		throw new Error(`Could not find 6-digit code in Inbucket message ${latest.id}`);
+		throw new Error(`Could not find 8-digit code in Inbucket message ${latest.id}`);
 	}
 	return match[1];
 }
@@ -92,11 +92,11 @@ export async function signInAsTestUser(page: Page) {
 	await page.getByLabel('Email').fill(TEST_USER_EMAIL);
 	await page.getByRole('button', { name: /email me a code/i }).click();
 
-	await expect(page.getByLabel(/6-digit code/i)).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByLabel(/8-digit code/i)).toBeVisible({ timeout: 10_000 });
 
 	const code = await pollForOtp(TEST_USER_EMAIL);
 
-	await page.getByLabel(/6-digit code/i).fill(code);
+	await page.getByLabel(/8-digit code/i).fill(code);
 	await page.getByRole('button', { name: /^Verify$/i }).click();
 
 	await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });

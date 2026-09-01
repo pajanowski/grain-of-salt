@@ -7,7 +7,7 @@
 	let step: 'request' | 'verify' = $derived(form?.step === 'verify' ? 'verify' : 'request');
 	let email = $derived(form?.email ?? '');
 	let token = $state<string>('');
-	const otpPattern = '[0-9]{6}';
+	const otpPattern = '[0-9]{8}';
 </script>
 
 <svelte:head>
@@ -75,13 +75,13 @@
 		>
 			<input type="hidden" name="email" value={email} />
 			<label class="flex flex-col gap-1">
-				<span class="text-sm">6-digit code</span>
+			<span class="text-sm">8-digit code</span>
 				<input
 					type="text"
 					name="token"
 					inputmode="numeric"
 				pattern="{otpPattern}"
-					maxlength="6"
+					maxlength="8"
 					required
 					bind:value={token}
 					class="rounded border px-3 py-2 tracking-widest"
