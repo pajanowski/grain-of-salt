@@ -54,19 +54,25 @@ const client = postgres(url, {
 
 // Log the underlying postgres error on every failed query so the real
 // cause (vs. Drizzle's "Failed query" wrapper) shows up in worker
-// logs. Drizzle routes every query through `client.unsafe`, including
-// those inside transactions, so this catches everything.
+// logs. postgres.js's `client.unsafe` returns a `PendingQuery<T>` that
+// extends Promise AND carries extra methods (`.execute()`, `.values()`,
+// `.raw()`, …) which Drizzle chains off of. Wrapping with `.catch()`
+// returns a plain Promise and breaks that chain, so we register the
+// logging as a side-effect handler and return the original PendingQuery
+// untouched. The handler fires when the query rejects; the original
+// rejection still propagates to Drizzle for its own wrapping.
 type UnsafeFn = typeof client.unsafe;
 const unsafe = client.unsafe.bind(client);
 (client as unknown as { unsafe: UnsafeFn }).unsafe = ((...args: Parameters<UnsafeFn>) => {
-	return unsafe(...args).catch((err: Error & { code?: string }) => {
+	const result = unsafe(...args);
+	result.catch((err: Error & { code?: string }) => {
 		console.error('[db] query failed:', {
 			message: err.message,
 			code: err.code,
 			query: typeof args[0] === 'string' ? args[0].slice(0, 240).replace(/\s+/g, ' ') : '<non-string>'
 		});
-		throw err;
 	});
+	return result;
 }) as UnsafeFn;
 
 export const db = drizzle(client, { schema });
