@@ -3,13 +3,22 @@ import postgres from 'postgres';
 import { env } from '$env/dynamic/private';
 import * as schema from './schema';
 
-if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
-
-const url = env.DATABASE_URL;
-// Detect Supabase pooler URLs (`:6543` or `?pgbouncer=true`). Direct
-// connections (port 5432) keep prepared statements safe; the pooler in
-// transaction mode does not.
-const isPooler = url.includes(':6543/') || url.includes('pgbouncer=true');
+// Cloudflare Hyperdrive brokers the Postgres connection at the runtime
+// level with per-request I/O context isolation — postgres.js's pool
+// alone cannot do this and trips the "Cannot perform I/O on behalf of
+// a different request" guard when SvelteKit fires `+layout` and
+// `+page` loads in parallel via `Promise.all`. In deployed mode we
+// prefer the Hyperdrive binding over a raw DATABASE_URL for that
+// reason. In local dev (`pnpm dev`) Hyperdrive isn't bound, so we
+// fall back to DATABASE_URL pointing at the local Supabase stack.
+// Cast HYPERDRIVE until `wrangler types` regenerates with the binding
+// (placeholder id makes the generated env type still treat it as a
+// string). Once the real id is in place, the cast is a no-op.
+const hyperdrive = env.HYPERDRIVE as unknown as { connectionString?: string } | undefined;
+const connectionString: string | undefined = hyperdrive?.connectionString ?? env.DATABASE_URL;
+if (!connectionString) {
+	throw new Error('Neither HYPERDRIVE binding nor DATABASE_URL is set');
+}
 
 /**
  * Application-side Postgres connection.
@@ -29,22 +38,19 @@ const isPooler = url.includes(':6543/') || url.includes('pgbouncer=true');
  * `getBrowserSupabase()` using the anon key and IS subject to RLS — so
  * RLS still defends against direct PostgREST access.
  */
-const client = postgres(url, {
-	// pgBouncer in transaction mode rotates backend connections between
-	// statements, so the prepare/execute split in the extended query
-	// protocol lands on a backend that has no prepared statement and
-	// surfaces as intermittent "Failed query" errors. Disable when
-	// routing through the pooler; harmless on direct connections.
-	prepare: !isPooler,
-	// Cloudflare Workers spawn one isolate per concurrent request and
-	// each isolate owns its own pool. Cap to stay under Supabase's
-	// direct-connection limit (60 free tier, 200+ paid) when many
-	// isolates are active simultaneously.
+const client = postgres(connectionString, {
+	// Hyperdrive handles connection pooling and per-request I/O context
+	// isolation, so prepared statements (the default) are safe again —
+	// they no longer cross request boundaries.
+	// Local-dev `pnpm dev` keeps prepared statements on too; the
+	// connection goes to the local stack where there's no Workers I/O
+	// guard.
+	// Small per-isolate pool to amortize handshake cost for back-to-back
+	// queries in the same request.
 	max: 5,
 	connection: {
 		application_name: 'grain-of-salt-worker'
 	},
-	// (errors are caught and logged by the client.unsafe wrapper below).
 	onnotice: () => {
 		// Suppress routine Postgres NOTICE/NOTIFY messages from worker
 		// logs. Remove this hook when debugging schema or trigger
@@ -56,8 +62,8 @@ const client = postgres(url, {
 // cause (vs. Drizzle's "Failed query" wrapper) shows up in worker
 // logs. postgres.js's `client.unsafe` returns a `PendingQuery<T>` that
 // extends Promise AND carries extra methods (`.execute()`, `.values()`,
-// `.raw()`, …) which Drizzle chains off of. Wrapping with `.catch()`
-// returns a plain Promise and breaks that chain, so we register the
+// `.raw()`, …) which Drizzle chains off of. Registering `.catch()` here
+// would return a plain Promise and break that chain, so we attach the
 // logging as a side-effect handler and return the original PendingQuery
 // untouched. The handler fires when the query rejects; the original
 // rejection still propagates to Drizzle for its own wrapping.
