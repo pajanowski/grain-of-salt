@@ -10,10 +10,10 @@
     "PUBLIC_SUPABASE_URL": "https://esqnatalvaswivsjzdrh.supabase.co",
     "PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_OOA6ob195CVqkVUYKuhqOw_ziqmaCh6"
   },
+  "compatibility_date": "2026-08-31",
   "observability": {
     "enabled": false,
     "head_sampling_rate": 1,
-    "redact_query_string": false,
     "logs": {
       "enabled": true,
       "head_sampling_rate": 1,
