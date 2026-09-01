@@ -3,22 +3,7 @@ import postgres from 'postgres';
 import { env } from '$env/dynamic/private';
 import * as schema from './schema';
 
-// Cloudflare Hyperdrive brokers the Postgres connection at the runtime
-// level with per-request I/O context isolation — postgres.js's pool
-// alone cannot do this and trips the "Cannot perform I/O on behalf of
-// a different request" guard when SvelteKit fires `+layout` and
-// `+page` loads in parallel via `Promise.all`. In deployed mode we
-// prefer the Hyperdrive binding over a raw DATABASE_URL for that
-// reason. In local dev (`pnpm dev`) Hyperdrive isn't bound, so we
-// fall back to DATABASE_URL pointing at the local Supabase stack.
-// Cast HYPERDRIVE until `wrangler types` regenerates with the binding
-// (placeholder id makes the generated env type still treat it as a
-// string). Once the real id is in place, the cast is a no-op.
-const hyperdrive = env.HYPERDRIVE as unknown as { connectionString?: string } | undefined;
-const connectionString: string | undefined = hyperdrive?.connectionString ?? env.DATABASE_URL;
-if (!connectionString) {
-	throw new Error('Neither HYPERDRIVE binding nor DATABASE_URL is set');
-}
+if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
 /**
  * Application-side Postgres connection.
@@ -38,28 +23,23 @@ if (!connectionString) {
  * `getBrowserSupabase()` using the anon key and IS subject to RLS — so
  * RLS still defends against direct PostgREST access.
  */
-const client = postgres(connectionString, {
-	// Hyperdrive handles connection pooling and per-request I/O context
-	// isolation, so prepared statements (the default) are safe again —
-	// they no longer cross request boundaries.
-	// Local-dev `pnpm dev` keeps prepared statements on too; the
-	// connection goes to the local stack where there's no Workers I/O
-	// guard.
-	// Small per-isolate pool to amortize handshake cost for back-to-back
-	// queries in the same request.
+const client = postgres(env.DATABASE_URL, {
+	// Small pool — Vercel functions may run concurrently across
+	// instances and each instance keeps its own pool. Cap to stay
+	// under Supabase's direct-connection limit (60 free tier, 200+ paid).
 	max: 5,
 	connection: {
-		application_name: 'grain-of-salt-worker'
+		application_name: 'grain-of-salt-vercel'
 	},
 	onnotice: () => {
-		// Suppress routine Postgres NOTICE/NOTIFY messages from worker
+		// Suppress routine Postgres NOTICE/NOTIFY messages from server
 		// logs. Remove this hook when debugging schema or trigger
 		// activity.
 	}
 });
 
 // Log the underlying postgres error on every failed query so the real
-// cause (vs. Drizzle's "Failed query" wrapper) shows up in worker
+// cause (vs. Drizzle's "Failed query" wrapper) shows up in Vercel
 // logs. postgres.js's `client.unsafe` returns a `PendingQuery<T>` that
 // extends Promise AND carries extra methods (`.execute()`, `.values()`,
 // `.raw()`, …) which Drizzle chains off of. Registering `.catch()` here
