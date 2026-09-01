@@ -8,6 +8,7 @@
   "name": "grain-of-salt",
   "vars": {
     "PUBLIC_SUPABASE_URL": "https://esqnatalvaswivsjzdrh.supabase.co",
+    "PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_OOA6ob195CVqkVUYKuhqOw_ziqmaCh6",
   },
   "compatibility_flags": [
     "nodejs_compat"
