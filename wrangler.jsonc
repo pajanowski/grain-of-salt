@@ -6,7 +6,10 @@
     "directory": ".svelte-kit/cloudflare",
   },
   "name": "grain-of-salt",
-  "compatibility_date": "2026-08-31",
+  "vars": {
+    "PUBLIC_SUPABASE_URL": "https://esqnatalvaswivsjzdrh.supabase.co",
+    "PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_OOA6ob195CVqkVUYKuhqOw_ziqmaCh6"
+  },
   "observability": {
     "enabled": false,
     "head_sampling_rate": 1,
