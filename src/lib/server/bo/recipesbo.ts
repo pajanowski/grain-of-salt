@@ -3,11 +3,12 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../db/index';
 import { recipeNodes } from '../db/schema';
 import {
+	appendRecipeNode,
 	createRootRecipeNode,
 	getRecipeNodesByRecipeId,
-	updateRecipeState,
 } from './recipenodesbo';
 import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
+
 
 /**
  * Create a new recipe owned by `ownerId`. The initial root node is created in
@@ -16,45 +17,34 @@ import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
  * After creation, the recipe's identity is the new root node's id, which is
  * what `recipe.id` is set to.
  */
-export async function saveNewRecipe(
-	recipe: Recipe,
-	ownerId: string,
-	parentNodeId: string | null = null,
-): Promise<Recipe> {
+export async function saveNewRecipe(recipe: Recipe, ownerId: string): Promise<Recipe> {
 	recipe.id = '';
-	const root = await createRootRecipeNode(recipe.name, ownerId, parentNodeId);
+	const root = await createRootRecipeNode(recipe.name, ownerId);
 	recipe.id = root.id;
 	return recipe;
 }
 
 /**
- * Create a new recipe forked from an existing one, owned by the same user as
- * the source. The new recipe's root has parentNodeId pointing to the source's
- * root node — establishing the "forked from" relationship at the recipe
- * hierarchy level.
+ * Fork a recipe: append a new node to the chain rooted at `fromLeafNodeId`.
+ *
+ * Per ADR 0002, "fork" means chain extension — the new node joins the
+ * existing chain with `parentId = fromLeafNodeId` and empty change arrays.
+ * The new node's materialized state is identical to the source's until
+ * the user adds their own changes.
+ *
+ * The verb "fork" is retained in the UI for familiarity even though the
+ * underlying semantics is closer to a git branch (new commit on the same
+ * chain) than to a separate recipe.
  */
 export async function forkRecipe(
-	fromRootNodeId: string,
+	fromLeafNodeId: string,
 	ownerId: string,
 	newName: string,
 ): Promise<RecipeNode> {
-	return await createRootRecipeNode(newName, ownerId, fromRootNodeId);
+	return await appendRecipeNode(fromLeafNodeId, newName, [], []);
 }
 
-/**
- * Apply a full-recipe PUT by diffing against the current materialized state
- * and appending a node to the recipe's history.
- *
- * Throws if the recipe isn't owned by `ownerId`.
- */
-export async function updateRecipe(recipe: Recipe, ownerId: string): Promise<Recipe> {
-	if (!recipe.id || recipe.id.trim().length === 0) {
-		throw new Error('Invalid Recipe ID');
-	}
-	await assertOwnership(recipe.id, ownerId);
-	await updateRecipeState(recipe, ownerId);
-	return recipe;
-}
+
 
 /**
  * Delete a recipe by deleting its root node. Refuses to delete a recipe

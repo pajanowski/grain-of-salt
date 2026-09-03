@@ -18,6 +18,6 @@
 		</nav>
 	{/if}
 
-	<Recipe {recipe} />
+	<Recipe {data} />
 	<RecipeHistory {history} />
 </div>

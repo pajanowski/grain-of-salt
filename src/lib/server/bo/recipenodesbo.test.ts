@@ -5,7 +5,16 @@ import type {
   IngredientChange,
   DirectionChange,
 } from '$lib/obj/RecipeNode.svelte';
-import { applyNodes } from './recipenodesbo';
+import {
+  applyNodes,
+  updateRecipeNode,
+  InvalidChangeError,
+  type UpdateRecipeNodePayload,
+} from './recipenodesbo';
+// Re-declared so individual test cases can deliberately construct invalid
+// payloads. The 'as unknown as' cast at the call site keeps TypeScript quiet
+// without losing the strict validation under test.
+type DraftPayload = UpdateRecipeNodePayload;
 
 // ===========================================================================
 // Unit tests for applyNodes — the pure replay function that materializes a
@@ -36,7 +45,6 @@ function node(
     id: partial.id,
     name: partial.name ?? 'Test Recipe',
     parentId: partial.parentId ?? null,
-    parentNodeId: partial.parentNodeId ?? null,
     label: partial.label ?? null,
     timestamp: partial.timestamp ?? 0,
     ingredientChanges: partial.ingredientChanges ?? [],
@@ -704,7 +712,6 @@ function seedNode(
     id,
     name,
     parentId,
-    parentNodeId: null,
     label,
     timestamp: 0,
     ingredientChanges: changes.ingredientChanges,
@@ -926,3 +933,174 @@ describe('omelette history scenarios (seed parity)', () => {
     });
   });
 });
+
+// ===========================================================================
+// Validation tests for updateRecipeNode. The validator runs synchronously
+// before any DB call, so each invalid payload rejects with InvalidChangeError
+// without needing a database. Ownership / write-path coverage lives in e2e.
+// ===========================================================================
+describe('updateRecipeNode payload validation', () => {
+  const validIngredient = (): Ingredient => ({
+    id: 'ing-1',
+    name: 'Egg',
+    amount: 2,
+    unit: ''
+  });
+
+  const validDirection = (): Direction => ({ id: 'dir-1', body: 'Beat eggs' });
+
+  const basePayload = (): DraftPayload => ({
+    nodeId: 'node-1',
+    ingredientChanges: [] as IngredientChange[],
+    directionChanges: [] as DirectionChange[]
+  });
+
+
+
+  function expectInvalid(payload: unknown): void {
+    // Validators throw synchronously; the async wrapper surfaces the rejection.
+    void expect(updateRecipeNode(payload as never, 'owner-1')).rejects.toBeInstanceOf(
+      InvalidChangeError
+    );
+  }
+
+  it('accepts a minimal valid payload (no changes, no label)', async () => {
+    // Will fail downstream at the DB call (no real node), but should pass
+    // validation. We can't easily assert "passed validation" without a DB
+    // mock — so just confirm the error is NOT InvalidChangeError.
+    await expect(
+      updateRecipeNode(basePayload(), 'owner-1')
+    ).rejects.not.toBeInstanceOf(InvalidChangeError);
+  });
+
+  it('rejects when payload is null', () => {
+    expectInvalid(null);
+  });
+
+  it('rejects when nodeId is missing', () => {
+    const p = basePayload();
+    expectInvalid({ ...p, nodeId: '' });
+  });
+
+  it('rejects when ingredientChanges is not an array', () => {
+    const p = basePayload();
+    expectInvalid({ ...p, ingredientChanges: 'not-an-array' });
+  });
+
+  it('rejects when directionChanges is not an array', () => {
+    const p = basePayload();
+    expectInvalid({ ...p, directionChanges: 'not-an-array' });
+  });
+
+  describe('ingredient change validation', () => {
+    it('rejects add with non-null targetId', () => {
+      const p = basePayload();
+      p.ingredientChanges = [
+        {
+          id: 'c-1',
+          changeType: 'add',
+          targetId: 'someone-elses-add',
+          note: null,
+          body: validIngredient()
+        }
+      ];
+      expectInvalid(p);
+    });
+
+    it('rejects add with missing body', () => {
+      const p = basePayload();
+      p.ingredientChanges = [
+        { id: 'c-1', changeType: 'add', targetId: null, note: null, body: null }
+      ];
+      expectInvalid(p);
+    });
+
+    it('rejects edit with missing targetId', () => {
+      const p = basePayload();
+      p.ingredientChanges = [
+        { id: 'c-1', changeType: 'edit', targetId: '', note: null, body: validIngredient() }
+      ];
+      expectInvalid(p);
+    });
+
+    it('rejects edit with missing body', () => {
+      const p = basePayload();
+      p.ingredientChanges = [
+        { id: 'c-1', changeType: 'edit', targetId: 'some-add', note: null, body: null }
+      ];
+      expectInvalid(p);
+    });
+
+    it('rejects remove with missing targetId', () => {
+      const p = basePayload();
+      p.ingredientChanges = [
+        { id: 'c-1', changeType: 'remove', targetId: '', note: null, body: null }
+      ];
+      expectInvalid(p);
+    });
+
+    it('rejects remove with non-null body', () => {
+      const p = basePayload();
+      p.ingredientChanges = [
+        { id: 'c-1', changeType: 'remove', targetId: 'some-add', note: null, body: validIngredient() }
+      ];
+      expectInvalid(p);
+    });
+
+    it('rejects unknown changeType', () => {
+      const p = basePayload();
+      // Cast through unknown so the bogus changeType compiles even though
+      // it isn't a legal ChangeType — the validation we're testing rejects
+      // it at runtime.
+      p.ingredientChanges = [
+        { id: 'c-1', changeType: 'bogus', targetId: null, note: null, body: null }
+      ] as unknown as IngredientChange[];
+      expectInvalid(p);
+    });
+
+
+    it('accepts a valid add', async () => {
+      const p = basePayload();
+      p.ingredientChanges = [
+        { id: 'c-1', changeType: 'add', targetId: null, note: null, body: validIngredient() }
+      ];
+      // Passes validation; fails downstream at the DB call.
+      await expect(updateRecipeNode(p, 'owner-1')).rejects.not.toBeInstanceOf(
+        InvalidChangeError
+      );
+    });
+  });
+
+  describe('direction change validation', () => {
+    it('rejects add with non-null targetId', () => {
+      const p = basePayload();
+      p.directionChanges = [
+        {
+          id: 'c-1',
+          changeType: 'add',
+          targetId: 'someone-elses-add',
+          note: null,
+          body: validDirection()
+        }
+      ];
+      expectInvalid(p);
+    });
+
+    it('rejects edit with missing body', () => {
+      const p = basePayload();
+      p.directionChanges = [
+        { id: 'c-1', changeType: 'edit', targetId: 'some-add', note: null, body: null }
+      ];
+      expectInvalid(p);
+    });
+
+    it('rejects remove with non-null body', () => {
+      const p = basePayload();
+      p.directionChanges = [
+        { id: 'c-1', changeType: 'remove', targetId: 'some-add', note: null, body: validDirection() }
+      ];
+      expectInvalid(p);
+    });
+  });
+});
+

@@ -54,18 +54,9 @@ export async function resetTestUserRecipes() {
 			oldToNew.set(row.id, newId);
 			await db.execute(sql`
 				insert into public.recipe_nodes (
-					id, parent_id, parent_node_id, owner_id,
+					id, parent_id, owner_id,
 					name, label, ingredient_changes, direction_changes
 				) values (
-					${newId}::uuid,
-					${row.parent_id ? (oldToNew.get(row.parent_id) ?? null) : null}::uuid,
-					null,
-					${TEST_USER_ID}::uuid,
-					${row.name},
-					${row.label},
-					${sql.raw(`'${JSON.stringify(row.ingredient_changes).replace(/'/g, "''")}'::jsonb`)},
-					${sql.raw(`'${JSON.stringify(row.direction_changes).replace(/'/g, "''")}'::jsonb`)}
-				)
 			`);
 		}
 	} finally {

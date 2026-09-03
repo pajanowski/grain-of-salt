@@ -1,33 +1,228 @@
 <script lang="ts">
 	import {
-		EmptyDirection,
 		EmptyIngredient,
+		EmptyDirection,
 		type Ingredient,
 		type Direction
 	} from '$lib/obj/Recipe.svelte';
+	import type { IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
+	import { v4 as uuid } from 'uuid';
 	import IngredientRow from './IngredientRow.svelte';
 	import DirectionRow from './DirectionRow.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import Modal from './Modal.svelte';
 	import { invalidateAll, goto } from '$app/navigation';
 
-	const { recipe } = $props();
+	const { data } = $props();
 
-	let recipeData = $state(JSON.parse(JSON.stringify(recipe)));
+	// Materialized recipe (id = root, ingredients/directions = applied across
+	// the full chain). The leaf being edited is `data.currentNode`.
+	let recipe = $derived(data.recipe);
+	let currentNode = $derived(data.currentNode);
+	let rootNodeId = $derived(recipe.id);
 
+	// The leaf node's change arrays. These are the wire payload — the server
+	// replaces them on the row in place. See ADR 0001.
+	let leafIngredientChanges = $state<IngredientChange[]>([]);
+	let leafDirectionChanges = $state<DirectionChange[]>([]);
+
+	// Resync local change arrays from the server when the editing node id
+	// changes (initial load, navigation). On post-save invalidateAll, the id
+	// is the same so no resync — last-saved state is preserved locally.
+	let syncedNodeId = $state<string | null>(null);
 	$effect(() => {
-		recipeData = JSON.parse(JSON.stringify(recipe));
+		if (currentNode.id !== syncedNodeId) {
+			leafIngredientChanges = JSON.parse(JSON.stringify(currentNode.ingredientChanges));
+			leafDirectionChanges = JSON.parse(JSON.stringify(currentNode.directionChanges));
+			syncedNodeId = currentNode.id;
+		}
 	});
 
-// recipeData.id is the root node id, which IS the recipe's identity.
-const rootNodeId = $derived(recipeData.id);
+	// Displayed state = materialized state with the leaf's pending changes
+	// applied optimistically. After save + invalidateAll, the materialized
+	// state catches up and this derivation re-runs to match.
+	let displayedIngredients = $derived.by(() => {
+		const map = new Map<string, Ingredient>();
+		for (const ing of recipe.ingredients) map.set(ing.id, ing);
+		for (const c of leafIngredientChanges) {
+			if (c.changeType === 'add' && c.body) map.set(c.body.id, c.body);
+			else if (c.changeType === 'edit' && c.body && c.targetId) map.set(c.targetId, c.body);
+			else if (c.changeType === 'remove' && c.targetId) map.delete(c.targetId);
+		}
+		return Array.from(map.values());
+	});
+	let displayedDirections = $derived.by(() => {
+		const map = new Map<string, Direction>();
+		for (const dir of recipe.directions) map.set(dir.id, dir);
+		for (const c of leafDirectionChanges) {
+			if (c.changeType === 'add' && c.body) map.set(c.body.id, c.body);
+			else if (c.changeType === 'edit' && c.body && c.targetId) map.set(c.targetId, c.body);
+			else if (c.changeType === 'remove' && c.targetId) map.delete(c.targetId);
+		}
+		return Array.from(map.values());
+	});
 
+	// ---- leaf-record lookup (Case A detection) ----
+	function leafRecordForIngredient(rowId: string): IngredientChange | undefined {
+		return leafIngredientChanges.find(
+			(c) =>
+				(c.changeType === 'add' && c.body?.id === rowId) ||
+				(c.changeType === 'edit' && c.targetId === rowId)
+		);
+	}
+	function leafRecordForDirection(rowId: string): DirectionChange | undefined {
+		return leafDirectionChanges.find(
+			(c) =>
+				(c.changeType === 'add' && c.body?.id === rowId) ||
+				(c.changeType === 'edit' && c.targetId === rowId)
+		);
+	}
+
+	// ---- per-row handlers (Case A mutate / Case B push) ----
+	function editIngredient(rowId: string, next: Ingredient) {
+		const record = leafRecordForIngredient(rowId);
+		if (record && record.body) {
+			// Case A: mutate the existing change record in place; same id, same op.
+			record.body = { ...next };
+		} else {
+			// Case B: push an edit on the leaf targeting the ancestor's add id.
+			leafIngredientChanges.push({
+				id: uuid(),
+				changeType: 'edit',
+				targetId: rowId,
+				note: null,
+				body: { ...next }
+			});
+		}
+	}
+	function removeIngredient(rowId: string) {
+		const idx = leafIngredientChanges.findIndex(
+			(c) =>
+				(c.changeType === 'add' && c.body?.id === rowId) ||
+				(c.changeType === 'edit' && c.targetId === rowId)
+		);
+		if (idx >= 0) {
+			// Case A: drop the leaf's record. If it was an add, the row is
+			// gone (unless an ancestor also added it). If it was an edit,
+			// the row falls back to whatever the ancestor chain produces.
+			leafIngredientChanges.splice(idx, 1);
+		} else {
+			// Case B: push a remove targeting the ancestor's add id.
+			leafIngredientChanges.push({
+				id: uuid(),
+				changeType: 'remove',
+				targetId: rowId,
+				note: null,
+				body: null
+			});
+		}
+	}
+	function moveIngredient(rowId: string) {
+		// Reorder = remove + add. The new add has a fresh id and lands at the
+		// end of the apply order, so the row visually jumps to the end.
+		const visible = displayedIngredients.find((i) => i.id === rowId);
+		if (!visible) return;
+		removeIngredient(rowId);
+		leafIngredientChanges.push({
+			id: uuid(),
+			changeType: 'add',
+			targetId: null,
+			note: null,
+			body: { ...visible }
+		});
+	}
+	function addIngredient(input: Ingredient) {
+		leafIngredientChanges.push({
+			id: uuid(),
+			changeType: 'add',
+			targetId: null,
+			note: null,
+			body: { ...input }
+		});
+	}
+
+	function editDirection(rowId: string, next: Direction) {
+		const record = leafRecordForDirection(rowId);
+		if (record && record.body) {
+			record.body = { ...next };
+		} else {
+			leafDirectionChanges.push({
+				id: uuid(),
+				changeType: 'edit',
+				targetId: rowId,
+				note: null,
+				body: { ...next }
+			});
+		}
+	}
+	function removeDirection(rowId: string) {
+		const idx = leafDirectionChanges.findIndex(
+			(c) =>
+				(c.changeType === 'add' && c.body?.id === rowId) ||
+				(c.changeType === 'edit' && c.targetId === rowId)
+		);
+		if (idx >= 0) {
+			leafDirectionChanges.splice(idx, 1);
+		} else {
+			leafDirectionChanges.push({
+				id: uuid(),
+				changeType: 'remove',
+				targetId: rowId,
+				note: null,
+				body: null
+			});
+		}
+	}
+	function moveDirection(rowId: string) {
+		const visible = displayedDirections.find((d) => d.id === rowId);
+		if (!visible) return;
+		removeDirection(rowId);
+		leafDirectionChanges.push({
+			id: uuid(),
+			changeType: 'add',
+			targetId: null,
+			note: null,
+			body: { ...visible }
+		});
+	}
+	function addDirection(input: Direction) {
+		leafDirectionChanges.push({
+			id: uuid(),
+			changeType: 'add',
+			targetId: null,
+			note: null,
+			body: { ...input }
+		});
+	}
+
+	// ---- add forms ----
 	let addingIngredient = $state(false);
 	let addingDirection = $state(false);
 	let newIngredient = $state(EmptyIngredient());
 	let newDirection = $state(EmptyDirection());
+
+	// ---- save ----
 	let savePromise = $state(Promise.resolve());
 	let saveResolve: (value: void) => void;
+	function performSave() {
+		savePromise = new Promise((resolve) => (saveResolve = resolve));
+		fetch(`/api/recipe-node/${currentNode.id}`, {
+			method: 'PUT',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				nodeId: currentNode.id,
+				ingredientChanges: leafIngredientChanges,
+				directionChanges: leafDirectionChanges
+			})
+		}).then(async (res) => {
+			if (!res.ok) {
+				alert(`Save failed: ${await res.text()}`);
+			} else {
+				await invalidateAll();
+			}
+			saveResolve();
+		});
+	}
 
 	// ---- rename modal state ----
 	let showRenameModal = $state(false);
@@ -35,7 +230,7 @@ const rootNodeId = $derived(recipeData.id);
 	let renameBusy = $state(false);
 
 	function openRename() {
-		renameName = recipeData.name;
+		renameName = recipe.name;
 		showRenameModal = true;
 	}
 
@@ -66,7 +261,7 @@ const rootNodeId = $derived(recipeData.id);
 	let forkBusy = $state(false);
 
 	function openFork() {
-		forkName = recipeData.name + ' (fork)';
+		forkName = recipe.name + ' (fork)';
 		showForkModal = true;
 	}
 
@@ -75,7 +270,7 @@ const rootNodeId = $derived(recipeData.id);
 		if (!trimmed || forkBusy) return;
 		forkBusy = true;
 		try {
-			const res = await fetch(`/api/recipe/${rootNodeId}/fork`, {
+			const res = await fetch(`/api/recipe/${currentNode.id}/fork`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ name: trimmed })
@@ -97,7 +292,7 @@ const rootNodeId = $derived(recipeData.id);
 
 	// ---- delete ----
 	async function confirmDelete() {
-		if (!confirm(`Delete "${recipeData.name}"? This cannot be undone.`)) return;
+		if (!confirm(`Delete "${recipe.name}"? This cannot be undone.`)) return;
 		const res = await fetch(`/api/recipe/${rootNodeId}`, { method: 'DELETE' });
 		if (!res.ok) {
 			alert(`Delete failed: ${await res.text()}`);
@@ -111,56 +306,24 @@ const rootNodeId = $derived(recipeData.id);
 		{ label: 'Fork recipe', onSelect: openFork },
 		{ label: 'Delete recipe', onSelect: confirmDelete, danger: true }
 	]);
-
-	// ---- per-row mutation handlers -----------------------------------------
-
-	function updateIngredientAt(index: number, next: Ingredient) {
-		recipeData.ingredients[index] = next;
-	}
-
-	function removeIngredientAt(index: number) {
-		recipeData.ingredients.splice(index, 1);
-	}
-
-	function moveIngredient(index: number, direction: 'up' | 'down') {
-		const target = direction === 'up' ? index - 1 : index + 1;
-		if (target < 0 || target >= recipeData.ingredients.length) return;
-		const arr = recipeData.ingredients;
-		[arr[index], arr[target]] = [arr[target], arr[index]];
-	}
-
-	function updateDirectionAt(index: number, next: Direction) {
-		recipeData.directions[index] = next;
-	}
-
-	function removeDirectionAt(index: number) {
-		recipeData.directions.splice(index, 1);
-	}
-
-	function moveDirection(index: number, direction: 'up' | 'down') {
-		const target = direction === 'up' ? index - 1 : index + 1;
-		if (target < 0 || target >= recipeData.directions.length) return;
-		const arr = recipeData.directions;
-		[arr[index], arr[target]] = [arr[target], arr[index]];
-	}
 </script>
 
 <div class="flex flex-col gap-2">
 	<div class="flex items-center gap-2">
-		<h1>Recipe: {recipeData.name}</h1>
+		<h1>Recipe: {recipe.name}</h1>
 		<ContextMenu items={menuItems} label="Recipe actions" />
 	</div>
 
 	<h2>Ingredients</h2>
 	<ol class="list-decimal list-inside" data-testid="ingredient-list">
-		{#each recipeData.ingredients as ing, i (ing.id)}
+		{#each displayedIngredients as ing, i (ing.id)}
 			<IngredientRow
 				ingredient={ing}
 				index={i}
-				total={recipeData.ingredients.length}
-				onUpdate={(next) => updateIngredientAt(i, next)}
-				onRemove={() => removeIngredientAt(i)}
-				onMove={(dir) => moveIngredient(i, dir)}
+				total={displayedIngredients.length}
+				onUpdate={(next) => editIngredient(ing.id, next)}
+				onRemove={() => removeIngredient(ing.id)}
+				onMove={(_dir) => moveIngredient(ing.id)}
 			/>
 		{/each}
 	</ol>
@@ -190,7 +353,7 @@ const rootNodeId = $derived(recipeData.id);
 			<button
 				type="button"
 				onclick={() => {
-					recipeData.ingredients.push(newIngredient);
+					addIngredient(newIngredient);
 					addingIngredient = !addingIngredient;
 					newIngredient = EmptyIngredient();
 				}}>Add</button
@@ -200,14 +363,14 @@ const rootNodeId = $derived(recipeData.id);
 
 	<h2>Directions</h2>
 	<ol class="list-decimal list-inside" data-testid="direction-list">
-		{#each recipeData.directions as dir, i (dir.id)}
+		{#each displayedDirections as dir, i (dir.id)}
 			<DirectionRow
 				direction={dir}
 				index={i}
-				total={recipeData.directions.length}
-				onUpdate={(next) => updateDirectionAt(i, next)}
-				onRemove={() => removeDirectionAt(i)}
-				onMove={(dir) => moveDirection(i, dir)}
+				total={displayedDirections.length}
+				onUpdate={(next) => editDirection(dir.id, next)}
+				onRemove={() => removeDirection(dir.id)}
+				onMove={(_dir) => moveDirection(dir.id)}
 			/>
 		{/each}
 	</ol>
@@ -229,7 +392,7 @@ const rootNodeId = $derived(recipeData.id);
 			<button
 				type="button"
 				onclick={() => {
-					recipeData.directions.push(newDirection);
+					addDirection(newDirection);
 					addingDirection = !addingDirection;
 					newDirection = EmptyDirection();
 				}}>Add</button
@@ -240,28 +403,7 @@ const rootNodeId = $derived(recipeData.id);
 	{#await savePromise}
 		<button type="submit" disabled>Save</button>
 	{:then}
-		<button
-			type="button"
-			onclick={() => {
-				savePromise = new Promise((resolve) => (saveResolve = resolve));
-				fetch('/api/save', {
-					method: 'PUT',
-					body: new URLSearchParams({
-						recipe: JSON.stringify(recipeData)
-					})
-				}).then(async (res) => {
-					if (!res.ok) {
-						const msg = await res.text();
-						alert(`Save failed: ${msg}`);
-					} else {
-						await invalidateAll();
-					}
-					saveResolve();
-				});
-			}}
-		>
-			Save
-		</button>
+		<button type="button" onclick={performSave}>Save</button>
 	{/await}
 </div>
 
@@ -270,30 +412,23 @@ const rootNodeId = $derived(recipeData.id);
 		<h2>Rename recipe</h2>
 	{/snippet}
 	<form
-		class="flex flex-col gap-2"
 		onsubmit={(e) => {
 			e.preventDefault();
 			confirmRename();
 		}}
 	>
-		<label class="flex flex-col gap-1">
+		<label>
 			Name
-			<input
-				data-testid="rename-name-input"
-				bind:value={renameName}
-				disabled={renameBusy}
-				autocomplete="off"
-			/>
+			<input bind:value={renameName} aria-label="New recipe name" />
 		</label>
-		<div class="flex gap-2 justify-end">
+		<div class="flex gap-2 mt-2">
+			<button type="submit" class="flat-button" disabled={renameBusy}>
+				{renameBusy ? 'Saving…' : 'Save'}
+			</button>
 			<button
 				type="button"
-				data-testid="rename-cancel"
-				onclick={() => (showRenameModal = false)}
-				disabled={renameBusy}>Cancel</button
-			>
-			<button type="submit" data-testid="rename-save" disabled={!renameName.trim() || renameBusy}
-				>Save</button
+				class="flat-button"
+				onclick={() => (showRenameModal = false)}>Cancel</button
 			>
 		</div>
 	</form>
@@ -304,30 +439,23 @@ const rootNodeId = $derived(recipeData.id);
 		<h2>Fork recipe</h2>
 	{/snippet}
 	<form
-		class="flex flex-col gap-2"
 		onsubmit={(e) => {
 			e.preventDefault();
 			confirmFork();
 		}}
 	>
-		<label class="flex flex-col gap-1">
-			New recipe name
-			<input
-				data-testid="fork-name-input"
-				bind:value={forkName}
-				disabled={forkBusy}
-				autocomplete="off"
-			/>
+		<label>
+			Name
+			<input bind:value={forkName} aria-label="Forked recipe name" />
 		</label>
-		<div class="flex gap-2 justify-end">
+		<div class="flex gap-2 mt-2">
+			<button type="submit" class="flat-button" disabled={forkBusy}>
+				{forkBusy ? 'Forking…' : 'Fork'}
+			</button>
 			<button
 				type="button"
-				data-testid="fork-cancel"
-				onclick={() => (showForkModal = false)}
-				disabled={forkBusy}>Cancel</button
-			>
-			<button type="submit" data-testid="fork-save" disabled={!forkName.trim() || forkBusy}
-				>Save</button
+				class="flat-button"
+				onclick={() => (showForkModal = false)}>Cancel</button
 			>
 		</div>
 	</form>

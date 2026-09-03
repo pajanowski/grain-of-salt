@@ -49,6 +49,10 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 			ingredients: state.ingredients,
 			directions: state.directions,
 		},
+		// Editing happens on the leaf. The client uses its full change arrays
+		// to distinguish Case A (leaf owns a change referencing this row's
+		// add-id) from Case B (inherited from ancestor). See ADR 0001.
+		currentNode: current,
     history, // full node chain for the history UI
     parentChain,
   };

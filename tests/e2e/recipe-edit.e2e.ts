@@ -7,11 +7,11 @@
  * any test can mutate the DB without poisoning the next one.
  *
  * Two known bugs are explicitly asserted so they fail loudly when fixed:
- *   - BUG #1 (indent regression): FIXED. The tree builder now resolves
- *     each child's `parentNodeId` against any node in the parent's chain,
- *     so a save that grows the chain no longer orphans child recipes.
- *     The test "saving a recipe keeps its child recipes at the same
- *     indent" guards the fix.
+ *   - BUG #1 (indent regression): FIXED. The tree builder uses `parentId`
+ *     to nest children under their parent, so a save that doesn't grow
+ *     the chain (ADR 0001) keeps the existing hierarchy intact. The test
+ *     "saving a recipe keeps its child recipes at the same indent"
+ *     guards the fix.
  *   - BUG #2 (save reverts edits): the user reported that after a save,
  *     a subsequent edit + save reverts the recipe. Tests for the
  *     save-then-edit scenario guard the regression so any future change
@@ -232,67 +232,59 @@ test.describe('ingredient and direction mutations', () => {
 		await clickSave(page);
 });
 
-	test('moves an ingredient up and down', async ({ page }) => {
+	test('moves an ingredient: rows land at the end of the list', async ({ page }) => {
+		// Reorder is implemented as remove + add (see ADR 0001). Both
+		// "Move up" and "Move down" append a new ingredient at the end of
+		// the leaf's apply order — visually, the row jumps to the bottom
+		// regardless of the original position or direction chosen.
 		await openRecipe(page, RECIPE.simple);
 
 		const ingredients = ingredientList(page);
-		// Initial order: Eggs (0), Butter (1), Salt (2).
-		const eggs = ingredientRow(page, 'Eggs');
-		const butter = ingredientRow(page, 'Butter');
+		const initial = await ingredients.locator('li').count();
+		// Move Eggs "down" — Eggs lands at the end.
+		await clickRowAction(page, ingredientRow(page, 'Eggs'), 'Move down');
+		const afterMoveDown = ingredients.locator('li').nth(initial - 1);
+		await expect(afterMoveDown).toContainText('Eggs');
 
-		const eggsBefore = await eggs.boundingBox();
-		const butterBefore = await butter.boundingBox();
-		expect(eggsBefore && butterBefore && eggsBefore.y < butterBefore.y).toBe(true);
+		// Move Eggs "up" — Eggs still lands at the end (same semantics).
+		await clickRowAction(page, ingredientRow(page, 'Eggs'), 'Move up');
+		const afterMoveUp = ingredients.locator('li').nth(initial - 1);
+		await expect(afterMoveUp).toContainText('Eggs');
 
-		// Move Eggs down → Butter, Eggs, Salt.
-		await clickRowAction(page, eggs, 'Move down');
-
-		const eggsAfterMove = ingredientRow(page, 'Eggs');
-		const butterAfterMove = ingredientRow(page, 'Butter');
-		const eggsAfterBox = await eggsAfterMove.boundingBox();
-		const butterAfterBox = await butterAfterMove.boundingBox();
-		expect(butterAfterBox && eggsAfterBox && butterAfterBox.y < eggsAfterBox.y).toBe(true);
-
-		// Move Eggs back up.
-		await clickRowAction(page, eggsAfterMove, 'Move up');
-
-		const eggsFinal = ingredientRow(page, 'Eggs');
-		const butterFinal = ingredientRow(page, 'Butter');
-		const eggsFinalBox = await eggsFinal.boundingBox();
-		const butterFinalBox = await butterFinal.boundingBox();
-		expect(eggsFinalBox && butterFinalBox && eggsFinalBox.y < butterFinalBox.y).toBe(true);
+		// Only one row at the end after both moves; the original ordering
+		// of the other rows is preserved.
+		await expect(ingredients.locator('li')).toHaveCount(initial);
+		await clickSave(page);
 	});
 
-	test('moves a direction up and down', async ({ page }) => {
+
+	test('moves a direction: rows land at the end of the list', async ({ page }) => {
+		// See the ingredient move test above — reorder = remove + add.
+		// Both directions put the row at the end of the leaf's apply order.
 		await openRecipe(page, RECIPE.simple);
 
-		const beat = directionRow(page, 0);
-		const melt = directionRow(page, 1);
+		const directions = directionList(page);
+		const initial = await directions.locator('li').count();
 
-		const beatBefore = await beat.boundingBox();
-		const meltBefore = await melt.boundingBox();
-		expect(beatBefore && meltBefore && beatBefore.y < meltBefore.y).toBe(true);
-
-		// Move "Beat" down → Melt, Beat, ...
-		await beat.getByRole('button', { name: /^Actions for/ }).click();
+		// Move "Beat" down — lands at the end.
+		await directionRow(page, 0)
+			.getByRole('button', { name: /^Actions for/ })
+			.click();
 		await page.getByRole('menuitem', { name: 'Move down' }).click();
+		await expect(directions.locator('li').nth(initial - 1)).toContainText('Beat');
 
-		const beatAfter = directionRow(page, 1);
-		const meltAfter = directionRow(page, 0);
-		const beatAfterBox = await beatAfter.boundingBox();
-		const meltAfterBox = await meltAfter.boundingBox();
-		expect(meltAfterBox && beatAfterBox && meltAfterBox.y < beatAfterBox.y).toBe(true);
-
-		// Move it back up.
-		await beatAfter.getByRole('button', { name: /^Actions for/ }).click();
+		// Move "Beat" up — still at the end.
+		await directionRow(page, initial - 1)
+			.getByRole('button', { name: /^Actions for/ })
+			.click();
 		await page.getByRole('menuitem', { name: 'Move up' }).click();
+		await expect(directions.locator('li').nth(initial - 1)).toContainText('Beat');
 
-		const beatFinal = directionRow(page, 0);
-		const meltFinal = directionRow(page, 1);
-		const beatFinalBox = await beatFinal.boundingBox();
-		const meltFinalBox = await meltFinal.boundingBox();
-		expect(beatFinalBox && meltFinalBox && beatFinalBox.y < meltFinalBox.y).toBe(true);
+		// Total count unchanged; only reordering.
+		await expect(directions.locator('li')).toHaveCount(initial);
+		await clickSave(page);
 	});
+
 
 	test('removes an ingredient and saves the deletion', async ({ page }) => {
 		// No-reload persistence: see "adds an ingredient and saves it".
@@ -361,10 +353,10 @@ test.describe('known bugs', () => {
 
 	test('saving a recipe keeps its child recipes at the same indent', async ({ page }) => {
 		// Regression test for the indent-regression bug. After saving a
-		// recipe (which appends a new node to the chain) the tree should
-		// still render the same hierarchy it had before the save. The fix
-		// resolves each child's `parentNodeId` against ANY node in the
-		// parent's chain, not just the latest tail.
+		// recipe (which now mutates the leaf node in place — see ADR 0001)
+		// the tree should still render the same hierarchy it had before
+		// the save. The chain doesn't grow on save, so indentation is
+		// stable across save round-trips.
 		const initialSimple = await readTreeIndent(page, RECIPE.simple);
 		const initialFrench = await readTreeIndent(page, RECIPE.french);
 		const initialCheese = await readTreeIndent(page, RECIPE.cheese);
@@ -563,4 +555,82 @@ test.describe('user scenarios', () => {
 	await expect(ingredientList(page).locator('li')).toHaveCount(3);
 	await expect(ingredientRow(page, 'Walnuts')).toHaveCount(0);
 });
+
 });
+
+
+/**
+ * ADR 0001 — saving edits does not append a new recipe node. The chain
+ * length must stay constant across save operations; only explicit forking
+ * grows the chain. The history list on /recipes/[slug] reflects this: each
+ * entry is one node in the chain.
+ */
+test.describe('saving does not append a node', () => {
+	async function countHistoryEntries(page: Page): Promise<number> {
+		await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
+		// Each history entry is an <li> with a node label and timestamp.
+		// Scope to the history list — not recipe/direction rows.
+		const items = page.locator('section', { has: page.getByRole('heading', { name: 'History' }) })
+			.locator('ol > li');
+		return items.count();
+	}
+
+	test('saving a simple edit keeps the chain length', async ({ page }) => {
+		await openRecipe(page, RECIPE.simple);
+		const before = await countHistoryEntries(page);
+
+		// Edit an ingredient and save.
+		const butterRow = ingredientRow(page, 'Butter');
+		await clickRowAction(page, butterRow, 'Edit');
+		await butterRow.locator('form').getByPlaceholder('Amount').fill('3');
+		await butterRow.locator('form').getByRole('button', { name: 'Save', exact: true }).click();
+		await clickSave(page);
+
+		// Re-open the page (full reload) to read the server-side chain.
+		await page.reload();
+		await expect(page.getByRole('heading', { name: `Recipe: ${RECIPE.simple}` })).toBeVisible();
+		const after = await countHistoryEntries(page);
+		expect(after).toBe(before);
+	});
+
+	test('saving an add keeps the chain length', async ({ page }) => {
+		await openRecipe(page, RECIPE.simple);
+		const before = await countHistoryEntries(page);
+
+		await page.getByRole('button', { name: 'Add new ingredient' }).click();
+		await fillAddIngredient(page, 'Paprika', '1', 'pinch');
+		await addIngredientForm(page).getByRole('button', { name: 'Add', exact: true }).click();
+		await clickSave(page);
+
+		await page.reload();
+		await expect(page.getByRole('heading', { name: `Recipe: ${RECIPE.simple}` })).toBeVisible();
+		const after = await countHistoryEntries(page);
+		expect(after).toBe(before);
+
+		// The new row survives reload — the save actually persisted.
+		await expect(ingredientRow(page, 'Paprika')).toBeVisible();
+	});
+
+	test('forking appends a new chain entry on the source', async ({ page }) => {
+		// ADR 0002: "fork" = chain extension. The new node joins the chain
+		// containing the leaf the user clicked fork on, so the source's
+		// history grows by one. The history view should reflect this on
+		// reload — a fork IS a new chain entry.
+		await openRecipe(page, RECIPE.simple);
+		const before = await countHistoryEntries(page);
+
+		await page.getByRole('button', { name: 'Recipe actions' }).click();
+		await page.getByRole('menuitem', { name: 'Fork recipe' }).click();
+		const forkNameInput = page.getByLabel('Forked recipe name');
+		await forkNameInput.fill(`${RECIPE.simple} (test fork)`);
+		await page.getByRole('button', { name: 'Fork', exact: true }).click();
+		await page.waitForURL(/\/recipes\//);
+
+		// Reload the source and verify the chain grew.
+		await openRecipe(page, RECIPE.simple);
+		const after = await countHistoryEntries(page);
+		expect(after).toBe(before + 1);
+	});
+
+});
+

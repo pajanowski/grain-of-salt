@@ -1,9 +1,8 @@
-import { v4 as uuid } from 'uuid';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '../db/index';
 import { recipeNodes } from '../db/schema';
 import type { InsertRecipeNode, SelectRecipeNode } from '../db/schema';
-import type { Ingredient, Direction, Recipe } from '$lib/obj/Recipe.svelte';
+import type { Ingredient, Direction } from '$lib/obj/Recipe.svelte';
 import type { RecipeNode, IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
 
 /**
@@ -18,18 +17,13 @@ export interface RecipeState {
 /**
  * Create a root node for a brand-new recipe owned by `ownerId`.
  * The root node has parentId = null.
- *
- * `parentNodeId`, when set, points to a node in the parent recipe —
- * establishing this recipe as a "child" of that one (e.g. a fork).
  */
 export async function createRootRecipeNode(
 	name: string,
 	ownerId: string,
-	parentNodeId: string | null = null,
 ): Promise<RecipeNode> {
 	const row: InsertRecipeNode = {
 		parentId: null,
-		parentNodeId,
 		ownerId,
 		name,
 		label: null,
@@ -39,6 +33,7 @@ export async function createRootRecipeNode(
 	const [inserted] = await db.insert(recipeNodes).values(row).returning();
 	return toUiRecipeNode(inserted);
 }
+
 
 /**
  * Append a child node to an existing parent. parentId is required — to create
@@ -68,7 +63,6 @@ export async function appendRecipeNode(
 
 	const row: InsertRecipeNode = {
 		parentId,
-		parentNodeId: null,
 		ownerId,
 		name,
 		label,
@@ -78,6 +72,7 @@ export async function appendRecipeNode(
 	const [inserted] = await db.insert(recipeNodes).values(row).returning();
 	return toUiRecipeNode(inserted);
 }
+
 
 /**
  * Fetch every node in the chain rooted by rootNodeId, oldest first.
@@ -258,7 +253,6 @@ function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 		id: row.id,
 		name: row.name,
 		parentId: row.parentId,
-		parentNodeId: row.parentNodeId,
 		label: row.label,
 		timestamp: row.timestamp instanceof Date ? row.timestamp : new Date(row.timestamp),
 		ingredientChanges: (row.ingredientChanges ?? []) as IngredientChange[],
@@ -266,166 +260,194 @@ function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 	};
 }
 
+
+
 /**
- * Diff a target Recipe against the current materialized state and append a
- * single node that transforms one into the other.
- *
- * - Ingredients/directions in the target but not in current -> 'add'
- * - Ingredients/directions in both, but with different fields -> 'edit'
- * - Ingredients/directions in current but not in target -> 'remove'
- *
- * If there is no root node yet (legacy recipe), one is created with the
- * current empty state and then a second node carries the diff.
- *
- * Returns the materialized state after the new node is applied.
+ * Wire payload for `PUT /api/recipe-node/[nodeId]`. The client sends the leaf
+ * node's full change arrays; the server replaces them on the row. The shape
+ * is intentionally symmetric — ingredients and directions are independent
+ * for ordering, but flow through the same path.
  */
-export async function updateRecipeState(
-	recipe: Recipe,
-	ownerId: string,
-	label: string | null = null,
-): Promise<RecipeState> {
-	const current = await getRecipeState(recipe.id);
+export interface UpdateRecipeNodePayload {
+	nodeId: string;
+	ingredientChanges: IngredientChange[];
+	directionChanges: DirectionChange[];
+	label?: string | null;
+}
 
-	const ingredientChanges = diffIngredients(current.ingredients, recipe.ingredients);
-	const directionChanges = diffDirections(current.directions, recipe.directions);
-
-	if (ingredientChanges.length === 0 && directionChanges.length === 0) {
-		// No-op save; current state already matches.
-		return current;
+/**
+ * Thrown when a change record fails validation. Surfaced as a 400 by the
+ * route handler.
+ */
+export class InvalidChangeError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'InvalidChangeError';
 	}
+}
 
-	// Chain off the current tail (latest node) so the linked list stays linear.
-	// If no nodes exist, create a root and chain off it.
-	let parentId: string;
-	const tail = await getLatestRecipeNode(recipe.id);
-	if (!tail) {
-		const created = await createRootRecipeNode(recipe.name, ownerId);
-		parentId = created.id;
+function validateIngredientChange(c: unknown, index: number): asserts c is IngredientChange {
+	if (!c || typeof c !== 'object') {
+		throw new InvalidChangeError(`ingredientChanges[${index}] must be an object`);
+	}
+	const obj = c as Record<string, unknown>;
+	if (typeof obj.id !== 'string' || obj.id.length === 0) {
+		throw new InvalidChangeError(`ingredientChanges[${index}].id must be a non-empty string`);
+	}
+	const op = obj.changeType;
+	if (op !== 'add' && op !== 'edit' && op !== 'remove') {
+		throw new InvalidChangeError(`ingredientChanges[${index}].changeType must be 'add' | 'edit' | 'remove'`);
+	}
+	if (op === 'add') {
+		if (obj.targetId !== null) {
+			throw new InvalidChangeError(`ingredientChanges[${index}] (add) must have targetId === null`);
+		}
+		if (!obj.body || typeof obj.body !== 'object') {
+			throw new InvalidChangeError(`ingredientChanges[${index}] (add) must have a body`);
+		}
+	} else if (op === 'edit') {
+		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
+			throw new InvalidChangeError(`ingredientChanges[${index}] (edit) must have a targetId`);
+		}
+		if (!obj.body || typeof obj.body !== 'object') {
+			throw new InvalidChangeError(`ingredientChanges[${index}] (edit) must have a body`);
+		}
 	} else {
-		parentId = tail.id;
+		// remove
+		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
+			throw new InvalidChangeError(`ingredientChanges[${index}] (remove) must have a targetId`);
+		}
+		if (obj.body !== null) {
+			throw new InvalidChangeError(`ingredientChanges[${index}] (remove) must have body === null`);
+		}
 	}
+}
 
-	await appendRecipeNode(
-		parentId,
-		recipe.name,
-		ingredientChanges,
-		directionChanges,
-		label,
-	);
+function validateDirectionChange(c: unknown, index: number): asserts c is DirectionChange {
+	if (!c || typeof c !== 'object') {
+		throw new InvalidChangeError(`directionChanges[${index}] must be an object`);
+	}
+	const obj = c as Record<string, unknown>;
+	if (typeof obj.id !== 'string' || obj.id.length === 0) {
+		throw new InvalidChangeError(`directionChanges[${index}].id must be a non-empty string`);
+	}
+	const op = obj.changeType;
+	if (op !== 'add' && op !== 'edit' && op !== 'remove') {
+		throw new InvalidChangeError(`directionChanges[${index}].changeType must be 'add' | 'edit' | 'remove'`);
+	}
+	if (op === 'add') {
+		if (obj.targetId !== null) {
+			throw new InvalidChangeError(`directionChanges[${index}] (add) must have targetId === null`);
+		}
+		if (!obj.body || typeof obj.body !== 'object') {
+			throw new InvalidChangeError(`directionChanges[${index}] (add) must have a body`);
+		}
+	} else if (op === 'edit') {
+		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
+			throw new InvalidChangeError(`directionChanges[${index}] (edit) must have a targetId`);
+		}
+		if (!obj.body || typeof obj.body !== 'object') {
+			throw new InvalidChangeError(`directionChanges[${index}] (edit) must have a body`);
+		}
+	} else {
+		// remove
+		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
+			throw new InvalidChangeError(`directionChanges[${index}] (remove) must have a targetId`);
+		}
+		if (obj.body !== null) {
+			throw new InvalidChangeError(`directionChanges[${index}] (remove) must have body === null`);
+		}
+	}
+}
 
-	return applyNodes(await getRecipeNodesByRecipeId(recipe.id));
+function validatePayload(payload: UpdateRecipeNodePayload): void {
+	if (!payload || typeof payload !== 'object') {
+		throw new InvalidChangeError('payload must be an object');
+	}
+	if (typeof payload.nodeId !== 'string' || payload.nodeId.length === 0) {
+		throw new InvalidChangeError('nodeId must be a non-empty string');
+	}
+	if (!Array.isArray(payload.ingredientChanges)) {
+		throw new InvalidChangeError('ingredientChanges must be an array');
+	}
+	if (!Array.isArray(payload.directionChanges)) {
+		throw new InvalidChangeError('directionChanges must be an array');
+	}
+	payload.ingredientChanges.forEach((c, i) => validateIngredientChange(c, i));
+	payload.directionChanges.forEach((c, i) => validateDirectionChange(c, i));
+	if (payload.label !== undefined && payload.label !== null && typeof payload.label !== 'string') {
+		throw new InvalidChangeError('label must be a string or null');
+	}
 }
 
 /**
- * Fetch the most recently created node in the chain rooted by rootNodeId
- * (the tail of the list). Returns null if the recipe has no nodes.
+ * Verify that the given node exists and belongs to `ownerId`. Every node in a
+ * chain shares the same ownerId (set at root creation), so a direct lookup
+ * is sufficient — no walk up the chain.
+ *
+ * Throws 'Node not found' if the row is absent and 'Forbidden' on owner
+ * mismatch. The route handler maps these to 404 and 403 respectively.
  */
-async function getLatestRecipeNode(rootNodeId: string): Promise<RecipeNode | null> {
-	const chain = await getRecipeNodesByRecipeId(rootNodeId);
-	if (chain.length === 0) return null;
-	return chain[chain.length - 1];
+async function assertNodeOwnership(nodeId: string, ownerId: string): Promise<void> {
+	const rows = await db
+		.select({ ownerId: recipeNodes.ownerId })
+		.from(recipeNodes)
+		.where(eq(recipeNodes.id, nodeId))
+		.limit(1);
+	if (rows.length === 0) {
+		throw new Error('Node not found');
+	}
+	if (rows[0].ownerId !== ownerId) {
+		throw new Error('Forbidden');
+	}
 }
 
-function diffIngredients(
-	current: Ingredient[],
-	next: Ingredient[],
-): IngredientChange[] {
-	const currentById = new Map(current.map((i) => [i.id, i]));
-	const nextById = new Map(next.map((i) => [i.id, i]));
+/**
+ * Replace the ingredientChanges and directionChanges JSONB columns on the
+ * given node. No diff, no new node — the client is authoritative for the
+ * leaf's change arrays. See ADR 0001.
+ *
+ * Empty payload + undefined label = no-op; skip the DB write entirely and
+ * return the current materialized state. Otherwise the writes go through
+ * and the timestamp is bumped.
+ */
+export async function updateRecipeNode(
+	payload: UpdateRecipeNodePayload,
+	ownerId: string,
+): Promise<RecipeState> {
+	validatePayload(payload);
+	await assertNodeOwnership(payload.nodeId, ownerId);
 
-	const changes: IngredientChange[] = [];
-
-	// adds and edits
-	for (const [id, ing] of nextById) {
-		const prior = currentById.get(id);
-		if (!prior) {
-			changes.push({
-				id: uuid(),
-				changeType: 'add',
-				targetId: null,
-				note: null,
-				body: ing,
-			});
-		} else if (!ingredientEqual(prior, ing)) {
-			changes.push({
-				id: uuid(),
-				changeType: 'edit',
-				targetId: id,
-				note: null,
-				body: ing,
-			});
-		}
+	const noChanges =
+		payload.ingredientChanges.length === 0 && payload.directionChanges.length === 0;
+	const noLabel = payload.label === undefined;
+	if (noChanges && noLabel) {
+		const root = await getRootRecipeNode(payload.nodeId);
+		if (!root) throw new Error('Node not found');
+		return applyNodes(await getRecipeNodesByRecipeId(root.id));
 	}
 
-	// removes
-	for (const id of currentById.keys()) {
-		if (!nextById.has(id)) {
-			changes.push({
-				id: uuid(),
-				changeType: 'remove',
-				targetId: id,
-				note: null,
-				body: null,
-			});
-		}
+	const set: {
+		ingredientChanges: IngredientChange[];
+		directionChanges: DirectionChange[];
+		timestamp: Date;
+		label?: string | null;
+	} = {
+		ingredientChanges: payload.ingredientChanges,
+		directionChanges: payload.directionChanges,
+		timestamp: new Date(),
+	};
+	if (payload.label !== undefined) {
+		set.label = payload.label;
 	}
 
-	return changes;
+	await db.update(recipeNodes).set(set).where(eq(recipeNodes.id, payload.nodeId));
+
+	const root = await getRootRecipeNode(payload.nodeId);
+	if (!root) throw new Error('Node not found');
+	return applyNodes(await getRecipeNodesByRecipeId(root.id));
 }
 
-function diffDirections(
-	current: Direction[],
-	next: Direction[],
-): DirectionChange[] {
-	const currentById = new Map(current.map((d) => [d.id, d]));
-	const nextById = new Map(next.map((d) => [d.id, d]));
-
-	const changes: DirectionChange[] = [];
-
-	for (const [id, dir] of nextById) {
-		const prior = currentById.get(id);
-		if (!prior) {
-			changes.push({
-				id: uuid(),
-				changeType: 'add',
-				targetId: null,
-				note: null,
-				body: dir,
-			});
-		} else if (prior.body !== dir.body) {
-			changes.push({
-				id: uuid(),
-				changeType: 'edit',
-				targetId: id,
-				note: null,
-				body: dir,
-			});
-		}
-	}
-
-	for (const id of currentById.keys()) {
-		if (!nextById.has(id)) {
-			changes.push({
-				id: uuid(),
-				changeType: 'remove',
-				targetId: id,
-				note: null,
-				body: null,
-			});
-		}
-	}
-
-	return changes;
-}
-
-function ingredientEqual(a: Ingredient, b: Ingredient): boolean {
-	return (
-		a.id === b.id &&
-		a.name === b.name &&
-		a.amount === b.amount &&
-		a.unit === b.unit
-	);
-}
 
 /**
  * A recipe as it appears in the list/tree UI. Each RecipeNode is its own

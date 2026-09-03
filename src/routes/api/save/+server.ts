@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { NewRecipe, type Recipe } from '$lib/obj/Recipe.svelte';
-import { saveNewRecipe, updateRecipe } from '$lib/server/bo/recipesbo';
+import { saveNewRecipe } from '$lib/server/bo/recipesbo';
 import { DEMO_USER_ID } from '$lib/server/db/schema';
 
 /**
@@ -32,22 +32,6 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 	const newRecipe = NewRecipe(recipeName);
 	const ret = await saveNewRecipe(newRecipe, ownerId);
 	return new Response(JSON.stringify(ret));
-};
-
-export const PUT: RequestHandler = async ({ request, locals, cookies }) => {
-	const ownerId = resolveOwnerId(locals, cookies);
-	if (!ownerId) {
-		return new Response('Sign in or continue as guest first', { status: 401 });
-	}
-
-	const data = await request.formData();
-	const recipe: Recipe = JSON.parse(data.get('recipe') as string);
-	try {
-		const ret = await updateRecipe(recipe, ownerId);
-		return new Response(JSON.stringify(ret));
-	} catch (e) {
-		return new Response((e as Error).message, { status: 500 });
-	}
 };
 
 export const DELETE: RequestHandler = async () => {

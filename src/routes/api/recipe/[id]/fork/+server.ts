@@ -7,13 +7,20 @@ import { DEMO_USER_ID } from '$lib/server/db/schema';
 
 /**
  * POST /api/recipe/[id]/fork
- * Body: { "name": "New Recipe Name" }
+ * Body: { "name": "New branch name" }
  *
- * The new recipe is owned by the caller (real user or guest's DEMO_USER_ID).
- * Guests can fork demo recipes; forking a real user's recipe while signed
- * out is blocked because the source recipe wouldn't be visible to them
- * anyway.
+ * Per ADR 0002, "fork" means chain extension: a new node is appended to
+ * the chain containing `[id]` with `parentId = [id]` and empty change
+ * arrays. The new node's materialized state is identical to the source's
+ * until the user adds their own changes.
+ *
+ * The verb "fork" is retained in the UI for familiarity even though the
+ * semantics is closer to a git branch than to a separate recipe.
+ *
+ * Ownership: the new node inherits its parent's ownerId (no cross-user
+ * forking). The caller must own the source chain.
  */
+
 function resolveOwnerId(
 	locals: App.Locals,
 	cookies: { get: (name: string) => string | undefined }
@@ -29,7 +36,7 @@ export const POST: RequestHandler = async ({ params, request, locals, cookies })
 		return new Response('Sign in or continue as guest first', { status: 401 });
 	}
 
-	// Verify the source recipe exists and the caller can see it (same
+	// Verify the source node exists and the caller can see it (same
 	// owner — guests can only fork their own demo tree).
 	const rows = await db
 		.select({ id: recipeNodes.id })
@@ -41,7 +48,7 @@ export const POST: RequestHandler = async ({ params, request, locals, cookies })
 		return new Response('Recipe not found', { status: 404 });
 	}
 
-	const sourceRootNodeId = rows[0].id;
+	const sourceNodeId = rows[0].id;
 
 	let body: { name?: unknown };
 	try {
@@ -55,7 +62,7 @@ export const POST: RequestHandler = async ({ params, request, locals, cookies })
 	}
 
 	try {
-		const newRecipe = await forkRecipe(sourceRootNodeId, ownerId, body.name.trim());
+		const newRecipe = await forkRecipe(sourceNodeId, ownerId, body.name.trim());
 		return new Response(JSON.stringify(newRecipe), {
 			status: 201,
 			headers: { 'content-type': 'application/json' }

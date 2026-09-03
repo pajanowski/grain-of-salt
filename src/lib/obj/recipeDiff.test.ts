@@ -53,7 +53,6 @@ function node(
     id: partial.id,
     name: partial.name ?? 'Test',
     parentId: partial.parentId ?? null,
-    parentNodeId: partial.parentNodeId ?? null,
     label: partial.label ?? null,
     timestamp: partial.timestamp ?? 0,
     ingredientChanges: partial.ingredientChanges ?? [],

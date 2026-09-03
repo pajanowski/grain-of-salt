@@ -1,15 +1,17 @@
-import { pgTable, uuid, text, timestamp, jsonb, type AnyPgColumn, check } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
+import { pgTable, uuid, text, timestamp, jsonb, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { IngredientChange, DirectionChange } from '../../obj/RecipeNode.svelte';
 
 /**
- * One node in a recipe's history. Forms a singly-linked list per recipe
- * via parentId. The head (parentId = null) is the recipe's root and
- * doubles as the recipe's identity — there is no separate recipes table.
+ * One node in a recipe's history. Forms a DAG per owner via `parentId`:
+ * each node has one parent (the previous node in its chain) and may have
+ * many children (sibling branches off the same parent). The head of any
+ * chain (parentId = null) is the recipe's root and doubles as the
+ * recipe's identity; there is no separate recipes table.
  *
- * Hierarchy: a recipe's ROOT node may carry a `parentNodeId` pointing to
- * the tail node of its parent recipe — making this recipe a "child" of
- * that one. Null on top-level recipes and on non-root nodes.
+ * Forking under the chain-extension model (ADR 0002) creates a new node
+ * in the same chain via `parentId` pointing to the leaf the user clicked
+ * fork on. Until the new node adds its own changes, its materialized
+ * recipe state is identical to the source's.
  *
  * Ownership: every node belongs to a Supabase auth user via ownerId.
  * Row-level security on `public.recipe_nodes` (see supabase/migrations)
@@ -21,36 +23,26 @@ import type { IngredientChange, DirectionChange } from '../../obj/RecipeNode.sve
  * same recipe name — so the API can answer "what recipe is this node
  * part of?" without joining through a recipes table.
  */
-export const recipeNodes = pgTable(
-	'recipe_nodes',
-	{
-		id: uuid('id').defaultRandom().primaryKey(),
-		parentId: uuid('parent_id').references((): AnyPgColumn => recipeNodes.id, {
-			onDelete: 'cascade'
-		}),
-		parentNodeId: uuid('parent_node_id').references((): AnyPgColumn => recipeNodes.id, {
-			onDelete: 'set null'
-		}),
-		ownerId: uuid('owner_id').notNull(),
-		name: text('name').notNull(),
-		label: text('label'),
-		timestamp: timestamp('timestamp', { withTimezone: true }).notNull().defaultNow(),
-		ingredientChanges: jsonb('ingredient_changes')
-			.$type<IngredientChange[]>()
-			.notNull()
-			.default([]),
-		directionChanges: jsonb('direction_changes')
-			.$type<DirectionChange[]>()
-			.notNull()
-			.default([])
-	},
-	(table) => [
-		check(
-			'parent_node_only_on_root',
-			sql`${table.parentNodeId} IS NULL OR ${table.parentId} IS NULL`
-		)
-	]
-);
+export const recipeNodes = pgTable('recipe_nodes', {
+	id: uuid('id').defaultRandom().primaryKey(),
+	parentId: uuid('parent_id').references((): AnyPgColumn => recipeNodes.id, {
+		onDelete: 'cascade'
+	}),
+	ownerId: uuid('owner_id').notNull(),
+	name: text('name').notNull(),
+	label: text('label'),
+	timestamp: timestamp('timestamp', { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+	ingredientChanges: jsonb('ingredient_changes')
+		.$type<IngredientChange[]>()
+		.notNull()
+		.default([]),
+	directionChanges: jsonb('direction_changes')
+		.$type<DirectionChange[]>()
+		.notNull()
+		.default([])
+});
+
 
 export type InsertRecipeNode = typeof recipeNodes.$inferInsert;
 export type SelectRecipeNode = typeof recipeNodes.$inferSelect;

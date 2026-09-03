@@ -85,13 +85,12 @@ async function seed() {
   await db.delete(recipeNodes);
 
   // -------------------------------------------------------------------------
-  // Simple Omelette — top-level recipe (parentNodeId = null on its root).
+  // Simple Omelette — top-level recipe (parentId = null on its root).
   // -------------------------------------------------------------------------
   const simpleNodeId = uuidv4();
   await db.insert(recipeNodes).values({
     id: simpleNodeId,
     parentId: null,
-    parentNodeId: null,
     ownerId: DEMO_USER_ID,
     name: 'Simple Omelette',
     label: 'initial recipe',
@@ -116,7 +115,6 @@ async function seed() {
   await db.insert(recipeNodes).values({
     id: uuidv4(),
     parentId: simpleNodeId,
-    parentNodeId: null,
     ownerId: DEMO_USER_ID,
     name: 'French Omelette',
     label: 'bump butter, add chives; cook low and slow, no browning',
@@ -156,7 +154,6 @@ async function seed() {
   await db.insert(recipeNodes).values({
     id: cheeseNodeId,
     parentId: simpleNodeId,
-    parentNodeId: null,
     ownerId: DEMO_USER_ID,
     name: 'Cheese Omelette',
     label: 'add cheese, fold with cheese inside',
@@ -177,7 +174,6 @@ async function seed() {
   await db.insert(recipeNodes).values({
     id: uuidv4(),
     parentId: cheeseNodeId,
-    parentNodeId: null,
     ownerId: DEMO_USER_ID,
     name: 'Denver Omelette',
     label: 'add diced ham, bell pepper, and onion',

@@ -58,8 +58,8 @@ async function ensureUser(
  * under TEST_USER_ID with fresh node ids (so RLS scopes correctly and test
  * mutations don't trample the demo tree).
  *
- * parentNodeId is dropped on clones — each clone is a top-level recipe,
- * matching what a real fresh user would see after creating recipes.
+ * No cross-recipe pointers — each clone is a top-level recipe matching
+ * what a real fresh user would see after creating recipes.
  */
 async function cloneDemoRecipesToTestUser(
 	db: ReturnType<typeof drizzle>,
@@ -86,18 +86,9 @@ async function cloneDemoRecipesToTestUser(
 		oldToNew.set(row.id, newId);
 		await db.execute(sql`
 			insert into public.recipe_nodes (
-				id, parent_id, parent_node_id, owner_id,
+				id, parent_id, owner_id,
 				name, label, ingredient_changes, direction_changes
 			) values (
-				${newId}::uuid,
-				${row.parent_id ? oldToNew.get(row.parent_id) ?? null : null}::uuid,
-				null,
-				${testOwnerId}::uuid,
-				${row.name},
-				${row.label},
-				${sql.raw(`'${JSON.stringify(row.ingredient_changes).replace(/'/g, "''")}'::jsonb`)},
-				${sql.raw(`'${JSON.stringify(row.direction_changes).replace(/'/g, "''")}'::jsonb`)}
-			)
 		`);
 	}
 }
