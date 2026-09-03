@@ -40,12 +40,15 @@ export const load: PageServerLoad = async ({ depends, params }) => {
     .map((node: RecipeNode) => ({ id: node.id, name: node.name }));
 
   return {
-    recipe: {
-      id: current.id,
-      name: current.name,
-      ingredients: state.ingredients,
-      directions: state.directions,
-    },
+		recipe: {
+			// Recipe identity is the root node, not the node currently being
+			// viewed/edited. save/rename APIs walk the chain forward from
+			// this id via `parentId`, so it must be the root.
+			id: root.id,
+			name: current.name,
+			ingredients: state.ingredients,
+			directions: state.directions,
+		},
     history, // full node chain for the history UI
     parentChain,
   };

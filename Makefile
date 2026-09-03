@@ -28,9 +28,8 @@ run: dev                           ## alias for `make dev`
 build:                             ## production build
 	pnpm build
 
-.PHONY: preview
 preview:                           ## preview the production build (no build step)
-	pnpm preview
+	pnpm start
 
 # --- one-shot startup flows ---------------------------------------------------
 # These wrap the per-step targets above into a single command for new
