@@ -30,7 +30,9 @@ export async function saveNewRecipe(recipe: Recipe, ownerId: string): Promise<Re
  * Per ADR 0002, "fork" means chain extension — the new node joins the
  * existing chain with `parentId = fromLeafNodeId` and empty change arrays.
  * The new node's materialized state is identical to the source's until
- * the user adds their own changes.
+ * the user adds their own changes. Ownership is propagated from the
+ * parent inside `appendRecipeNode`; the route handler is responsible for
+ * having verified the caller can see the source chain.
  *
  * The verb "fork" is retained in the UI for familiarity even though the
  * underlying semantics is closer to a git branch (new commit on the same
@@ -38,7 +40,6 @@ export async function saveNewRecipe(recipe: Recipe, ownerId: string): Promise<Re
  */
 export async function forkRecipe(
 	fromLeafNodeId: string,
-	ownerId: string,
 	newName: string,
 ): Promise<RecipeNode> {
 	return await appendRecipeNode(fromLeafNodeId, newName, [], []);

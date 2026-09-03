@@ -62,7 +62,7 @@ export const POST: RequestHandler = async ({ params, request, locals, cookies })
 	}
 
 	try {
-		const newRecipe = await forkRecipe(sourceNodeId, ownerId, body.name.trim());
+		const newRecipe = await forkRecipe(sourceNodeId, body.name.trim());
 		return new Response(JSON.stringify(newRecipe), {
 			status: 201,
 			headers: { 'content-type': 'application/json' }

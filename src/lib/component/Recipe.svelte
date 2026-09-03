@@ -280,7 +280,6 @@
 				return;
 			}
 			const newRecipe = await res.json();
-			console.log(JSON.stringify(newRecipe));
 			showForkModal = false;
 			await goto(`/recipes/${newRecipe.id}`);
 		} catch (e) {
