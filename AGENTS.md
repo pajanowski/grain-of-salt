@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Common commands and tools
+
+`make start-all` to start all services and serve web page in production preview mode
+`pnpm exec playwright test` to run playwright tests locally. Avoid using docker container on this machine unless debugging a discrepancy between docker run and bare metal run.
+`gh` Github cli to access information about PRs, CI runs, etc
+
 ## Project Explaination
 
 This project is a recipe web app that allows users to iterate on recipes and allow a git like branching system.
@@ -61,6 +67,7 @@ node's `ingredient_changes` and `direction_changes` JSONB columns in place;
 it does NOT create a new recipe node. See `docs/adr/0001-per-node-in-place-edits.md`.
 
 Wire body:
+
 ```
 {
   nodeId: string,
@@ -97,6 +104,7 @@ containing the leaf the user clicked fork on, with `parent_id = leafId`
 and empty change arrays. See `docs/adr/0002-fork-as-chain-extension.md`.
 
 Concretely:
+
 - New node is in the same chain as the source (shares the recipe's
   root and identity).
 - New node's materialized state is identical to the source's until
@@ -106,7 +114,6 @@ Concretely:
 The schema has a single parent pointer (`parent_id`); the legacy
 `parent_node_id` cross-recipe fork pointer was dropped in migration
 `20260101000300_drop_parent_node_id.sql`.
-
 
 ### Important files
 
