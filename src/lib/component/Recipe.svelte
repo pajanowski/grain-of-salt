@@ -11,7 +11,7 @@
 	import DirectionRow from './DirectionRow.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import Modal from './Modal.svelte';
-	import { invalidateAll, goto } from '$app/navigation';
+	import { invalidateAll, goto, invalidate } from '$app/navigation';
 
 	const { data } = $props();
 
@@ -248,8 +248,8 @@
 				alert(`Rename failed: ${await res.text()}`);
 				return;
 			}
+			await invalidate('app:recipe-tree');
 			showRenameModal = false;
-			await invalidateAll();
 		} finally {
 			renameBusy = false;
 		}
@@ -281,6 +281,7 @@
 			}
 			const newRecipe = await res.json();
 			showForkModal = false;
+			await invalidate('app:recipe-tree');
 			await goto(`/recipes/${newRecipe.id}`);
 		} catch (e) {
 			alert(`Fork failed: ${(e as Error).message}`);
@@ -424,10 +425,8 @@
 			<button type="submit" class="flat-button" disabled={renameBusy}>
 				{renameBusy ? 'Saving…' : 'Save'}
 			</button>
-			<button
-				type="button"
-				class="flat-button"
-				onclick={() => (showRenameModal = false)}>Cancel</button
+			<button type="button" class="flat-button" onclick={() => (showRenameModal = false)}
+				>Cancel</button
 			>
 		</div>
 	</form>
@@ -451,10 +450,8 @@
 			<button type="submit" class="flat-button" disabled={forkBusy}>
 				{forkBusy ? 'Forking…' : 'Fork'}
 			</button>
-			<button
-				type="button"
-				class="flat-button"
-				onclick={() => (showForkModal = false)}>Cancel</button
+			<button type="button" class="flat-button" onclick={() => (showForkModal = false)}
+				>Cancel</button
 			>
 		</div>
 	</form>
