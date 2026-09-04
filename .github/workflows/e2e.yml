@@ -29,13 +29,17 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        # Read version from package.json's packageManager field. Pinning
+        # 'version' here would duplicate that source of truth and trip
+        # ERR_PNPM_BAD_PM_VERSION (pnpm refuses to run if the two differ).
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Must match or exceed pnpm 11's required Node version
+          # (>=22.13) and line up with svelte.config.js's
+          # runtime: 'nodejs22.x'.
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
