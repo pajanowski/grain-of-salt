@@ -11,6 +11,7 @@
 	import DirectionRow from './DirectionRow.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import Modal from './Modal.svelte';
+	import NodeChanges from './NodeChanges.svelte';
 	import { invalidateAll, goto, invalidate } from '$app/navigation';
 
 	const { data } = $props();
@@ -201,28 +202,54 @@
 	let newIngredient = $state(EmptyIngredient());
 	let newDirection = $state(EmptyDirection());
 
-	// ---- save ----
-	let savePromise = $state(Promise.resolve());
-	let saveResolve: (value: void) => void;
-	function performSave() {
-		savePromise = new Promise((resolve) => (saveResolve = resolve));
-		fetch(`/api/recipe-node/${currentNode.id}`, {
-			method: 'PUT',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({
-				nodeId: currentNode.id,
-				ingredientChanges: leafIngredientChanges,
-				directionChanges: leafDirectionChanges
-			})
-		}).then(async (res) => {
-			if (!res.ok) {
-				alert(`Save failed: ${await res.text()}`);
-			} else {
-				await invalidateAll();
-			}
-			saveResolve();
-		});
-	}
+// ---- save / reset ----
+let savePromise = $state(Promise.resolve());
+let saveResolve: (value: void) => void;
+
+// Compare the leaf's local arrays against the server snapshot at page
+// load. If anything differs (id, op, body, or note), the page has
+// unsaved changes. The check normalises array order so client-side
+// reordering doesn't trigger a false positive — we care about content,
+// not sequence.
+function snapshotKey(changes: { id: string; changeType: string; body: unknown; note: string | null }[]): string {
+	return JSON.stringify(
+		[...changes]
+			.map((c) => ({ id: c.id, changeType: c.changeType, body: c.body, note: c.note }))
+			.sort((a, b) => a.id.localeCompare(b.id))
+	);
+}
+
+let hasUnsavedChanges = $derived(
+	snapshotKey(leafIngredientChanges) !== snapshotKey(currentNode.ingredientChanges) ||
+	snapshotKey(leafDirectionChanges) !== snapshotKey(currentNode.directionChanges)
+);
+
+function performSave() {
+	if (!hasUnsavedChanges) return;
+	savePromise = new Promise((resolve) => (saveResolve = resolve));
+	fetch(`/api/recipe-node/${currentNode.id}`, {
+		method: 'PUT',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({
+			nodeId: currentNode.id,
+			ingredientChanges: leafIngredientChanges,
+			directionChanges: leafDirectionChanges
+		})
+	}).then(async (res) => {
+		if (!res.ok) {
+			alert(`Save failed: ${await res.text()}`);
+		} else {
+			await invalidateAll();
+		}
+		saveResolve();
+	});
+}
+
+function performReset() {
+	leafIngredientChanges = JSON.parse(JSON.stringify(currentNode.ingredientChanges));
+	leafDirectionChanges = JSON.parse(JSON.stringify(currentNode.directionChanges));
+}
+
 
 	// ---- rename modal state ----
 	let showRenameModal = $state(false);
@@ -398,13 +425,48 @@
 				}}>Add</button
 			>
 		</form>
-	{/if}
+{/if}
 
-	{#await savePromise}
-		<button type="submit" disabled>Save</button>
-	{:then}
-		<button type="button" onclick={performSave}>Save</button>
-	{/await}
+
+<NodeChanges
+	leafIngredientChanges={leafIngredientChanges}
+	leafDirectionChanges={leafDirectionChanges}
+	savedIngredientChanges={currentNode.ingredientChanges}
+	savedDirectionChanges={currentNode.directionChanges}
+	onRemoveIngredient={(id) => {
+		const idx = leafIngredientChanges.findIndex((c) => c.id === id);
+		if (idx >= 0) leafIngredientChanges.splice(idx, 1);
+	}}
+	onRemoveDirection={(id) => {
+		const idx = leafDirectionChanges.findIndex((c) => c.id === id);
+		if (idx >= 0) leafDirectionChanges.splice(idx, 1);
+	}}
+	onSetNote={(kind, id, note) => {
+		const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
+		const change = arr.find((c) => c.id === id);
+		if (change) change.note = note;
+	}}
+/>
+
+{#await savePromise}
+	<button type="submit" disabled>Saving…</button>
+{:then}
+	<div class="flex gap-2">
+		<button
+			type="button"
+			onclick={performSave}
+			disabled={!hasUnsavedChanges}
+			data-testid="save-button"
+		>Save</button>
+		<button
+			type="button"
+			class="flat-button"
+			onclick={performReset}
+			disabled={!hasUnsavedChanges}
+			data-testid="reset-button"
+		>Reset</button>
+	</div>
+{/await}
 </div>
 
 <Modal bind:showModal={showRenameModal}>

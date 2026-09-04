@@ -1,11 +1,22 @@
 @import "tailwindcss";
 
+/* body * { */
+/*   @apply sepia; */
+/* } */
 button {
 	@apply bg-amber-300;
 	@apply border-2;
 	@apply max-w-32;
   @apply w-full;
+  @apply shadow-lg/50;
 }
+
+button:disabled {
+	@apply bg-amber-100;
+  @apply text-gray-500;
+  @apply shadow-none;
+}
+
 
 input {
   @apply border-2
