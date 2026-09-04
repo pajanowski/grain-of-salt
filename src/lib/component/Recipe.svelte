@@ -12,6 +12,7 @@
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import Modal from './Modal.svelte';
 	import NodeChanges from './NodeChanges.svelte';
+	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
 	import { invalidateAll, goto, invalidate } from '$app/navigation';
 
 	const { data } = $props();
@@ -196,17 +197,112 @@
 		});
 	}
 
-	// ---- add forms ----
-	let addingIngredient = $state(false);
-	let addingDirection = $state(false);
-	let newIngredient = $state(EmptyIngredient());
-	let newDirection = $state(EmptyDirection());
+// ---- add forms ----
+let addingIngredient = $state(false);
+let addingDirection = $state(false);
+let newIngredient = $state(EmptyIngredient());
+let newDirection = $state(EmptyDirection());
+
+
+// For each visible row, find the leaf's change record that "owns" it (the
+// latest change referencing this row's id). The note on that change is
+// what the recipe view should show inline; ancestor-owned notes are
+// reachable from the History section instead.
+function ingredientNoteFor(rowId: string): string | null {
+	const c = leafIngredientChanges.find(
+		(x) =>
+			(x.changeType === 'add' && x.body?.id === rowId) ||
+			((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
+	);
+	return c?.note ?? null;
+}
+
+function directionNoteFor(rowId: string): string | null {
+	const c = leafDirectionChanges.find(
+		(x) =>
+			(x.changeType === 'add' && x.body?.id === rowId) ||
+			((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
+	);
+	return c?.note ?? null;
+}
+
+// ---- per-row note editor ----
+// The row-level note button opens the same shared NoteSidebar as the
+// NodeChanges section. The sidebar is mounted at the bottom of this
+// component so the state lives here.
+let openRowNoteEditor = $state<{
+	change: SidebarChange;
+	kind: 'ingredient' | 'direction';
+	changeId: string;
+	currentNote: string | null;
+} | null>(null);
+
+function openRowNote(rowId: string, kind: 'ingredient' | 'direction') {
+	const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
+	const c = arr.find(
+		(x) =>
+			(x.changeType === 'add' && x.body?.id === rowId) ||
+			((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
+	);
+	if (!c) return;
+	openRowNoteEditor = {
+		change: {
+			id: c.id,
+			kind,
+			changeType: c.changeType,
+			text:
+				kind === 'ingredient'
+					? formatIngredient(c.body, c.changeType)
+					: formatDirection(c.body, c.changeType)
+		},
+		kind,
+		changeId: c.id,
+		currentNote: c.note ?? null
+	};
+}
+
+function closeRowNote() {
+	openRowNoteEditor = null;
+}
+
+function commitRowNote(text: string) {
+	if (!openRowNoteEditor) return;
+	const { kind, changeId } = openRowNoteEditor;
+	const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
+	const c = arr.find((x) => x.id === changeId);
+	if (c) c.note = text.length > 0 ? text : null;
+}
+
+function deleteRowNote() {
+	if (!openRowNoteEditor) return;
+	const { kind, changeId } = openRowNoteEditor;
+	const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
+	const c = arr.find((x) => x.id === changeId);
+	if (c) c.note = null;
+}
+
+function formatIngredient(body: unknown, op: 'add' | 'edit' | 'remove'): string {
+	if (op === 'remove') return 'ingredient';
+	if (!body || typeof body !== 'object') return 'ingredient';
+	const ing = body as { name?: string; amount?: number; unit?: string };
+	const parts = [ing.name ?? ''];
+	if (ing.amount) parts.push(String(ing.amount));
+	if (ing.unit) parts.push(ing.unit);
+	return parts.filter(Boolean).join(' ').trim() || 'ingredient';
+}
+
+function formatDirection(body: unknown, op: 'add' | 'edit' | 'remove'): string {
+	if (op === 'remove') return 'direction';
+	if (!body || typeof body !== 'object') return 'direction';
+	const dir = body as { body?: string };
+	return dir.body || '(empty)';
+}
+
 
 // ---- save / reset ----
 let savePromise = $state(Promise.resolve());
 let saveResolve: (value: void) => void;
 
-// Compare the leaf's local arrays against the server snapshot at page
 // load. If anything differs (id, op, body, or note), the page has
 // unsaved changes. The check normalises array order so client-side
 // reordering doesn't trigger a false positive — we care about content,
@@ -344,14 +440,16 @@ function performReset() {
 	<h2>Ingredients</h2>
 	<ol class="list-decimal list-inside" data-testid="ingredient-list">
 		{#each displayedIngredients as ing, i (ing.id)}
-			<IngredientRow
-				ingredient={ing}
-				index={i}
-				total={displayedIngredients.length}
-				onUpdate={(next) => editIngredient(ing.id, next)}
-				onRemove={() => removeIngredient(ing.id)}
-				onMove={(_dir) => moveIngredient(ing.id)}
-			/>
+		<IngredientRow
+			ingredient={ing}
+			index={i}
+			total={displayedIngredients.length}
+			note={ingredientNoteFor(ing.id)}
+			onNote={() => openRowNote(ing.id, 'ingredient')}
+			onUpdate={(next) => editIngredient(ing.id, next)}
+			onRemove={() => removeIngredient(ing.id)}
+			onMove={(_dir) => moveIngredient(ing.id)}
+		/>
 		{/each}
 	</ol>
 	<button
@@ -391,14 +489,16 @@ function performReset() {
 	<h2>Directions</h2>
 	<ol class="list-decimal list-inside" data-testid="direction-list">
 		{#each displayedDirections as dir, i (dir.id)}
-			<DirectionRow
-				direction={dir}
-				index={i}
-				total={displayedDirections.length}
-				onUpdate={(next) => editDirection(dir.id, next)}
-				onRemove={() => removeDirection(dir.id)}
-				onMove={(_dir) => moveDirection(dir.id)}
-			/>
+		<DirectionRow
+			direction={dir}
+			index={i}
+			total={displayedDirections.length}
+			note={directionNoteFor(dir.id)}
+			onNote={() => openRowNote(dir.id, 'direction')}
+			onUpdate={(next) => editDirection(dir.id, next)}
+			onRemove={() => removeDirection(dir.id)}
+			onMove={(_dir) => moveDirection(dir.id)}
+		/>
 		{/each}
 	</ol>
 	<button
@@ -518,3 +618,10 @@ function performReset() {
 		</div>
 	</form>
 </Modal>
+
+<NoteSidebar
+	note={openRowNoteEditor}
+	onclose={closeRowNote}
+	onsave={commitRowNote}
+	ondelete={deleteRowNote}
+/>
