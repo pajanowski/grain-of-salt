@@ -18,7 +18,11 @@ export default defineConfig({
 	testMatch: '**/*.e2e.{ts,js}',
 	globalSetup: './tests/e2e/global-setup.ts',
 	// Tests live next to the routes they exercise; ignore everything else.
-	outputDir: './pw-test-results',
+	// Artifacts go to /tmp so docker runs (see scripts/run-e2e-docker.sh)
+	// don't leave root-owned files on the host workspace, and so leftover
+	// artifacts from a previous run never block the next. They vanish on
+	// container exit; the CI workflow copies them out if it wants them.
+	outputDir: '/tmp/pw-test-results',
  	testIgnore: ['**/node_modules/**', '**/build/**', '**/.svelte-kit/**', 'tests/archive/**'],
 
 	forbidOnly: !!process.env.CI,
@@ -27,8 +31,7 @@ export default defineConfig({
 	reporter: process.env.CI
 		? [
 				['github'],
-				['html', { open: 'never', outputFolder: 'playwright-report' }],
-				['list']
+				['html', { open: 'never', outputFolder: '/tmp/pw-html' }],
 			]
 		: 'list',
 
