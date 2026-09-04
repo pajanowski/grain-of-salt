@@ -89,6 +89,14 @@ async function cloneDemoRecipesToTestUser(
 				id, parent_id, owner_id,
 				name, label, ingredient_changes, direction_changes
 			) values (
+				${newId}::uuid,
+				${row.parent_id ? (oldToNew.get(row.parent_id) ?? null) : null}::uuid,
+				${testOwnerId}::uuid,
+				${row.name},
+				${row.label},
+				${sql.raw(`'${JSON.stringify(row.ingredient_changes).replace(/'/g, "''")}'::jsonb`)},
+				${sql.raw(`'${JSON.stringify(row.direction_changes).replace(/'/g, "''")}'::jsonb`)}
+			)
 		`);
 	}
 }

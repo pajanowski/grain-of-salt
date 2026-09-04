@@ -366,9 +366,12 @@ test.describe('known bugs', () => {
 		expect(initialCheese).toBeCloseTo(1.25, 1);
 		expect(initialDenver).toBeCloseTo(2.5, 1);
 
-		// To trigger a node append, the save must include a change;
-		// `updateRecipeState` short-circuits on no-op saves. We add an
-		// ingredient and then save.
+		// To produce a measurable change on the leaf, the save must
+		// include a real change. Under ADR 0001 `updateRecipeNode` writes
+		// the leaf's change arrays in place and skips the DB write when
+		// both arrays are empty and the label is unchanged — so we add
+		// an ingredient (then remove it) so the leaf ends up with at
+		// least one non-trivial record.
 		await openRecipe(page, RECIPE.cheese);
 		await page.getByRole('button', { name: 'Add new ingredient' }).click();
 		await fillAddIngredient(page, 'Chili flakes', '1', 'pinch');

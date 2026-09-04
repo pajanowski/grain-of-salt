@@ -33,7 +33,3 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 	const ret = await saveNewRecipe(newRecipe, ownerId);
 	return new Response(JSON.stringify(ret));
 };
-
-export const DELETE: RequestHandler = async () => {
-	return new Response();
-};

@@ -129,11 +129,6 @@ export async function getRecipeNodesByRecipeIdV2(recipeNodeId: string): Promise<
 
 	return nodes;
 }
-/**
- * Alias of getRecipeNodesByRecipeId for readability at call sites that
- * are building a history UI.
- */
-export const getRecipeHistory = getRecipeNodesByRecipeId;
 
 /**
  * Resolve any node id in a chain to the chain's root (the node whose
@@ -157,22 +152,6 @@ export async function getRootRecipeNode(nodeId: string): Promise<RecipeNode | nu
 		cursorId = row.parentId;
 	}
 	return cursor;
-}
-
-/**
- * Ordering rules:
- *  - Nodes are applied in ascending timestamp order (oldest first).
- *  - Within a node, ingredientChanges are applied in array order, then
- *    directionChanges in array order. Callers are responsible for ordering
- *    their changes such that a 'remove' of an id precedes any later
- *    'edit'/'add' that would conflict with it.
- *
- * 'add' inserts a new row, 'edit' replaces the row by targetId, 'remove'
- * deletes the row by targetId.
- */
-export async function getRecipeState(rootNodeId: string): Promise<RecipeState> {
-	const nodes = await getRecipeNodesByRecipeId(rootNodeId);
-	return applyNodes(nodes);
 }
 
 /**
