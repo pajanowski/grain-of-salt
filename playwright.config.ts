@@ -18,7 +18,8 @@ export default defineConfig({
 	testMatch: '**/*.e2e.{ts,js}',
 	globalSetup: './tests/e2e/global-setup.ts',
 	// Tests live next to the routes they exercise; ignore everything else.
-	testIgnore: ['**/node_modules/**', '**/build/**', '**/.svelte-kit/**'],
+	outputDir: './pw-test-results',
+ 	testIgnore: ['**/node_modules/**', '**/build/**', '**/.svelte-kit/**', 'tests/archive/**'],
 
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,

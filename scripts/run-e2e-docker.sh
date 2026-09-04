@@ -30,8 +30,8 @@ CONTAINER_MAILPIT_URL="http://localhost:54324"
 
 docker run \
   --rm \
+  --user pwuser \
   --add-host=host.docker.internal:host-gateway \
-  --add-host=localhost:host-gateway \
   -v "${PROJECT_ROOT}:/work" \
   -v "${PROJECT_ROOT}/.svelte-kit:/work/.svelte-kit" \
   -v "${PROJECT_ROOT}/build:/work/build" \
