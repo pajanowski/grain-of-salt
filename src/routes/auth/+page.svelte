@@ -26,12 +26,7 @@
 	{/if}
 
 	{#if step === 'request'}
-		<form
-			method="POST"
-			action="?/otpRequest"
-			use:enhance
-			class="flex flex-col gap-3"
-		>
+		<form method="POST" action="?/otpRequest" use:enhance class="flex flex-col gap-3">
 			<label class="flex flex-col gap-1">
 				<span class="text-sm">Email</span>
 				<input
@@ -46,9 +41,7 @@
 			{#if form?.step === 'request' && form.error}
 				<p class="text-sm text-red-600">{form.error}</p>
 			{/if}
-			<button type="submit" class="rounded bg-black px-4 py-2 text-white">
-				Email me a code
-			</button>
+			<button type="submit"> Email me a code </button>
 		</form>
 
 		<div class="my-6 flex items-center gap-3 text-xs text-gray-500">
@@ -58,29 +51,22 @@
 		</div>
 
 		<form method="POST" action="?/guestIn" use:enhance>
-			<button type="submit" class="w-full rounded border px-4 py-2">
-				Continue as guest (demo)
-			</button>
+			<button type="submit"> Continue as guest (demo) </button>
 		</form>
 	{:else}
 		<p class="mb-4 text-sm">
-			Code sent to <strong>{email}</strong>. Check your inbox
-			(or Mailpit at <code>http://127.0.0.1:54324</code> in local dev).
+			Code sent to <strong>{email}</strong>. Check your inbox (or Mailpit at
+			<code>http://127.0.0.1:54324</code> in local dev).
 		</p>
-		<form
-			method="POST"
-			action="?/otpVerify"
-			use:enhance
-			class="flex flex-col gap-3"
-		>
+		<form method="POST" action="?/otpVerify" use:enhance class="flex flex-col gap-3">
 			<input type="hidden" name="email" value={email} />
 			<label class="flex flex-col gap-1">
-			<span class="text-sm">8-digit code</span>
+				<span class="text-sm">8-digit code</span>
 				<input
 					type="text"
 					name="token"
 					inputmode="numeric"
-				pattern="{otpPattern}"
+					pattern={otpPattern}
 					maxlength="8"
 					required
 					bind:value={token}
@@ -91,9 +77,7 @@
 			{#if form?.step === 'verify' && form.error}
 				<p class="text-sm text-red-600">{form.error}</p>
 			{/if}
-			<button type="submit" class="rounded bg-black px-4 py-2 text-white">
-				Verify
-			</button>
+			<button type="submit" class="rounded bg-black px-4 py-2 text-white"> Verify </button>
 			<button
 				type="button"
 				class="text-xs text-gray-600 underline"

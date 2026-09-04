@@ -6,12 +6,14 @@
 		ingredient: Ingredient;
 		index: number;
 		total: number;
+		note: string | null;
+		onNote: () => void;
 		onUpdate: (next: Ingredient) => void;
 		onRemove: () => void;
 		onMove: (direction: 'up' | 'down') => void;
 	};
 
-	let { ingredient, index, total, onUpdate, onRemove, onMove }: Props = $props();
+	let { ingredient, index, total, note, onNote, onUpdate, onRemove, onMove }: Props = $props();
 
 	let editing = $state(false);
 	let draft = $state<Ingredient>({ ...ingredient });
@@ -41,18 +43,22 @@
 		{
 			label: 'Move up',
 			disabled: index === 0,
-			onSelect: () => onMove('up'),
+			onSelect: () => onMove('up')
 		},
 		{
 			label: 'Move down',
 			disabled: index === total - 1,
-			onSelect: () => onMove('down'),
+			onSelect: () => onMove('down')
 		},
-		{ label: 'Remove', onSelect: confirmRemove, danger: true },
+		{ label: 'Remove', onSelect: confirmRemove, danger: true }
 	]);
 </script>
 
-<li class="flex items-center gap-2" data-testid="ingredient-row" data-ingredient-name={ingredient.name}>
+<li
+	class="flex items-center gap-2"
+	data-testid="ingredient-row"
+	data-ingredient-name={ingredient.name}
+>
 	{#if editing}
 		<form
 			class="flex flex-wrap items-center gap-2 flex-1"
@@ -73,15 +79,8 @@
 				step="any"
 				bind:value={draft.amount}
 			/>
-			<input
-				class="border rounded px-2 py-1 w-20"
-				placeholder="Unit"
-				bind:value={draft.unit}
-			/>
-			<button
-				type="submit"
-				class="px-2 py-1 text-sm rounded border hover:bg-gray-100">Save</button
-			>
+			<input class="border rounded px-2 py-1 w-20" placeholder="Unit" bind:value={draft.unit} />
+			<button type="submit" class="px-2 py-1 text-sm rounded border hover:bg-gray-100">Save</button>
 			<button
 				type="button"
 				class="px-2 py-1 text-sm rounded border hover:bg-gray-100"
@@ -95,6 +94,18 @@
 			<span class="opacity-60 ml-1">{ingredient.amount}</span>
 			<span class="opacity-60 ml-1">{ingredient.unit}</span>
 		</span>
+		{#if note}
+			<button
+				type="button"
+				class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200"
+				aria-label="Edit note"
+				title={note}
+				onclick={onNote}
+				data-testid="ingredient-note-button"
+			>
+				📝
+			</button>
+		{/if}
 		<ContextMenu {items} label={`Actions for ${ingredient.name}`} />
 	{/if}
 </li>

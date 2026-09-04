@@ -9,6 +9,7 @@ button {
 	@apply max-w-32;
   @apply w-full;
   @apply shadow-lg/50;
+  @apply p-2;
 }
 
 button:disabled {
