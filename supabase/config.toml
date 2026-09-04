@@ -54,6 +54,10 @@ enable_confirmations = false
 otp_length = 8
 otp_expiry = 3600
 
+[auth.email.template.magic_link]
+subject = "Your Magic Link"
+content_path = "./supabase/templates/magic_link.html"
+
 [auth.sms]
 enable_signup = false
 enable_confirmations = false
