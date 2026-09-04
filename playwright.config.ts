@@ -1,14 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for end-to-end tests.
- *
  * Tests run inside the Playwright Docker image (see
  * scripts/run-e2e-docker.sh). The host is expected to already be running
  * `vite preview` on PORT (or `vite dev` when PLAYWRIGHT_USE_DEV=1) — we
  * therefore use `reuseExistingServer=true` and never spawn a server here.
  *
- * The container reaches the host's preview server via host.docker.internal.
+ * The container shares the host's network namespace (`--network host`),
+ * so `localhost` inside the container reaches the host's preview server.
  */
 const PORT = 4173;
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
@@ -18,11 +17,12 @@ export default defineConfig({
 	testMatch: '**/*.e2e.{ts,js}',
 	globalSetup: './tests/e2e/global-setup.ts',
 	// Tests live next to the routes they exercise; ignore everything else.
-	// Artifacts go to /tmp so docker runs (see scripts/run-e2e-docker.sh)
-	// don't leave root-owned files on the host workspace, and so leftover
-	// artifacts from a previous run never block the next. They vanish on
-	// container exit; the CI workflow copies them out if it wants them.
-	outputDir: '/tmp/pw-test-results',
+	// Artifact paths are relative to /work (the project root in the docker
+	// container, see scripts/run-e2e-docker.sh). The docker script
+	// bind-mounts these dirs onto the host so `actions/upload-artifact`
+	// can find them and so leftover dirs are visible (not silently lost
+	// inside the container's /tmp).
+	outputDir: 'pw-test-results',
  	testIgnore: ['**/node_modules/**', '**/build/**', '**/.svelte-kit/**', 'tests/archive/**'],
 
 	forbidOnly: !!process.env.CI,
@@ -31,7 +31,7 @@ export default defineConfig({
 	reporter: process.env.CI
 		? [
 				['github'],
-				['html', { open: 'never', outputFolder: '/tmp/pw-html' }],
+				['html', { open: 'never', outputFolder: 'playwright-report' }],
 			]
 		: 'list',
 
