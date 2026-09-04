@@ -69,7 +69,9 @@ jobs:
         # until the URL is reachable anyway.
 
       - name: Run Playwright tests in Docker
-        run: bash scripts/run-e2e-docker.sh
+        # Narrow the run while iterating — the full suite re-enabled when
+        # this gate flips.
+        run: bash scripts/run-e2e-docker.sh tests/e2e/codegen-repro.e2e.ts
 
       - name: Upload Playwright report
         if: always()

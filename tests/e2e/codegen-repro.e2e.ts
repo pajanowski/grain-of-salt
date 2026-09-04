@@ -6,12 +6,10 @@
  * test waits for the real post-condition instead of racing Svelte's
  * reactivity.
  *
- * Saves in this app append a forward-chained node to the recipe's history
- * rather than mutating the recipe's own slug-page render — see
- * "adds an ingredient and saves it" in recipe-edit.e2e.ts. After reload,
- * the saved edits don't show on the recipe's own page. The guard we keep
- * here is the negative leak check (Celery on Denver must not appear on
- * Simple), which is the original purpose of this codegen scenario.
+ * Per ADR 0001 the save endpoint mutates the leaf's JSONB columns in
+ * place — the saved Peanut butter IS expected to appear on Simple after
+ * reload. The cross-recipe guard we keep here is the Celery-not-on-Simple
+ * assertion: an edit on Denver must not leak onto the Simple slug page.
  */
 import { expect, test } from '@playwright/test';
 import { signInAsTestUser } from './helpers/auth';
@@ -22,7 +20,9 @@ test.beforeEach(async ({ page }) => {
 	await signInAsTestUser(page);
 });
 
-test('codegen scenario: add to simple, add to denver, verify simple unchanged', async ({ page }) => {
+test('codegen scenario: add to simple, add to denver, verify cross-recipe leak guard', async ({
+	page
+}) => {
 	// Step 1: open Simple Omelette.
 	await page.getByRole('link', { name: 'Simple Omelette' }).click();
 	await page.waitForURL(/\/recipes\//);
@@ -63,8 +63,6 @@ test('codegen scenario: add to simple, add to denver, verify simple unchanged', 
 	// Step 5: back to Simple. The save didn't leak Celery across recipes
 	// — Celery was added to Denver only, so it must not appear on Simple.
 	await page.goto('/');
-	// on Simple either; that's the post-condition we assert for the
-	// Simple side of this scenario.)
 	await page.getByRole('link', { name: 'Simple Omelette', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Recipe: Simple Omelette' })).toBeVisible();
 
@@ -73,10 +71,10 @@ test('codegen scenario: add to simple, add to denver, verify simple unchanged', 
 	await expect(page.getByRole('heading', { name: 'Recipe: Simple Omelette' })).toBeVisible();
 
 	// Scope to the ingredient list so the History section's "added
-// ingredient: Peanut butter" / "removed ingredient: Peanut butter"
-// entries don't trip strict-mode (and so they can't be used to paper
-// over a bug where the change is recorded but not applied to the body).
+	// ingredient: Peanut butter" / "removed ingredient: Peanut butter"
+	// entries don't trip strict-mode (and so they can't be used to paper
+	// over a bug where the change is recorded but not applied to the body).
 	const ingredientList = page.getByTestId('ingredient-list');
-	await expect(ingredientList.getByText('Peanut butter')).toHaveCount(0);
+	await expect(ingredientList.getByText('Peanut butter')).toHaveCount(1);
 	await expect(ingredientList.getByText('Celery')).toHaveCount(0);
 });
