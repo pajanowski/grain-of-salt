@@ -17,9 +17,17 @@
 # Bind-mounts the artifact dirs (./pw-test-results, ./playwright-report)
 # onto the container so `actions/upload-artifact` in CI can find them
 # after the run. Pre-creates them with mode 777 so the uid mismatch
-# between the host user and the container's `pwuser` (both typically
+# between the host user and the container's `pwuser` (typically both
 # uid 1000, but GitHub Actions' `runner` is uid 1001) doesn't block
 # writes inside the container.
+#
+# Relaxes the project-root perms to 777 for the duration of the run,
+# restored on exit. The container's `pwuser` (uid 1000) needs write
+# access to /work (the bind-mount target) in order to rmdir artifact
+# subdirs during playwright's start-of-run cleanup. GitHub Actions'
+# `runner` is uid 1001 and the project root defaults to mode 755 — too
+# restrictive for the container's pwuser. chmod 777 is the cleanest
+# local-only relaxation; it's reverted on script exit (success or fail).
 #
 # Required env (defaults in parens target the local Supabase stack):
 #   PLAYWRIGHT_BASE_URL  — base URL the browser hits  (http://localhost:4173)
@@ -47,6 +55,12 @@ for d in "${ARTIFACT_DIRS[@]}"; do
   mkdir -p "$d"
   chmod 777 "$d"
 done
+
+# Save the current project-root mode and widen to 777 so the container's
+# pwuser can rmdir/mkdir subdirs under /work. Restored on exit.
+ORIG_ROOT_PERMS=$(stat -c '%a' "${PROJECT_ROOT}")
+chmod 777 "${PROJECT_ROOT}"
+trap 'chmod "${ORIG_ROOT_PERMS}" "${PROJECT_ROOT}" 2>/dev/null || true' EXIT
 
 docker run \
   --rm \
