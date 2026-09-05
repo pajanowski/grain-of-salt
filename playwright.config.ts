@@ -23,7 +23,7 @@ export default defineConfig({
   // can find them and so leftover dirs are visible (not silently lost
   // inside the container's /tmp).
   outputDir: 'pw-test-results',
-  testIgnore: ['**/node_modules/**', '**/build/**', '**/.svelte-kit/**', 'tests/archive/**'],
+  testIgnore: ['**/node_modules/**', '**/build/**', '**/.svelte-kit/**', '**/.auth/**', 'tests/archive/**'],
 
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -50,8 +50,16 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'], channel: 'chromium' }
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: 'chromium',
+        // Pre-seed every test with the Supabase session captured by
+        // global-setup.ts — saves ~3s per test by skipping the OTP
+        // round-trip. Tests that exercise the sign-in flow itself must
+        // override `storageState` to undefined (e.g. via a separate
+        // project) so they start unauthenticated.
+        storageState: '.auth/test-user.json'
+      }
     }
   ],
-
 });

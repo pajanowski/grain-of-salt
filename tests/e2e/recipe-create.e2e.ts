@@ -14,7 +14,6 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { v4 as uuidv4 } from 'uuid';
-import { signInAsTestUser } from './helpers/auth';
 
 /**
  * Open the inline create-recipe form and assert its input is visible.
@@ -28,7 +27,6 @@ async function openCreateForm(page: Page) {
 test('create recipe: uuid name appears in the recipe list and persists across reload', async ({
 	page
 }) => {
-	await signInAsTestUser(page);
 	await page.goto('/');
 
 	const recipeName = uuidv4();
@@ -52,7 +50,6 @@ test('create recipe: uuid name appears in the recipe list and persists across re
 });
 
 test('cancel closes the form without creating a recipe', async ({ page }) => {
-	await signInAsTestUser(page);
 	await page.goto('/');
 
 	const recipeName = uuidv4();
@@ -69,7 +66,6 @@ test('cancel closes the form without creating a recipe', async ({ page }) => {
 });
 
 test('cancel clears the form so a reopen starts blank', async ({ page }) => {
-	await signInAsTestUser(page);
 	await page.goto('/');
 
 	await openCreateForm(page);
@@ -87,7 +83,6 @@ test('cancel clears the form so a reopen starts blank', async ({ page }) => {
 test('creating two recipes in sequence makes both visible in the list', async ({
 	page
 }) => {
-	await signInAsTestUser(page);
 	await page.goto('/');
 
 	const nameA = uuidv4();
@@ -113,7 +108,6 @@ test('creating two recipes in sequence makes both visible in the list', async ({
 });
 
 test('clicking the new recipe link navigates to its detail page', async ({ page }) => {
-	await signInAsTestUser(page);
 	await page.goto('/');
 
 	const recipeName = uuidv4();
@@ -136,7 +130,6 @@ test('clicking the new recipe link navigates to its detail page', async ({ page 
 test('server failure during save closes the form but does not add the recipe', async ({
 	page
 }) => {
-	await signInAsTestUser(page);
 
 	// Stub POST /api/save to return 500. The page's fetch handler ignores
 	// res.ok and unconditionally calls invalidateAll() + closes the form,
@@ -163,7 +156,6 @@ test('server failure during save closes the form but does not add the recipe', a
 test('submitting an empty name creates an unnamed recipe (current behaviour)', async ({
 	page
 }) => {
-	await signInAsTestUser(page);
 	await page.goto('/');
 
 	// Count via the DOM href selector rather than getByRole('link') —

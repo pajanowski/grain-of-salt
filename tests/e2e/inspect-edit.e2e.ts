@@ -1,5 +1,4 @@
 import { expect, type Page, test } from '@playwright/test';
-import { signInAsTestUser } from './helpers/auth';
 
 async function openRecipe(page: Page, recipeName: string) {
   await page.goto('/');
@@ -22,7 +21,6 @@ function ingredientRow(page: Page, name: string) {
 }
 
 test('debug edit flow', async ({ page }) => {
-  await signInAsTestUser(page);
   await openRecipe(page, 'Test Sibling A');
 
   const row = ingredientRow(page, 'Eggs');

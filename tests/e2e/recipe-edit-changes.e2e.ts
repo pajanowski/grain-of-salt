@@ -30,7 +30,6 @@
  * with each other within the suite.
  */
 import { expect, type Page, test } from '@playwright/test';
-import { signInAsTestUser } from './helpers/auth';
 
 const RECIPE = {
 	root: 'Test Root',
@@ -40,15 +39,10 @@ const RECIPE = {
 } as const;
 
 /**
- * Sign the test's `page` in as the test user before each test. We
- * intentionally do NOT call `resetTestUserRecipes` here — that helper
- * would wipe our fixture. The fixture is re-loaded by global-setup on
- * each suite run, and the new tree's UUIDs isolate it from the demo
- * recipes that other tests touch.
+ * The fixture tree is re-loaded by global-setup on each suite run; per-test
+ * resets would wipe it. The shared `use.storageState` in
+ * playwright.config.ts signs every test in without a per-test OTP.
  */
-test.beforeEach(async ({ page }) => {
-	await signInAsTestUser(page);
-});
 
 if (process.env.PLAYWRIGHT_USE_DEV) {
 	test.setTimeout(120_000);

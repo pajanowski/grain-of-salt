@@ -25,6 +25,10 @@ vite.config.ts.timestamp-*
 test-results
 /playwright-report
 /pw-test-results
+
+# Cached Supabase session captured by tests/e2e/global-setup.ts for shared
+# auth across tests. Treated as a secret — regenerated on every run.
+/.auth
 /blob-report
 /playwright/.cache
 .env*

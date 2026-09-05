@@ -13,10 +13,23 @@ import { execSync } from 'node:child_process';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
+import { chromium } from '@playwright/test';
 import { v4 as uuidv4 } from 'uuid';
 
+import { signInAsTestUser } from './helpers/auth';
 export { TEST_USER_ID, TEST_USER_EMAIL } from './helpers/auth-shared';
 import { TEST_USER_ID, TEST_USER_EMAIL } from './helpers/auth-shared';
+
+/**
+ * Cached Supabase auth cookies shared across every test in the suite.
+ * Captured once at the end of globalSetup; consumed by the chromium
+ * project via `use.storageState` so individual tests boot already
+ * signed in instead of paying ~3s per test for an OTP round-trip.
+ *
+ * The directory is project-ignored; tests never read it directly.
+ */
+const STORAGE_STATE_PATH = '.auth/test-user.json';
+
 
 async function ensureUser(
 	db: ReturnType<typeof drizzle>,
@@ -287,5 +300,31 @@ export default async function globalSetup() {
 
 	} finally {
 		await client.end();
+	}
+
+	console.log('[e2e global-setup] Capturing shared test-user storage state');
+	await captureTestUserStorageState();
+}
+
+/**
+ * Launch a headless browser, sign in once as the test user, and persist
+ * the resulting auth cookies + localStorage to disk. Playwright loads
+ * this into every test's browser context via `use.storageState`, so
+ * individual tests skip the OTP round-trip entirely.
+ *
+ * `baseURL` must match the value the tests use (see
+ * playwright.config.ts); `signInAsTestUser` navigates to relative URLs.
+ */
+async function captureTestUserStorageState() {
+	const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173';
+
+	const browser = await chromium.launch();
+	try {
+		const context = await browser.newContext({ baseURL });
+		const page = await context.newPage();
+		await signInAsTestUser(page);
+		await context.storageState({ path: STORAGE_STATE_PATH });
+	} finally {
+		await browser.close();
 	}
 }

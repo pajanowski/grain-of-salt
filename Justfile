@@ -81,8 +81,22 @@ playwright-install:
 test-deps: test-db-deps dev
 
 # Run e2e in Docker (no host browser install needed)
+# Builds, starts vite preview on port 4173, runs tests, then stops the server.
 test-e2e *extra:
-    pnpm test:e2e {{extra}}
+    #!/usr/bin/env bash
+    set -e
+    just build
+    pnpm preview &
+    PREVIEW_PID=$!
+    # Wait for preview server to be ready
+    for i in $(seq 1 30); do
+        if curl -sf http://localhost:4173 > /dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+    pnpm test:e2e {{extra}} || { kill $PREVIEW_PID 2>/dev/null; exit 1; }
+    kill $PREVIEW_PID 2>/dev/null
 
 # Run e2e in browser UI mode (requires playwright-install)
 test-e2e-ui *extra:

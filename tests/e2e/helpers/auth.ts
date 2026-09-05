@@ -8,11 +8,12 @@
  *
  * Inbucket indexes mailboxes by the local-part of the address.
  *
- * Performance note: tests using `signInAsTestUser(page)` in beforeEach
- * pay ~3s per test. For long suites, prefer using a worker-cached
- * `storageState` via global-setup (exported to a file consumed by
- * playwright.config projects[].use.storageState).
+ * The suite now signs the test user in ONCE in tests/e2e/global-setup.ts
+ * and shares the resulting cookies via `use.storageState` in
+ * playwright.config.ts. This helper is only invoked from globalSetup;
+ * individual tests boot already authenticated.
  */
+
 import { expect, type Page } from '@playwright/test';
 import { TEST_USER_EMAIL } from './auth-shared';
 
