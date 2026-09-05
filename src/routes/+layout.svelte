@@ -47,7 +47,15 @@
 								method: 'POST',
 								body: new URLSearchParams({ recipeName: newRecipeName })
 							}).then((res) => {
+								// TODO: surface server errors — this handler ignores
+								//       res.ok and closes the form on any response.
+								//       See "server failure during save" in
+								//       tests/e2e/recipe-create.e2e.ts.
 								invalidateAll();
+								// TODO: also reset `newRecipeName = ''` here so
+								//       re-opening the form starts blank. Only
+								//       Cancel resets it today, so a successful
+								//       submit leaves a stale value in the input.
 								createRecipe = false;
 							});
 						}}

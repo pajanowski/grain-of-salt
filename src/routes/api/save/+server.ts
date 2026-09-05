@@ -26,9 +26,12 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 	if (!ownerId) {
 		return new Response('Sign in or continue as guest first', { status: 401 });
 	}
-
 	const data = await request.formData();
 	const recipeName = data.get('recipeName') as string;
+	// TODO: reject empty/whitespace-only names with a 400. Currently any
+	//       string (including '') creates a root node, which renders as a
+	//       link with no accessible text. See "submitting an empty name"
+	//       in tests/e2e/recipe-create.e2e.ts.
 	const newRecipe = NewRecipe(recipeName);
 	const ret = await saveNewRecipe(newRecipe, ownerId);
 	return new Response(JSON.stringify(ret));
