@@ -92,11 +92,19 @@ test-unit:                         ## run unit tests once
 test-watch:                        ## run unit tests in watch mode
 	pnpm test:unit
 
+.PHONY: test-deps
+test-deps: db-up db-push            ## ensure supabase is up and the schema is applied (idempotent)
+
 .PHONY: test-e2e
 test-e2e:                          ## install playwright browsers and run e2e
-	pnpm test:e2e
+ 	pnpm test:e2e
 
-# --- database ---------------------------------------------------------------
+.PHONY: test-e2e-ui
+test-e2e-ui: test-deps             ## run playwright tests in UI mode against the local supabase stack
+ 	DATABASE_URL='postgres://postgres:postgres@127.0.0.1:54322/postgres' \
+ 	PUBLIC_SUPABASE_URL='http://127.0.0.1:54321' \
+ 	MAILPIT_URL='http://127.0.0.1:54324' \
+ 	pnpm exec playwright test --ui $(filter-out $@,$(MAKECMDGOALS))
 # All DB state lives inside the local Supabase stack
 # (https://supabase.com/docs/guides/local-development). It bundles
 # Postgres + Auth (GoTrue) + Storage + Realtime + Mailpit (for OTP emails)

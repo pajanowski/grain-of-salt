@@ -197,155 +197,159 @@
 		});
 	}
 
-// ---- add forms ----
-let addingIngredient = $state(false);
-let addingDirection = $state(false);
-let newIngredient = $state(EmptyIngredient());
-let newDirection = $state(EmptyDirection());
+	// ---- add forms ----
+	let addingIngredient = $state(false);
+	let addingDirection = $state(false);
+	let newIngredient = $state(EmptyIngredient());
+	let newDirection = $state(EmptyDirection());
 
+	// For each visible row, find the leaf's change record that "owns" it (the
+	// latest change referencing this row's id). The note on that change is
+	// what the recipe view should show inline; ancestor-owned notes are
+	// reachable from the History section instead.
+	function ingredientNoteFor(rowId: string): string | null {
+		const c = leafIngredientChanges.find(
+			(x) =>
+				(x.changeType === 'add' && x.body?.id === rowId) ||
+				((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
+		);
+		return c?.note ?? null;
+	}
 
-// For each visible row, find the leaf's change record that "owns" it (the
-// latest change referencing this row's id). The note on that change is
-// what the recipe view should show inline; ancestor-owned notes are
-// reachable from the History section instead.
-function ingredientNoteFor(rowId: string): string | null {
-	const c = leafIngredientChanges.find(
-		(x) =>
-			(x.changeType === 'add' && x.body?.id === rowId) ||
-			((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
-	);
-	return c?.note ?? null;
-}
+	function directionNoteFor(rowId: string): string | null {
+		const c = leafDirectionChanges.find(
+			(x) =>
+				(x.changeType === 'add' && x.body?.id === rowId) ||
+				((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
+		);
+		return c?.note ?? null;
+	}
 
-function directionNoteFor(rowId: string): string | null {
-	const c = leafDirectionChanges.find(
-		(x) =>
-			(x.changeType === 'add' && x.body?.id === rowId) ||
-			((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
-	);
-	return c?.note ?? null;
-}
+	// ---- per-row note editor ----
+	// The row-level note button opens the same shared NoteSidebar as the
+	// NodeChanges section. The sidebar is mounted at the bottom of this
+	// component so the state lives here.
+	let openRowNoteEditor = $state<{
+		change: SidebarChange;
+		kind: 'ingredient' | 'direction';
+		changeId: string;
+		currentNote: string | null;
+	} | null>(null);
 
-// ---- per-row note editor ----
-// The row-level note button opens the same shared NoteSidebar as the
-// NodeChanges section. The sidebar is mounted at the bottom of this
-// component so the state lives here.
-let openRowNoteEditor = $state<{
-	change: SidebarChange;
-	kind: 'ingredient' | 'direction';
-	changeId: string;
-	currentNote: string | null;
-} | null>(null);
-
-function openRowNote(rowId: string, kind: 'ingredient' | 'direction') {
-	const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
-	const c = arr.find(
-		(x) =>
-			(x.changeType === 'add' && x.body?.id === rowId) ||
-			((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
-	);
-	if (!c) return;
-	openRowNoteEditor = {
-		change: {
-			id: c.id,
+	function openRowNote(rowId: string, kind: 'ingredient' | 'direction') {
+		const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
+		const c = arr.find(
+			(x) =>
+				(x.changeType === 'add' && x.body?.id === rowId) ||
+				((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
+		);
+		if (!c) return;
+		openRowNoteEditor = {
+			change: {
+				id: c.id,
+				kind,
+				changeType: c.changeType,
+				text:
+					kind === 'ingredient'
+						? formatIngredient(c.body, c.changeType)
+						: formatDirection(c.body, c.changeType)
+			},
 			kind,
-			changeType: c.changeType,
-			text:
-				kind === 'ingredient'
-					? formatIngredient(c.body, c.changeType)
-					: formatDirection(c.body, c.changeType)
-		},
-		kind,
-		changeId: c.id,
-		currentNote: c.note ?? null
-	};
-}
+			changeId: c.id,
+			currentNote: c.note ?? null
+		};
+	}
 
-function closeRowNote() {
-	openRowNoteEditor = null;
-}
+	function closeRowNote() {
+		openRowNoteEditor = null;
+	}
 
-function commitRowNote(text: string) {
-	if (!openRowNoteEditor) return;
-	const { kind, changeId } = openRowNoteEditor;
-	const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
-	const c = arr.find((x) => x.id === changeId);
-	if (c) c.note = text.length > 0 ? text : null;
-}
+	function commitRowNote(text: string) {
+		if (!openRowNoteEditor) return;
+		const { kind, changeId } = openRowNoteEditor;
+		const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
+		const c = arr.find((x) => x.id === changeId);
+		if (c) c.note = text.length > 0 ? text : null;
+	}
 
-function deleteRowNote() {
-	if (!openRowNoteEditor) return;
-	const { kind, changeId } = openRowNoteEditor;
-	const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
-	const c = arr.find((x) => x.id === changeId);
-	if (c) c.note = null;
-}
+	function deleteRowNote() {
+		if (!openRowNoteEditor) return;
+		const { kind, changeId } = openRowNoteEditor;
+		const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
+		const c = arr.find((x) => x.id === changeId);
+		if (c) c.note = null;
+	}
 
-function formatIngredient(body: unknown, op: 'add' | 'edit' | 'remove'): string {
-	if (op === 'remove') return 'ingredient';
-	if (!body || typeof body !== 'object') return 'ingredient';
-	const ing = body as { name?: string; amount?: number; unit?: string };
-	const parts = [ing.name ?? ''];
-	if (ing.amount) parts.push(String(ing.amount));
-	if (ing.unit) parts.push(ing.unit);
-	return parts.filter(Boolean).join(' ').trim() || 'ingredient';
-}
+	function formatIngredient(body: unknown, op: 'add' | 'edit' | 'remove'): string {
+		if (op === 'remove') return 'ingredient';
+		if (!body || typeof body !== 'object') return 'ingredient';
+		const ing = body as { name?: string; amount?: number; unit?: string };
+		const parts = [ing.name ?? ''];
+		if (ing.amount) parts.push(String(ing.amount));
+		if (ing.unit) parts.push(ing.unit);
+		return parts.filter(Boolean).join(' ').trim() || 'ingredient';
+	}
 
-function formatDirection(body: unknown, op: 'add' | 'edit' | 'remove'): string {
-	if (op === 'remove') return 'direction';
-	if (!body || typeof body !== 'object') return 'direction';
-	const dir = body as { body?: string };
-	return dir.body || '(empty)';
-}
+	function formatDirection(body: unknown, op: 'add' | 'edit' | 'remove'): string {
+		if (op === 'remove') return 'direction';
+		if (!body || typeof body !== 'object') return 'direction';
+		const dir = body as { body?: string };
+		return dir.body || '(empty)';
+	}
 
+	// ---- save / reset ----
+	let savePromise = $state(Promise.resolve());
+	let saveResolve: (value: void) => void;
 
-// ---- save / reset ----
-let savePromise = $state(Promise.resolve());
-let saveResolve: (value: void) => void;
+	// load. If anything differs (id, op, body, or note), the page has
+	// unsaved changes. The check normalises array order so client-side
+	// reordering doesn't trigger a false positive — we care about content,
+	// not sequence.
+	function snapshotKey(
+		changes: { id: string; changeType: string; body: unknown; note: string | null }[]
+	): string {
+		return JSON.stringify(
+			[...changes]
+				.map((c) => ({ id: c.id, changeType: c.changeType, body: c.body, note: c.note }))
+				.sort((a, b) => a.id.localeCompare(b.id))
+		);
+	}
 
-// load. If anything differs (id, op, body, or note), the page has
-// unsaved changes. The check normalises array order so client-side
-// reordering doesn't trigger a false positive — we care about content,
-// not sequence.
-function snapshotKey(changes: { id: string; changeType: string; body: unknown; note: string | null }[]): string {
-	return JSON.stringify(
-		[...changes]
-			.map((c) => ({ id: c.id, changeType: c.changeType, body: c.body, note: c.note }))
-			.sort((a, b) => a.id.localeCompare(b.id))
+	let hasUnsavedChanges = $derived(
+		snapshotKey(leafIngredientChanges) !== snapshotKey(currentNode.ingredientChanges) ||
+			snapshotKey(leafDirectionChanges) !== snapshotKey(currentNode.directionChanges)
 	);
-}
 
-let hasUnsavedChanges = $derived(
-	snapshotKey(leafIngredientChanges) !== snapshotKey(currentNode.ingredientChanges) ||
-	snapshotKey(leafDirectionChanges) !== snapshotKey(currentNode.directionChanges)
-);
+	function performSave() {
+		if (!hasUnsavedChanges) return;
+		savePromise = new Promise((resolve) => (saveResolve = resolve));
+		fetch(`/api/recipe-node/${currentNode.id}`, {
+			method: 'PUT',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				nodeId: currentNode.id,
+				ingredientChanges: leafIngredientChanges,
+				directionChanges: leafDirectionChanges
+			})
+		}).then(async (res) => {
+			if (!res.ok) {
+				alert(`Save failed: ${await res.text()}`);
+			} else {
+				await invalidateAll();
+				// Force the sync $effect to re-run. The server wrote the leaf's
+				// change arrays, so data.currentNode carries the updated values.
+				// Resetting syncedNodeId makes the effect re-copy them into the
+				// leaf state vars — snapshotKey(leaf) === snapshotKey(server).
+				syncedNodeId = null;
+			}
+			saveResolve();
+		});
+	}
 
-function performSave() {
-	if (!hasUnsavedChanges) return;
-	savePromise = new Promise((resolve) => (saveResolve = resolve));
-	fetch(`/api/recipe-node/${currentNode.id}`, {
-		method: 'PUT',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({
-			nodeId: currentNode.id,
-			ingredientChanges: leafIngredientChanges,
-			directionChanges: leafDirectionChanges
-		})
-	}).then(async (res) => {
-		if (!res.ok) {
-			alert(`Save failed: ${await res.text()}`);
-		} else {
-			await invalidateAll();
-		}
-		saveResolve();
-	});
-}
-
-function performReset() {
-	leafIngredientChanges = JSON.parse(JSON.stringify(currentNode.ingredientChanges));
-	leafDirectionChanges = JSON.parse(JSON.stringify(currentNode.directionChanges));
-}
-
+	function performReset() {
+		leafIngredientChanges = JSON.parse(JSON.stringify(currentNode.ingredientChanges));
+		leafDirectionChanges = JSON.parse(JSON.stringify(currentNode.directionChanges));
+	}
 
 	// ---- rename modal state ----
 	let showRenameModal = $state(false);
@@ -440,16 +444,16 @@ function performReset() {
 	<h2>Ingredients</h2>
 	<ol class="list-decimal list-inside" data-testid="ingredient-list">
 		{#each displayedIngredients as ing, i (ing.id)}
-		<IngredientRow
-			ingredient={ing}
-			index={i}
-			total={displayedIngredients.length}
-			note={ingredientNoteFor(ing.id)}
-			onNote={() => openRowNote(ing.id, 'ingredient')}
-			onUpdate={(next) => editIngredient(ing.id, next)}
-			onRemove={() => removeIngredient(ing.id)}
-			onMove={(_dir) => moveIngredient(ing.id)}
-		/>
+			<IngredientRow
+				ingredient={ing}
+				index={i}
+				total={displayedIngredients.length}
+				note={ingredientNoteFor(ing.id)}
+				onNote={() => openRowNote(ing.id, 'ingredient')}
+				onUpdate={(next) => editIngredient(ing.id, next)}
+				onRemove={() => removeIngredient(ing.id)}
+				onMove={(_dir) => moveIngredient(ing.id)}
+			/>
 		{/each}
 	</ol>
 	<button
@@ -489,16 +493,16 @@ function performReset() {
 	<h2>Directions</h2>
 	<ol class="list-decimal list-inside" data-testid="direction-list">
 		{#each displayedDirections as dir, i (dir.id)}
-		<DirectionRow
-			direction={dir}
-			index={i}
-			total={displayedDirections.length}
-			note={directionNoteFor(dir.id)}
-			onNote={() => openRowNote(dir.id, 'direction')}
-			onUpdate={(next) => editDirection(dir.id, next)}
-			onRemove={() => removeDirection(dir.id)}
-			onMove={(_dir) => moveDirection(dir.id)}
-		/>
+			<DirectionRow
+				direction={dir}
+				index={i}
+				total={displayedDirections.length}
+				note={directionNoteFor(dir.id)}
+				onNote={() => openRowNote(dir.id, 'direction')}
+				onUpdate={(next) => editDirection(dir.id, next)}
+				onRemove={() => removeDirection(dir.id)}
+				onMove={(_dir) => moveDirection(dir.id)}
+			/>
 		{/each}
 	</ol>
 	<button
@@ -525,48 +529,47 @@ function performReset() {
 				}}>Add</button
 			>
 		</form>
-{/if}
+	{/if}
 
+	<NodeChanges
+		{leafIngredientChanges}
+		{leafDirectionChanges}
+		savedIngredientChanges={currentNode.ingredientChanges}
+		savedDirectionChanges={currentNode.directionChanges}
+		onRemoveIngredient={(id) => {
+			const idx = leafIngredientChanges.findIndex((c) => c.id === id);
+			if (idx >= 0) leafIngredientChanges.splice(idx, 1);
+		}}
+		onRemoveDirection={(id) => {
+			const idx = leafDirectionChanges.findIndex((c) => c.id === id);
+			if (idx >= 0) leafDirectionChanges.splice(idx, 1);
+		}}
+		onSetNote={(kind, id, note) => {
+			const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
+			const change = arr.find((c) => c.id === id);
+			if (change) change.note = note;
+		}}
+	/>
 
-<NodeChanges
-	leafIngredientChanges={leafIngredientChanges}
-	leafDirectionChanges={leafDirectionChanges}
-	savedIngredientChanges={currentNode.ingredientChanges}
-	savedDirectionChanges={currentNode.directionChanges}
-	onRemoveIngredient={(id) => {
-		const idx = leafIngredientChanges.findIndex((c) => c.id === id);
-		if (idx >= 0) leafIngredientChanges.splice(idx, 1);
-	}}
-	onRemoveDirection={(id) => {
-		const idx = leafDirectionChanges.findIndex((c) => c.id === id);
-		if (idx >= 0) leafDirectionChanges.splice(idx, 1);
-	}}
-	onSetNote={(kind, id, note) => {
-		const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
-		const change = arr.find((c) => c.id === id);
-		if (change) change.note = note;
-	}}
-/>
-
-{#await savePromise}
-	<button type="submit" disabled>Saving…</button>
-{:then}
-	<div class="flex gap-2">
-		<button
-			type="button"
-			onclick={performSave}
-			disabled={!hasUnsavedChanges}
-			data-testid="save-button"
-		>Save</button>
-		<button
-			type="button"
-			class="flat-button"
-			onclick={performReset}
-			disabled={!hasUnsavedChanges}
-			data-testid="reset-button"
-		>Reset</button>
-	</div>
-{/await}
+	{#await savePromise}
+		<button type="submit" disabled>Saving…</button>
+	{:then}
+		<div class="flex gap-2">
+			<button
+				type="button"
+				onclick={performSave}
+				disabled={!hasUnsavedChanges}
+				data-testid="save-button">Save</button
+			>
+			<button
+				type="button"
+				class="flat-button"
+				onclick={performReset}
+				disabled={!hasUnsavedChanges}
+				data-testid="reset-button">Reset</button
+			>
+		</div>
+	{/await}
 </div>
 
 <Modal bind:showModal={showRenameModal}>

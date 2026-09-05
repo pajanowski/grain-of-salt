@@ -101,6 +101,164 @@ async function cloneDemoRecipesToTestUser(
 	}
 }
 
+/**
+ * Names of the recipe-edit fixture — a 4-node tree shared across the
+ * recipe-edit-changes e2e file so it can verify cross-node isolation
+ * without per-test resets. Tests in that file navigate by name, so the
+ * names are stable; the loader deletes any prior rows with these names
+ * before inserting to keep the suite re-runnable against a warm DB.
+ */
+const FIXTURE_NAMES = [
+	'Test Root',
+	'Test Sibling A',
+	'Test Sibling B',
+	'Test Grandchild'
+] as const;
+
+/**
+ * Build a 4-node fixture for the test user:
+ *
+ *   Test Root
+ *   ├── Test Sibling A   (3 ingredients + 3 directions as initial content)
+ *   │   └── Test Grandchild
+ *   └── Test Sibling B   (empty)
+ *
+ * Sibling A carries initial content so the edit/remove tests have rows
+ * to target. The other three nodes start empty so isolation is
+ * unambiguous.
+ *
+ * Idempotent: deletes any prior fixture rows under TEST_USER_ID before
+ * inserting, so re-running the suite against a warm DB is safe.
+ */
+async function setupRecipeEditFixture(
+	db: ReturnType<typeof drizzle>,
+	testOwnerId: string
+) {
+	const nameList = `(${FIXTURE_NAMES.map((n) => `'${n.replace(/'/g, "''")}'`).join(',')})`;
+	await db.execute(sql.raw(
+		`delete from public.recipe_nodes where owner_id = '${testOwnerId}' and name in ${nameList}`
+	));
+
+	const rootId = uuidv4();
+	const siblingAId = uuidv4();
+	const siblingBId = uuidv4();
+	const grandchildId = uuidv4();
+
+	const eggId = uuidv4();
+	const milkId = uuidv4();
+	const saltId = uuidv4();
+	const ingredientChanges = [
+		{
+			id: uuidv4(),
+			changeType: 'add',
+			targetId: null,
+			note: null,
+			body: { id: eggId, name: 'Eggs', amount: 3, unit: 'whole' }
+		},
+		{
+			id: uuidv4(),
+			changeType: 'add',
+			targetId: null,
+			note: null,
+			body: { id: milkId, name: 'Milk', amount: 1, unit: 'cup' }
+		},
+		{
+			id: uuidv4(),
+			changeType: 'add',
+			targetId: null,
+			note: null,
+			body: { id: saltId, name: 'Salt', amount: 1, unit: 'tsp' }
+		}
+	];
+
+	const crackId = uuidv4();
+	const whiskId = uuidv4();
+	const heatId = uuidv4();
+	const directionChanges = [
+		{
+			id: uuidv4(),
+			changeType: 'add',
+			targetId: null,
+			note: null,
+			body: { id: crackId, body: 'Crack the eggs' }
+		},
+		{
+			id: uuidv4(),
+			changeType: 'add',
+			targetId: null,
+			note: null,
+			body: { id: whiskId, body: 'Whisk with milk' }
+		},
+		{
+			id: uuidv4(),
+			changeType: 'add',
+			targetId: null,
+			note: null,
+			body: { id: heatId, body: 'Heat the pan' }
+		}
+	];
+
+	const toJsonb = (value: unknown) =>
+		sql.raw(`'${JSON.stringify(value).replace(/'/g, "''")}'::jsonb`);
+
+	// Insertion order matters: children reference their parent ids.
+	const inserts: Array<{
+		id: string;
+		parentId: string | null;
+		name: string;
+		ingredients: unknown;
+		directions: unknown;
+	}> = [
+		{
+			id: rootId,
+			parentId: null,
+			name: 'Test Root',
+			ingredients: [],
+			directions: []
+		},
+		{
+			id: siblingAId,
+			parentId: rootId,
+			name: 'Test Sibling A',
+			ingredients: ingredientChanges,
+			directions: directionChanges
+		},
+		{
+			id: siblingBId,
+			parentId: rootId,
+			name: 'Test Sibling B',
+			ingredients: [],
+			directions: []
+		},
+		{
+			id: grandchildId,
+			parentId: siblingAId,
+			name: 'Test Grandchild',
+			ingredients: [],
+			directions: []
+		}
+	];
+
+	for (const row of inserts) {
+		await db.execute(sql`
+			insert into public.recipe_nodes (
+				id, parent_id, owner_id,
+				name, label, ingredient_changes, direction_changes
+			) values (
+				${row.id}::uuid,
+				${row.parentId}::uuid,
+				${testOwnerId}::uuid,
+				${row.name},
+				null,
+				${toJsonb(row.ingredients)},
+				${toJsonb(row.directions)}
+			)
+		`);
+	}
+
+	console.log('[e2e global-setup] Created 4-node recipe-edit fixture under test user');
+}
+
 export default async function globalSetup() {
 	const dbUrl = process.env.DATABASE_URL;
 	if (!dbUrl) {
@@ -123,6 +281,10 @@ export default async function globalSetup() {
 
 		console.log('[e2e global-setup] Cloning demo recipes under test user');
 		await cloneDemoRecipesToTestUser(db, '00000000-0000-0000-0000-000000000001', TEST_USER_ID);
+
+		console.log('[e2e global-setup] Creating recipe-edit fixture under test user');
+		await setupRecipeEditFixture(db, TEST_USER_ID);
+
 	} finally {
 		await client.end();
 	}
