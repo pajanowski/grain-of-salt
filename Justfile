@@ -40,6 +40,7 @@ start-all:
     if [ ! -d node_modules ]; then
         just install
     fi
+    supabase start
     just db-up
     just db-push
     just db-seed
@@ -49,6 +50,7 @@ start-all:
 # Hard reset + bootstrap
 start-fresh:
     just install
+    supabase start
     just db-up
     pnpm supabase db reset
     just db-push

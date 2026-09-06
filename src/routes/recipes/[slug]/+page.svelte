@@ -3,21 +3,19 @@
 	import RecipeHistory from '$lib/component/RecipeHistory.svelte';
 
 	const { data } = $props();
-	let recipe = $derived(data.recipe);
-	let history = $derived(data.history);
 	let parentChain = $derived(data.parentChain);
 </script>
 
-<div class="max-w-200">
+<div class="mx-auto max-w-3xl px-4 py-6">
 	{#if parentChain.length > 0}
-		<nav class="text-sm opacity-70 mb-2">
+		<nav class="mb-4 text-sm text-stone-500">
 			{#each parentChain as p, i (p.id)}
-				<a href="/recipes/{p.id}">{p.name}</a>{i < parentChain.length - 1 ? ' → ' : ''}
+				<a href="/recipes/{p.id}" class="hover:underline">{p.name}</a>{i < parentChain.length - 1 ? ' → ' : ''}
 			{/each}
-			<span class="opacity-50">→ </span>
+			<span>→ </span>
 		</nav>
 	{/if}
 
 	<Recipe {data} />
-	<RecipeHistory {history} />
+	<RecipeHistory history={data.history} />
 </div>

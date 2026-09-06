@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { error } from '@sveltejs/kit';
 import { getRecipeNodesByRecipeIdV2, applyNodes } from '$lib/server/bo/recipenodesbo';
 import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
 
@@ -10,36 +11,36 @@ import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
  * `parentChain` shows ancestor recipes for breadcrumb navigation.
  */
 export const load: PageServerLoad = async ({ depends, params }) => {
-  depends('app:recipe');
-  const recipeNodeId = params.slug;
+	depends('app:recipe');
+	const recipeNodeId = params.slug;
 
-  // Fetch the chain from current node back to root.
-  const chainBackwards = await getRecipeNodesByRecipeIdV2(recipeNodeId);
+	// Fetch the chain from current node back to root.
+	const chainBackwards = await getRecipeNodesByRecipeIdV2(recipeNodeId);
 
-  // Reverse so we have root → ... → current (oldest first, needed for replay).
-  const history = [...chainBackwards].reverse();
+	// Reverse so we have root → ... → current (oldest first, needed for replay).
+	const history = [...chainBackwards].reverse();
 
-  if (history.length === 0) {
-    throw new Error('Recipe not found');
-  }
+	if (history.length === 0) {
+		throw error(404, 'Recipe not found');
+	}
 
-  // The root is the first element after reversing.
-  const root = history[0];
-  // The current node is the last element.
-  const current = history[history.length - 1];
+	// The root is the first element after reversing.
+	const root = history[0];
+	// The current node is the last element.
+	const current = history[history.length - 1];
 
-  // Materialize the full recipe state by replaying all nodes.
-  const state = applyNodes(history);
+	// Materialize the full recipe state by replaying all nodes.
+	const state = applyNodes(history);
 
-  // Build the parent breadcrumb chain: ancestor recipes (not including self).
-  // Skip the first entry (root) — we don't include the recipe itself in the chain.
-  // Then skip the last entry (current) — that's the page we're on.
-  const parentChain = history
-    .slice(1) // drop root
-    .slice(0, -1) // drop current
-    .map((node: RecipeNode) => ({ id: node.id, name: node.name }));
+	// Build the parent breadcrumb chain: ancestor recipes (not including self).
+	// Skip the first entry (root) — we don't include the recipe itself in the chain.
+	// Then skip the last entry (current) — that's the page we're on.
+	const parentChain = history
+		.slice(1) // drop root
+		.slice(0, -1) // drop current
+		.map((node: RecipeNode) => ({ id: node.id, name: node.name }));
 
-  return {
+	return {
 		recipe: {
 			// Recipe identity is the root node, not the node currently being
 			// viewed/edited. save/rename APIs walk the chain forward from
@@ -47,13 +48,13 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 			id: root.id,
 			name: current.name,
 			ingredients: state.ingredients,
-			directions: state.directions,
+			directions: state.directions
 		},
 		// Editing happens on the leaf. The client uses its full change arrays
 		// to distinguish Case A (leaf owns a change referencing this row's
 		// add-id) from Case B (inherited from ancestor). See ADR 0001.
 		currentNode: current,
-    history, // full node chain for the history UI
-    parentChain,
-  };
+		history, // full node chain for the history UI
+		parentChain
+	};
 };

@@ -18,20 +18,13 @@
 
 	const { data } = $props();
 
-	// Materialized recipe (id = root, ingredients/directions = applied across
-	// the full chain). The leaf being edited is `data.currentNode`.
 	let recipe = $derived(data.recipe);
 	let currentNode = $derived(data.currentNode);
 	let rootNodeId = $derived(recipe.id);
 
-	// The leaf node's change arrays. These are the wire payload — the server
-	// replaces them on the row in place. See ADR 0001.
 	let leafIngredientChanges = $state<IngredientChange[]>([]);
 	let leafDirectionChanges = $state<DirectionChange[]>([]);
 
-	// Resync local change arrays from the server when the editing node id
-	// changes (initial load, navigation). On post-save invalidateAll, the id
-	// is the same so no resync — last-saved state is preserved locally.
 	let syncedNodeId = $state<string | null>(null);
 	$effect(() => {
 		if (currentNode.id !== syncedNodeId) {
@@ -41,9 +34,6 @@
 		}
 	});
 
-	// Displayed state = materialized state with the leaf's pending changes
-	// applied optimistically. After save + invalidateAll, the materialized
-	// state catches up and this derivation re-runs to match.
 	let displayedIngredients = $derived.by(() => {
 		const map = new Map<string, Ingredient>();
 		for (const ing of recipe.ingredients) map.set(ing.id, ing);
@@ -65,7 +55,6 @@
 		return Array.from(map.values());
 	});
 
-	// ---- leaf-record lookup (Case A detection) ----
 	function leafRecordForIngredient(rowId: string): IngredientChange | undefined {
 		return leafIngredientChanges.find(
 			(c) =>
@@ -81,14 +70,11 @@
 		);
 	}
 
-	// ---- per-row handlers (Case A mutate / Case B push) ----
 	function editIngredient(rowId: string, next: Ingredient) {
 		const record = leafRecordForIngredient(rowId);
 		if (record && record.body) {
-			// Case A: mutate the existing change record in place; same id, same op.
 			record.body = { ...next };
 		} else {
-			// Case B: push an edit on the leaf targeting the ancestor's add id.
 			leafIngredientChanges.push({
 				id: uuid(),
 				changeType: 'edit',
@@ -105,12 +91,8 @@
 				(c.changeType === 'edit' && c.targetId === rowId)
 		);
 		if (idx >= 0) {
-			// Case A: drop the leaf's record. If it was an add, the row is
-			// gone (unless an ancestor also added it). If it was an edit,
-			// the row falls back to whatever the ancestor chain produces.
 			leafIngredientChanges.splice(idx, 1);
 		} else {
-			// Case B: push a remove targeting the ancestor's add id.
 			leafIngredientChanges.push({
 				id: uuid(),
 				changeType: 'remove',
@@ -121,8 +103,6 @@
 		}
 	}
 	function moveIngredient(rowId: string) {
-		// Reorder = remove + add. The new add has a fresh id and lands at the
-		// end of the apply order, so the row visually jumps to the end.
 		const visible = displayedIngredients.find((i) => i.id === rowId);
 		if (!visible) return;
 		removeIngredient(rowId);
@@ -198,16 +178,11 @@
 		});
 	}
 
-	// ---- add forms ----
 	let addingIngredient = $state(false);
 	let addingDirection = $state(false);
 	let newIngredient = $state(EmptyIngredient());
 	let newDirection = $state(EmptyDirection());
 
-	// For each visible row, find the leaf's change record that "owns" it (the
-	// latest change referencing this row's id). The note on that change is
-	// what the recipe view should show inline; ancestor-owned notes are
-	// reachable from the History section instead.
 	function ingredientNoteFor(rowId: string): string | null {
 		const c = leafIngredientChanges.find(
 			(x) =>
@@ -226,10 +201,6 @@
 		return c?.note ?? null;
 	}
 
-	// ---- per-row note editor ----
-	// The row-level note button opens the same shared NoteSidebar as the
-	// NodeChanges section. The sidebar is mounted at the bottom of this
-	// component so the state lives here.
 	let openRowNoteEditor = $state<{
 		change: SidebarChange;
 		kind: 'ingredient' | 'direction';
@@ -298,14 +269,7 @@
 		return dir.body || '(empty)';
 	}
 
-	// ---- save / reset ----
-	let savePromise = $state(Promise.resolve());
-	let saveResolve: (value: void) => void;
 
-	// load. If anything differs (id, op, body, or note), the page has
-	// unsaved changes. The check normalises array order so client-side
-	// reordering doesn't trigger a false positive — we care about content,
-	// not sequence.
 	function snapshotKey(
 		changes: { id: string; changeType: string; body: unknown; note: string | null }[]
 	): string {
@@ -323,7 +287,6 @@
 
 	function performSave() {
 		if (!hasUnsavedChanges) return;
-		savePromise = new Promise((resolve) => (saveResolve = resolve));
 		api
 			.put(`/api/recipe-node/${currentNode.id}`, {
 				nodeId: currentNode.id,
@@ -332,17 +295,10 @@
 			})
 			.then(async () => {
 				await invalidateAll();
-				// Force the sync $effect to re-run. The server wrote the leaf's
-				// change arrays, so data.currentNode carries the updated values.
-				// Resetting syncedNodeId makes the effect re-copy them into the
-				// leaf state vars — snapshotKey(leaf) === snapshotKey(server).
 				syncedNodeId = null;
 			})
 			.catch((e) => {
 				alert(`Save failed: ${errorMessage(e)}`);
-			})
-			.finally(() => {
-				saveResolve();
 			});
 	}
 
@@ -351,7 +307,6 @@
 		leafDirectionChanges = JSON.parse(JSON.stringify(currentNode.directionChanges));
 	}
 
-	// ---- rename modal state ----
 	let showRenameModal = $state(false);
 	let renameName = $state('');
 	let renameBusy = $state(false);
@@ -375,7 +330,7 @@
 			renameBusy = false;
 		}
 	}
-	// ---- fork modal state ----
+
 	let showForkModal = $state(false);
 	let forkName = $state('');
 	let forkBusy = $state(false);
@@ -384,6 +339,7 @@
 		forkName = recipe.name + ' (fork)';
 		showForkModal = true;
 	}
+
 	async function confirmFork() {
 		const trimmed = forkName.trim();
 		if (!trimmed || forkBusy) return;
@@ -420,100 +376,183 @@
 	]);
 </script>
 
-<div class="flex flex-col gap-2">
-	<div class="flex items-center gap-2">
-		<h1>Recipe: {recipe.name}</h1>
+<div class="mx-auto flex max-w-3xl flex-col gap-6">
+	<!-- Recipe header -->
+	<div class="flex items-center justify-between">
+		<h1 class="text-2xl font-bold">{recipe.name}</h1>
 		<ContextMenu items={menuItems} label="Recipe actions" />
 	</div>
 
-	<h2>Ingredients</h2>
-	<ol class="list-decimal list-inside" data-testid="ingredient-list">
-		{#each displayedIngredients as ing, i (ing.id)}
-			<IngredientRow
-				ingredient={ing}
-				index={i}
-				total={displayedIngredients.length}
-				note={ingredientNoteFor(ing.id)}
-				onNote={() => openRowNote(ing.id, 'ingredient')}
-				onUpdate={(next) => editIngredient(ing.id, next)}
-				onRemove={() => removeIngredient(ing.id)}
-				onMove={(_dir) => moveIngredient(ing.id)}
-			/>
-		{/each}
-	</ol>
-	<button
-		class="flat-button"
-		onclick={() => {
-			if (!addingIngredient) {
-				newIngredient = EmptyIngredient();
-			}
-			addingIngredient = !addingIngredient;
-		}}>Add new ingredient</button
-	>
-	{#if addingIngredient}
-		<form class="flex flex-col">
-			<label>
-				Name
-				<input placeholder="Name" aria-label="Name" bind:value={newIngredient.name} />
-			</label>
-			<label>
-				Amount
-				<input placeholder="Amount" aria-label="Amount" bind:value={newIngredient.amount} />
-			</label>
-			<label>
-				Unit
-				<input placeholder="Unit" aria-label="Unit" bind:value={newIngredient.unit} />
-			</label>
+	<!-- Ingredients -->
+	<section class="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm">
+		<div class="flex items-center justify-between border-b border-stone-100 px-4 py-3">
+			<h2 class="font-semibold text-stone-800">Ingredients</h2>
 			<button
-				type="button"
+				class="secondary flex items-center gap-1.5 text-sm"
 				onclick={() => {
-					addIngredient(newIngredient);
+					if (!addingIngredient) newIngredient = EmptyIngredient();
 					addingIngredient = !addingIngredient;
-					newIngredient = EmptyIngredient();
-				}}>Add</button
+				}}
 			>
-		</form>
-	{/if}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					class="h-4 w-4"
+					aria-hidden="true"
+				>
+					<line x1="12" x2="12" y1="5" y2="19" />
+					<line x1="5" x2="19" y1="12" y2="12" />
+				</svg>
+				Add
+			</button>
+		</div>
 
-	<h2>Directions</h2>
-	<ol class="list-decimal list-inside" data-testid="direction-list">
-		{#each displayedDirections as dir, i (dir.id)}
-			<DirectionRow
-				direction={dir}
-				index={i}
-				total={displayedDirections.length}
-				note={directionNoteFor(dir.id)}
-				onNote={() => openRowNote(dir.id, 'direction')}
-				onUpdate={(next) => editDirection(dir.id, next)}
-				onRemove={() => removeDirection(dir.id)}
-				onMove={(_dir) => moveDirection(dir.id)}
-			/>
-		{/each}
-	</ol>
-	<button
-		class="flat-button"
-		onclick={() => {
-			if (!addingDirection) {
-				newDirection = EmptyDirection();
-			}
-			addingDirection = !addingDirection;
-		}}>Add new direction</button
-	>
-	{#if addingDirection}
-		<form class="flex flex-col gap-2">
-			<label>
-				Body
-				<input placeholder="Body" aria-label="Body" bind:value={newDirection.body} />
-			</label>
+		<div class="p-4">
+			{#if addingIngredient}
+				<form class="mb-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3">
+					<input
+						class="border rounded px-3 py-2"
+						placeholder="Ingredient name"
+						bind:value={newIngredient.name}
+					/>
+					<div class="flex gap-2">
+						<input
+							class="border rounded px-3 py-2 w-24"
+							placeholder="Amount"
+							type="number"
+							step="any"
+							bind:value={newIngredient.amount}
+						/>
+						<input
+							class="border rounded px-3 py-2 flex-1"
+							placeholder="Unit"
+							bind:value={newIngredient.unit}
+						/>
+					</div>
+					<div class="flex gap-2">
+						<button
+							type="button"
+							onclick={() => {
+								addIngredient(newIngredient);
+								addingIngredient = false;
+								newIngredient = EmptyIngredient();
+							}}>Add</button
+						>
+						<button type="button" class="secondary" onclick={() => (addingIngredient = false)}
+							>Cancel</button
+						>
+					</div>
+				</form>
+			{/if}
+
+			<ol class="flex flex-col divide-y divide-stone-100" data-testid="ingredient-list">
+				{#each displayedIngredients as ing, i (ing.id)}
+					<li class="py-3 first:pt-0 last:pb-0">
+						<IngredientRow
+							ingredient={ing}
+							index={i}
+							total={displayedIngredients.length}
+							note={ingredientNoteFor(ing.id)}
+							onNote={() => openRowNote(ing.id, 'ingredient')}
+							onUpdate={(next) => editIngredient(ing.id, next)}
+							onRemove={() => removeIngredient(ing.id)}
+							onMove={(_dir) => moveIngredient(ing.id)}
+						/>
+					</li>
+				{/each}
+			</ol>
+		</div>
+	</section>
+
+	<!-- Directions -->
+	<section class="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm">
+		<div class="flex items-center justify-between border-b border-stone-100 px-4 py-3">
+			<h2 class="font-semibold text-stone-800">Directions</h2>
 			<button
-				type="button"
+				class="secondary flex items-center gap-1.5 text-sm"
 				onclick={() => {
-					addDirection(newDirection);
+					if (!addingDirection) newDirection = EmptyDirection();
 					addingDirection = !addingDirection;
-					newDirection = EmptyDirection();
-				}}>Add</button
+				}}
 			>
-		</form>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					class="h-4 w-4"
+					aria-hidden="true"
+				>
+					<line x1="12" x2="12" y1="5" y2="19" />
+					<line x1="5" x2="19" y1="12" y2="12" />
+				</svg>
+				Add
+			</button>
+		</div>
+
+		<div class="p-4">
+			{#if addingDirection}
+				<form class="mb-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3">
+					<textarea
+						class="border rounded px-3 py-2 w-full"
+						rows="3"
+						placeholder="Direction"
+						bind:value={newDirection.body}
+					></textarea>
+					<div class="flex gap-2">
+						<button
+							type="button"
+							onclick={() => {
+								addDirection(newDirection);
+								addingDirection = false;
+								newDirection = EmptyDirection();
+							}}>Add</button
+						>
+						<button type="button" class="secondary" onclick={() => (addingDirection = false)}
+							>Cancel</button
+						>
+					</div>
+				</form>
+			{/if}
+
+			<ol class="flex flex-col divide-y divide-stone-100" data-testid="direction-list">
+				{#each displayedDirections as dir, i (dir.id)}
+					<li class="py-3 first:pt-0 last:pb-0">
+						<DirectionRow
+							direction={dir}
+							index={i}
+							total={displayedDirections.length}
+							note={directionNoteFor(dir.id)}
+							onNote={() => openRowNote(dir.id, 'direction')}
+							onUpdate={(next) => editDirection(dir.id, next)}
+							onRemove={() => removeDirection(dir.id)}
+							onMove={(_dir) => moveDirection(dir.id)}
+						/>
+					</li>
+				{/each}
+			</ol>
+		</div>
+	</section>
+
+	<!-- Unsaved changes bar -->
+	{#if hasUnsavedChanges}
+		<div
+			class="sticky bottom-4 flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 shadow-md"
+		>
+			<span class="text-sm font-medium text-amber-900">Unsaved changes</span>
+			<div class="flex gap-2">
+				<button type="button" class="secondary" onclick={performReset}>Reset</button>
+				<button type="button" onclick={performSave}>Save</button>
+			</div>
+		</div>
 	{/if}
 
 	<NodeChanges
@@ -535,47 +574,18 @@
 			if (change) change.note = note;
 		}}
 	/>
-
-	{#await savePromise}
-		<button type="submit" disabled>Saving…</button>
-	{:then}
-		<div class="flex gap-2">
-			<button
-				type="button"
-				onclick={performSave}
-				disabled={!hasUnsavedChanges}
-				data-testid="save-button">Save</button
-			>
-			<button
-				type="button"
-				class="flat-button"
-				onclick={performReset}
-				disabled={!hasUnsavedChanges}
-				data-testid="reset-button">Reset</button
-			>
-		</div>
-	{/await}
 </div>
 
 <Modal bind:showModal={showRenameModal}>
-	{#snippet header()}
-		<h2>Rename recipe</h2>
-	{/snippet}
-	<form
-		onsubmit={(e) => {
-			e.preventDefault();
-			confirmRename();
-		}}
-	>
-		<label>
-			Name
+	{#snippet header()}<h2 class="font-semibold">Rename recipe</h2>{/snippet}
+	<form onsubmit={(e) => { e.preventDefault(); confirmRename(); }}>
+		<label class="flex flex-col gap-1">
+			<span class="text-sm font-medium">New name</span>
 			<input bind:value={renameName} aria-label="New recipe name" />
 		</label>
-		<div class="flex gap-2 mt-2">
-			<button type="submit" class="flat-button" disabled={renameBusy}>
-				{renameBusy ? 'Saving…' : 'Save'}
-			</button>
-			<button type="button" class="flat-button" onclick={() => (showRenameModal = false)}
+		<div class="mt-3 flex gap-2">
+			<button type="submit" disabled={renameBusy}>{renameBusy ? 'Saving…' : 'Save'}</button>
+			<button type="button" class="secondary" onclick={() => (showRenameModal = false)}
 				>Cancel</button
 			>
 		</div>
@@ -583,24 +593,15 @@
 </Modal>
 
 <Modal bind:showModal={showForkModal}>
-	{#snippet header()}
-		<h2>Fork recipe</h2>
-	{/snippet}
-	<form
-		onsubmit={(e) => {
-			e.preventDefault();
-			confirmFork();
-		}}
-	>
-		<label>
-			Name
+	{#snippet header()}<h2 class="font-semibold">Fork recipe</h2>{/snippet}
+	<form onsubmit={(e) => { e.preventDefault(); confirmFork(); }}>
+		<label class="flex flex-col gap-1">
+			<span class="text-sm font-medium">Fork name</span>
 			<input bind:value={forkName} aria-label="Forked recipe name" />
 		</label>
-		<div class="flex gap-2 mt-2">
-			<button type="submit" class="flat-button" disabled={forkBusy}>
-				{forkBusy ? 'Forking…' : 'Fork'}
-			</button>
-			<button type="button" class="flat-button" onclick={() => (showForkModal = false)}
+		<div class="mt-3 flex gap-2">
+			<button type="submit" disabled={forkBusy}>{forkBusy ? 'Forking…' : 'Fork'}</button>
+			<button type="button" class="secondary" onclick={() => (showForkModal = false)}
 				>Cancel</button
 			>
 		</div>
