@@ -3,7 +3,7 @@
 
 	let { recipeTree }: { recipeTree: RecipeTreeNode[] } = $props();
 
-	// Set of root node ids whose subtrees are collapsed. Local state — the
+	// Set of node ids whose subtrees are collapsed. Local state — the
 	// tree resets on full reload, which is fine for a list view.
 	let collapsed = $state<Set<string>>(new Set());
 
@@ -43,86 +43,134 @@
 		return n;
 	}
 
-	/**
-	 * Flatten the tree, skipping children of any node in `collapsed`. Each
-	 * row carries enough info for the renderer to decide whether to show a
-	 * toggle and how to indent.
-	 */
-	function flatten(
-		nodes: RecipeTreeNode[],
-		depth = 0,
-	): Array<{ node: RecipeTreeNode; depth: number; hasChildren: boolean; hiddenCount: number }> {
-		const out: Array<{ node: RecipeTreeNode; depth: number; hasChildren: boolean; hiddenCount: number }> = [];
+	type Row = {
+		node: RecipeTreeNode;
+		depth: number;
+		hasChildren: boolean;
+		hiddenCount: number;
+	};
+
+	function flatten(nodes: RecipeTreeNode[], depth = 0): Row[] {
+		const out: Row[] = [];
 		for (const node of nodes) {
 			const hasChildren = node.children.length > 0;
-			out.push({ node, depth, hasChildren, hiddenCount: 0 });
+			const row: Row = { node, depth, hasChildren, hiddenCount: 0 };
+			out.push(row);
 			if (hasChildren && !collapsed.has(node.id)) {
-				for (const row of flatten(node.children, depth + 1)) {
-					out.push(row);
-				}
+				out.push(...flatten(node.children, depth + 1));
 			} else if (hasChildren) {
-				// The current row's hiddenCount is the descendants it would
-				// show if expanded. Annotate the row above (already pushed).
-				out[out.length - 1].hiddenCount = countDescendants(node);
+				row.hiddenCount = countDescendants(node);
 			}
 		}
 		return out;
 	}
 
-	let rows = $derived(flatten(recipeTree));
+	type TreeGroup = { root: RecipeTreeNode; rows: Row[] };
+
+	// Each top-level tree becomes its own card. Index drives the alternating palette.
+	let treeGroups = $derived<TreeGroup[]>(
+		recipeTree.map((root) => ({
+			root,
+			rows: flatten([root])
+		}))
+	);
+
+	// Subtle alternating backgrounds. Two tones is enough to make the seam
+	// between trees obvious without being loud.
+	const TREE_PALETTES = ['bg-white', 'bg-stone-50'] as const;
 </script>
 
-<div class="flex flex-col">
-	<h1><a href="/">Recipe List</a></h1>
+<div class="flex flex-col gap-3">
+	<header class="flex items-center justify-between gap-3">
+		<h1 class="text-xl font-semibold">Recipe List</h1>
+		{#if expandableIds.length > 0}
+			<div class="flex gap-2 text-sm">
+				<button type="button" class="rl-btn rounded" onclick={expandAll}>Expand all</button>
+				<button type="button" class="rl-btn rounded" onclick={collapseAll}>Collapse all</button>
+			</div>
+		{/if}
+	</header>
 
-	{#if expandableIds.length > 0}
-		<div class="flex gap-2 mb-2 text-sm">
-			<button
-				type="button"
-				class="px-2 py-1 rounded border hover:bg-gray-100"
-				onclick={expandAll}
-			>
-				Expand all
-			</button>
-			<button
-				type="button"
-				class="px-2 py-1 rounded border hover:bg-gray-100"
-				onclick={collapseAll}
-			>
-				Collapse all
-			</button>
+	{#if treeGroups.length === 0}
+		<p class="text-gray-600">No recipes yet.</p>
+	{:else}
+		<div class="flex flex-col gap-3">
+			{#each treeGroups as group, i (group.root.id)}
+				{@const palette = TREE_PALETTES[i % TREE_PALETTES.length]}
+				<section class="overflow-hidden rounded-lg border border-gray-200 shadow-sm {palette}">
+					<ul class="divide-y divide-gray-200/70">
+						{#each group.rows as { node, depth, hasChildren, hiddenCount } (node.id)}
+							<li
+								class="group flex items-center gap-1.5 py-1 pr-3 hover:bg-black/[0.03]"
+								style="padding-left: {0.5 + depth * 1.25}rem"
+							>
+								<button
+									type="button"
+									class="rl-toggle {!hasChildren ? 'invisible' : ''}"
+									aria-label={collapsed.has(node.id) ? 'Expand subtree' : 'Collapse subtree'}
+									aria-expanded={!collapsed.has(node.id)}
+									onclick={() => toggle(node.id)}
+								>
+									<svg
+										viewBox="0 0 20 20"
+										class="h-3 w-3 transition-transform"
+										class:rotate-90={!collapsed.has(node.id)}
+										fill="currentColor"
+										aria-hidden="true"
+									>
+										<path d="M7 5l6 5-6 5V5z" />
+									</svg>
+								</button>
+								<a
+									href="/recipes/{node.id}"
+									class="flex-1 truncate rounded px-1.5 py-0.5 hover:underline"
+								>
+									{node.name}
+									{#if hasChildren && hiddenCount > 0}
+										<span class="ml-1 text-xs text-gray-500">({hiddenCount} more)</span>
+									{/if}
+								</a>
+							</li>
+						{/each}
+					</ul>
+				</section>
+			{/each}
 		</div>
 	{/if}
-
-	{#if rows.length === 0}
-		<p>No recipes yet.</p>
-	{:else}
-		<ul class="list-none p-0">
-			{#each rows as { node, depth, hasChildren, hiddenCount } (node.id)}
-				<li
-					class="flex flex-row justify-between items-center gap-2"
-					style="padding-left: {depth * 1.25}rem"
-				>
-					<a href="/recipes/{node.id}" class="flex-1">
-						{depth > 0 ? '↳ ' : ''}{node.name}
-						{#if hasChildren && hiddenCount > 0}
-							<span class="opacity-50 text-sm">({hiddenCount})</span>
-						{/if}
-					</a>
-
-					{#if hasChildren}
-						<button
-							type="button"
-							class="w-6 h-6 inline-flex items-center justify-center text-sm rounded hover:bg-gray-100"
-							aria-label={collapsed.has(node.id) ? 'Expand subtree' : 'Collapse subtree'}
-							aria-expanded={!collapsed.has(node.id)}
-							onclick={() => toggle(node.id)}
-						>
-							{collapsed.has(node.id) ? '▸' : '�'}
-						</button>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-	{/if}
 </div>
+
+<!--
+	Global `button { @apply bg-amber-300 ... w-full ... }` lives in src/app.css
+	and wins over Tailwind utilities on specificity. Scope resets below.
+-->
+<style>
+	.rl-btn {
+		background: white;
+		width: auto;
+		max-width: none;
+		box-shadow: none;
+		border: 1px solid #d1d5db;
+		padding: 4px 10px;
+	}
+	.rl-btn:hover {
+		background: #f9fafb;
+	}
+	.rl-toggle {
+		background: transparent;
+		width: 1.25rem;
+		height: 1.25rem;
+		max-width: none;
+		box-shadow: none;
+		border: none;
+		padding: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 4px;
+		color: #6b7280;
+	}
+	.rl-toggle:hover {
+		background: rgba(0, 0, 0, 0.08);
+		color: #111827;
+	}
+</style>
