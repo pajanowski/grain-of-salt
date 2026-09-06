@@ -1,24 +1,49 @@
 @import "tailwindcss";
 
-/* body * { */
-/*   @apply sepia; */
-/* } */
+/* Base button — amber, used as default for in-app actions.
+   Components that need different sizing override locally. */
 button {
 	@apply bg-amber-300;
-	@apply border-2;
-	@apply max-w-32;
-  @apply w-full;
-  @apply shadow-lg/50;
-  @apply p-2;
+	@apply border border-amber-600;
+	@apply shadow-md;
+	@apply px-4 py-2;
+	@apply rounded;
+	@apply font-semibold;
+	@apply text-amber-950;
+	@apply transition-colors duration-150;
+}
+
+button:hover:not(:disabled) {
+	@apply bg-amber-400;
+}
+
+button:active:not(:disabled) {
+	@apply bg-amber-500;
 }
 
 button:disabled {
 	@apply bg-amber-100;
-  @apply text-gray-500;
-  @apply shadow-none;
+	@apply text-amber-700;
+	@apply border-amber-300;
+	@apply shadow-none;
+	@apply cursor-not-allowed;
 }
 
+/* Secondary / cancel buttons — outlined, not filled */
+button.secondary {
+	@apply bg-transparent;
+	@apply text-amber-800;
+}
+
+button.secondary:hover:not(:disabled) {
+	@apply bg-amber-100;
+}
 
 input {
-  @apply border-2
+	@apply border-2 border-stone-300;
+	@apply rounded;
+	@apply px-3 py-2;
+	@apply w-full;
+	@apply focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200;
+	@apply transition-colors duration-150;
 }
