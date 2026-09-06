@@ -14,7 +14,8 @@
 	import NodeChanges from './NodeChanges.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
 	import { invalidateAll, goto, invalidate } from '$app/navigation';
-	import { api, errorMessage } from '$lib/api';
+	import { errorMessage } from '$lib/api';
+	import { renameRecipe, forkRecipe, deleteRecipe, saveNodeChanges } from '$lib/recipes';
 
 	const { data } = $props();
 
@@ -287,12 +288,11 @@
 
 	function performSave() {
 		if (!hasUnsavedChanges) return;
-		api
-			.put(`/api/recipe-node/${currentNode.id}`, {
-				nodeId: currentNode.id,
-				ingredientChanges: leafIngredientChanges,
-				directionChanges: leafDirectionChanges
-			})
+		saveNodeChanges(currentNode.id, {
+			nodeId: currentNode.id,
+			ingredientChanges: leafIngredientChanges,
+			directionChanges: leafDirectionChanges
+		})
 			.then(async () => {
 				await invalidateAll();
 				syncedNodeId = null;
@@ -321,7 +321,7 @@
 		if (!trimmed || renameBusy) return;
 		renameBusy = true;
 		try {
-			await api.patch(`/api/recipe/${rootNodeId}`, { name: trimmed });
+			await renameRecipe(rootNodeId, trimmed);
 			await invalidate('app:recipe-tree');
 			showRenameModal = false;
 		} catch (e) {
@@ -345,10 +345,7 @@
 		if (!trimmed || forkBusy) return;
 		forkBusy = true;
 		try {
-			const { data: newRecipe } = await api.post<{ id: string }>(
-				`/api/recipe/${currentNode.id}/fork`,
-				{ name: trimmed }
-			);
+			const newRecipe = await forkRecipe(currentNode.id, trimmed);
 			showForkModal = false;
 			await invalidate('app:recipe-tree');
 			await goto(`/recipes/${newRecipe.id}`);
@@ -358,11 +355,10 @@
 			forkBusy = false;
 		}
 	}
-
 	async function confirmDelete() {
 		if (!confirm(`Delete "${recipe.name}"? This cannot be undone.`)) return;
 		try {
-			await api.delete(`/api/recipe/${rootNodeId}`);
+			await deleteRecipe(rootNodeId);
 			await goto('/');
 		} catch (e) {
 			alert(`Delete failed: ${errorMessage(e)}`);

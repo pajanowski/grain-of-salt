@@ -114,6 +114,15 @@ async function cloneDemoRecipesToTestUser(
 }
 
 export default async function globalSetup() {
+	// Demo mode (ADR 0003 — Demo suite): no Supabase is running, so
+	// skip every step that touches the database or signs in. The
+	// demo Playwright project sets PLAYWRIGHT_DEMO=1 in its env so
+	// the runner can invoke this file for the demo project without
+	// the supabase-dependent setup work.
+	if (process.env.PLAYWRIGHT_DEMO === '1') {
+		console.log('[e2e global-setup] PLAYWRIGHT_DEMO=1 — skipping Supabase setup');
+		return;
+	}
 	const dbUrl = process.env.DATABASE_URL;
 	if (!dbUrl) {
 		throw new Error('DATABASE_URL must be set for e2e tests to run');

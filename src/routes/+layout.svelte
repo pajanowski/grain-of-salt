@@ -2,42 +2,102 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import RecipeList from '$lib/component/RecipeList.svelte';
-	import { api, errorMessage } from '$lib/api';
+	import { errorMessage } from '$lib/api';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-
+	import { resetDemoState, demoRecipes, demoNodes } from '$lib/recipe-store.demo';
+	import { createRecipe as createRecipeDispatch } from '$lib/recipes';
+	import type { RecipeTreeNode } from '$lib/recipe-store';
 	let { data, children } = $props();
 
 	let sidebarCollapsed = $state(false);
-	let createRecipe = $state(false);
+	let showCreateForm = $state(false);
 	let newRecipeName = $state('');
 	let inputEl = $state<HTMLInputElement | null>(null);
 
+	// demoTree drives the sidebar RecipeList in demo mode.
+	// Initial value comes from the server's already-nested recipeTree so SSR
+	// renders the seed tree without running any client code. After hydration,
+	// the $effect below seeds the demo store from SEED_RECIPES and keeps the
+	// tree in sync as the user creates/forkes/etc.
+	let demoTree = $state<RecipeTreeNode[] | null>(data.demoMode ? data.recipeTree : null);
+
 	$effect(() => {
-		if (createRecipe && inputEl) {
-			inputEl.focus();
+		if (!data.demoMode) {
+			demoTree = null;
+			return;
 		}
+		// Seed store on first mount. Idempotent — only writes if still empty.
+		if ($demoRecipes.length === 0) {
+			import('$lib/demo-seed').then(({ SEED_RECIPES }) => {
+				if ($demoRecipes.length === 0) demoRecipes.set([...SEED_RECIPES]);
+			});
+		}
+
+		// Subscribe and rebuild on every change.
+		demoTree = buildTree($demoRecipes, $demoNodes);
+		const u1 = demoRecipes.subscribe((r) => (demoTree = buildTree(r, $demoNodes)));
+		const u2 = demoNodes.subscribe((n) => (demoTree = buildTree($demoRecipes, n)));
+		return () => { u1(); u2(); };
 	});
 
-	function handleCreate() {
+	// Build nested tree from flat summaries. Each non-root summary's
+	// parentId is the source recipe summary id (matches production shape).
+	function buildTree(summaries: typeof $demoRecipes, _nodes: typeof $demoNodes): RecipeTreeNode[] {
+		const childrenByParent = new Map<string, typeof summaries>();
+		for (const s of summaries) {
+			if (s.parentId === null) continue;
+			const arr = childrenByParent.get(s.parentId) ?? [];
+			arr.push(s);
+			childrenByParent.set(s.parentId, arr);
+		}
+		const attach = (s: typeof summaries[number]): RecipeTreeNode => ({
+			id: s.id,
+			name: s.name,
+			parentId: s.parentId,
+			children: (childrenByParent.get(s.id) ?? []).map(attach)
+		});
+		return summaries.filter((s) => s.parentId === null).map(attach);
+	}
+
+	$effect(() => {
+		if (showCreateForm && inputEl) inputEl.focus();
+	});
+
+	async function handleCreate() {
 		if (!newRecipeName.trim()) return;
-		api
-			.post('/api/save', new URLSearchParams({ recipeName: newRecipeName }))
-			.then(() => {
-				newRecipeName = '';
-				createRecipe = false;
-				invalidateAll();
-			})
-			.catch((e) => {
-				alert(`Create failed: ${errorMessage(e)}`);
-			});
+		console.log('handleCreate called, demoMode=', data.demoMode, 'name=', newRecipeName);
+		try {
+			const result = await createRecipeDispatch(newRecipeName);
+			console.log('createRecipeDispatch returned:', result, '$demoRecipes length=', $demoRecipes.length);
+			newRecipeName = '';
+			showCreateForm = false;
+			if (data.demoMode) {
+				console.log('demoTree before rebuild:', demoTree?.map(t => t.name));
+				demoTree = buildTree($demoRecipes, $demoNodes);
+				console.log('demoTree after rebuild:', demoTree?.map(t => t.name));
+			} else {
+				await invalidateAll();
+			}
+		} catch (e) {
+			console.error('Create failed:', e);
+			alert(`Create failed: ${errorMessage(e)}`);
+		}
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') handleCreate();
 		if (e.key === 'Escape') {
 			newRecipeName = '';
-			createRecipe = false;
+			showCreateForm = false;
+		}
+	}
+	async function handleResetDemo() {
+		resetDemoState();
+		if (data.demoMode) {
+			demoTree = buildTree($demoRecipes, $demoNodes);
+		} else {
+			await invalidateAll();
 		}
 	}
 </script>
@@ -108,7 +168,6 @@
 		<aside
 			class="flex h-full w-64 shrink-0 flex-col border-r border-stone-200 bg-stone-100 shadow-[2px_0_8px_rgba(0,0,0,0.08)]"
 		>
-			<!-- Sidebar header -->
 			<div class="flex items-center justify-between border-b border-stone-200 px-4 py-3">
 				<span class="font-semibold text-stone-700">Grain of Salt</span>
 				<button
@@ -138,26 +197,27 @@
 
 			<!-- Scrollable content -->
 			<div class="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
-				<RecipeList recipeTree={data.recipeTree} />
+				<RecipeList recipeTree={data.demoMode ? demoTree : data.recipeTree} />
 
-				{#if createRecipe}
+				{#if showCreateForm}
 					<div class="rounded-lg border border-stone-300 bg-stone-50 p-4 shadow-sm">
 						<p class="mb-3 font-semibold text-stone-800">New Recipe</p>
 						<div class="flex flex-col gap-3">
-							<input
-								bind:this={inputEl}
-								bind:value={newRecipeName}
-								onkeydown={handleKeydown}
-								placeholder="Recipe name"
-								class="text-sm"
-							/>
+						<input
+							bind:this={inputEl}
+							bind:value={newRecipeName}
+							onkeydown={handleKeydown}
+							name="Recipe name"
+							placeholder="Recipe name"
+							class="text-sm"
+						/>
 							<div class="flex gap-2">
 								<button onclick={handleCreate}>Create</button>
 								<button
 									class="secondary"
 									onclick={() => {
 										newRecipeName = '';
-										createRecipe = false;
+										showCreateForm = false;
 									}}
 								>
 									Cancel
@@ -166,7 +226,7 @@
 						</div>
 					</div>
 				{:else}
-					<button onclick={() => (createRecipe = true)} class="flex items-center gap-2">
+					<button onclick={() => (showCreateForm = true)} class="flex items-center gap-2">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							viewBox="0 0 24 24"
@@ -184,8 +244,18 @@
 						Create Recipe
 					</button>
 				{/if}
-			</div>
 
+				{#if data.demoMode}
+					<button
+						type="button"
+						class="secondary flex items-center gap-2"
+						onclick={handleResetDemo}
+						data-testid="reset-demo"
+					>
+						Reset demo
+					</button>
+				{/if}
+			</div>
 			<!-- Auth footer -->
 			<div class="border-t border-stone-200 p-4">
 				{#if data.user}

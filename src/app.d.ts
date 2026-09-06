@@ -9,6 +9,8 @@ declare global {
 			safeGetSession: () => Promise<{ session: Session | null; user: User | null }>;
 			session: Session | null;
 			user: User | null;
+			/** Set by hooks.server.ts when running in demo mode. */
+			demoMode: boolean;
 		}
 		// interface PageData {}
 		// interface PageState {}

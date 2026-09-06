@@ -50,6 +50,10 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      // Production project. Matches every e2e file EXCEPT the demo
+      // ones. Uses the Supabase-backed preview server, requires
+      // DATABASE_URL/PUBLIC_SUPABASE_URL/MAILPIT_URL.
+      testMatch: /(?<!demo)\.e2e\.[jt]s$/,
       use: {
         ...devices['Desktop Chrome'],
         channel: 'chromium',
@@ -59,6 +63,22 @@ export default defineConfig({
         // override `storageState` to undefined (e.g. via a separate
         // project) so they start unauthenticated.
         storageState: '.auth/test-user.json'
+      }
+    },
+    {
+      name: 'demo',
+      // Demo-mode project (ADR 0003 — Demo suite). Matches only the
+      // *.demo.e2e.ts files. Runs against a preview server launched
+      // with VITE_DEMO_MODE=1, no Supabase required. The shared
+      // globalSetup short-circuits when PLAYWRIGHT_DEMO=1.
+      testMatch: /\.demo\.e2e\.[jt]s$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: 'chromium',
+        // Demo users start unauthenticated — there is no auth cookie
+        // to seed. The demo /auth page bounces home; the layout's
+        // safeGetSession returns DEMO_USER.
+        storageState: undefined
       }
     }
   ],

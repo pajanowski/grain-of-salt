@@ -1,7 +1,18 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { isDemoServer } from '$lib/demo-init';
+import { env } from '$env/dynamic/public';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
+	// Demo mode (ADR 0003 — Auth in demo mode). Skip the OTP form;
+	// safeGetSession already returns DEMO_USER, so any auth check on
+	// a protected page will succeed. Bounce straight home.
+	const demoEnv =
+		(import.meta as { env?: Record<string, string> }).env?.VITE_DEMO_MODE ??
+		env.VITE_DEMO_MODE;
+	if (isDemoServer(url.hostname, demoEnv)) {
+		throw redirect(303, '/');
+	}
 	const { session, user } = await locals.safeGetSession();
 	if (session && user) {
 		// Already logged in — bounce home.
