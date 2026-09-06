@@ -70,38 +70,10 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Guest session. No Supabase call — just sets a cookie. Useful for
-	 * demos and tests where you want to exercise the app shell without
-	 * burning an email.
+	 * Sign out. Clears the Supabase session.
 	 */
-	guestIn: async ({ cookies, url }) => {
-		cookies.set('guest', '1', {
-			path: '/',
-			httpOnly: true,
-			sameSite: 'lax',
-			secure: url.protocol === 'https:',
-			maxAge: 60 * 60 * 24 // 1 day
-		});
-		throw redirect(303, url.searchParams.get('next') ?? '/');
-	},
-
-	/**
-	 * Sign out. Clears the Supabase session and any guest cookie.
-	 */
-	logout: async ({ locals, cookies }) => {
+	logout: async ({ locals }) => {
 		await locals.supabase.auth.signOut();
-		cookies.delete('guest', { path: '/' });
 		throw redirect(303, '/');
-	},
-
-	/**
-	 * Upgrade a guest to a real email account. The user's guest data
-	 * survives only if the route reading it falls back to the guest
-	 * cookie; otherwise it's lost, since guest has no auth.users row.
-	 * (This matches the "cookie-only guest" design choice.)
-	 */
-	guestClear: async ({ cookies, url }) => {
-		cookies.delete('guest', { path: '/' });
-		throw redirect(303, url.searchParams.get('next') ?? '/auth');
 	}
 };

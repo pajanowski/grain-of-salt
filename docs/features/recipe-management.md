@@ -19,8 +19,8 @@ rename and delete.
 
 ## Ownership
 
-Both endpoints verify the caller owns the chain. Guests can manage
-recipes on `DEMO_USER_ID`'s tree only.
+Both endpoints verify the caller owns the chain. Unauthenticated
+requests are rejected with 401.
 
 ## Files
 

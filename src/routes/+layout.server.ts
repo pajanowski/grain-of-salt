@@ -1,32 +1,24 @@
 import type { LayoutServerLoad } from './$types';
 import { getRecipeTree } from '$lib/server/bo/recipenodesbo';
-import { DEMO_USER_ID } from '$lib/server/db/schema';
 import { env } from '$env/dynamic/public';
 
-export const load: LayoutServerLoad = async ({ depends, locals, cookies }) => {
-  depends('app:recipes');
-  depends('app:recipe-tree');
+export const load: LayoutServerLoad = async ({ depends, locals }) => {
+	depends('app:recipes');
+	depends('app:recipe-tree');
 
-  const { session, user } = await locals.safeGetSession();
+	const { session, user } = await locals.safeGetSession();
 
-  // Recipe-tree visibility:
-  //  - Signed-in user: see their own recipes.
-  //  - Guest (no Supabase session but has the guest cookie): see the
-  //    shared demo tree (DEMO_USER_ID). Demo recipes are seeded and
-  //    read-only from the guest's perspective — the bo layer enforces
-  //    ownership on every write.
-  const ownerId = user?.id ?? (cookies.get('guest') === '1' ? DEMO_USER_ID : null);
+	// Signed-in users see their own recipes. Unauthenticated browsers
+	// (no Supabase session) see an empty list — they must sign in.
+	const ownerId = user?.id ?? null;
+	const recipeTree = ownerId ? await getRecipeTree(ownerId) : [];
+	const supabaseConfigured = Boolean(env.PUBLIC_SUPABASE_URL);
 
-  const recipeTree = ownerId ? await getRecipeTree(ownerId) : [];
-  const isGuest = cookies.get('guest') === '1';
-  const supabaseConfigured = Boolean(env.PUBLIC_SUPABASE_URL);
-
-  return {
-    recipeTree,
-    session,
-    user,
-    isGuest,
-    ownerId,
-    supabaseConfigured
-  };
+	return {
+		recipeTree,
+		session,
+		user,
+		ownerId,
+		supabaseConfigured
+	};
 };

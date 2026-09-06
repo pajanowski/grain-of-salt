@@ -16,8 +16,7 @@ import type { IngredientChange, DirectionChange } from '../../obj/RecipeNode.sve
  * Ownership: every node belongs to a Supabase auth user via ownerId.
  * Row-level security on `public.recipe_nodes` (see supabase/migrations)
  * restricts read/write to the owning user. Seed/demo data is owned by a
- * fixed demo user (see also DEMO_USER_ID) so guests can still see the
- * default recipe tree.
+ * fixed demo user (see also DEMO_USER_ID).
  *
  * The `name` field is denormalized — every node in a recipe carries the
  * same recipe name — so the API can answer "what recipe is this node
@@ -52,8 +51,7 @@ export type SelectRecipeNode = typeof recipeNodes.$inferSelect;
  * by Supabase Auth; this table holds app-level fields and is auto-populated
  * by a trigger defined in supabase/migrations.
  *
- * Note: guest sessions in this project are cookie-only — they have NO row in
- * `auth.users` and therefore NO row here. Only "real" (email) users appear.
+ *
  */
 export const profiles = pgTable('profiles', {
 	id: uuid('id').primaryKey(),
@@ -64,11 +62,10 @@ export const profiles = pgTable('profiles', {
 
 export type InsertProfile = typeof profiles.$inferInsert;
 export type SelectProfile = typeof profiles.$inferSelect;
-
 /**
- * Fixed UUID used by `scripts/seed.ts` and by the guest demo tree. The
- * matching `auth.users` row is provisioned by the recipes migration. Guests
- * (no Supabase session) see recipes owned by this user; signed-in users see
- * their own.
+ * Fixed UUID used by `scripts/seed.ts`. The matching `auth.users` row is
+ * provisioned by the recipes migration. Seed/demo recipes live under this
+ * owner and are visible only to the demo user themselves; signed-in users
+ * see their own trees.
  */
 export const DEMO_USER_ID = '00000000-0000-0000-0000-000000000001';

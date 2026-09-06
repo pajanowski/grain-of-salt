@@ -16,8 +16,8 @@ input + Create / Cancel). Submitting POSTs to `/api/save`.
 
 ## Ownership
 
-- Signed-in user → their own id.
-- Guest → `DEMO_USER_ID` (the new recipe joins the shared demo tree).
+- The new recipe belongs to the signed-in user. Unauthenticated
+  requests are rejected with 401.
 
 ## Files
 

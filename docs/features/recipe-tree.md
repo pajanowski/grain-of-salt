@@ -15,9 +15,7 @@ and consumed by `RecipeList.svelte`.
 ## Visibility
 
 - Signed-in user → their own recipes.
-- Guest → the shared `DEMO_USER_ID` tree.
-- Unauthenticated, no guest cookie → empty list ("No recipes yet").
-
+- Unauthenticated → empty list ("No recipes yet").
 ## Inline create
 
 A "Create Recipe" button below the tree opens an inline form. See

@@ -22,12 +22,6 @@
 		<form method="POST" action="/auth?/logout" use:enhance>
 			<button type="submit" class="rounded border px-2 py-1 hover:bg-gray-100">Sign out</button>
 		</form>
-	{:else if data.isGuest}
-		<span class="rounded bg-yellow-100 px-2 py-0.5 text-xs">Guest</span>
-		<a href="/auth" class="rounded border px-2 py-1 hover:bg-gray-100">Sign in</a>
-		<form method="POST" action="/auth?/guestClear" use:enhance>
-			<button type="submit" class="text-xs text-gray-500 underline">End guest session</button>
-		</form>
 	{:else}
 		<a href="/auth" class="rounded bg-black px-3 py-1 text-white">Sign in</a>
 	{/if}

@@ -14,11 +14,9 @@ if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
  *
  * Authorization rules:
  *   - Every `recipe_nodes` write MUST carry an ownerId matching
- *     `locals.user.id` (or DEMO_USER_ID for guests — which is read-only
- *     in practice).
+ *     `locals.user.id`.
  *   - Every `recipe_nodes` read MUST filter by ownerId unless it is the
- *     demo-user tree (guests) or the owner themselves.
- *
+ *     demo-user tree (seed data) or the owner themselves.
  * Browser-side Supabase traffic (auth, realtime) goes through
  * `getBrowserSupabase()` using the anon key and IS subject to RLS — so
  * RLS still defends against direct PostgREST access.

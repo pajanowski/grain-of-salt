@@ -1,29 +1,14 @@
 import type { RequestHandler } from './$types';
 import { deleteRecipe, renameRecipe } from '$lib/server/bo/recipesbo';
-import { DEMO_USER_ID } from '$lib/server/db/schema';
 
-/**
- * Resolve ownerId from the session or guest cookie. Guest requests can
- * rename/delete demo recipes (owned by DEMO_USER_ID), but cannot touch
- * anyone else's tree.
- */
-function resolveOwnerId(
-	locals: App.Locals,
-	cookies: { get: (name: string) => string | undefined }
-): string | null {
-	if (locals.user?.id) return locals.user.id;
-	if (cookies.get('guest') === '1') return DEMO_USER_ID;
-	return null;
-}
-
-export const DELETE: RequestHandler = async ({ params, locals, cookies }) => {
-	if (!params.id || params.id.trim().length === 0) {
-		return new Response('Recipe not found', { status: 404 });
+export const DELETE: RequestHandler = async ({ params, locals }) => {
+	const ownerId = locals.user?.id;
+	if (!ownerId) {
+		return new Response('Sign in first', { status: 401 });
 	}
 
-	const ownerId = resolveOwnerId(locals, cookies);
-	if (!ownerId) {
-		return new Response('Sign in or continue as guest first', { status: 401 });
+	if (!params.id || params.id.trim().length === 0) {
+		return new Response('Recipe not found', { status: 404 });
 	}
 
 	try {
@@ -34,14 +19,14 @@ export const DELETE: RequestHandler = async ({ params, locals, cookies }) => {
 	}
 };
 
-export const PATCH: RequestHandler = async ({ params, request, locals, cookies }) => {
-	if (!params.id || params.id.trim().length === 0) {
-		return new Response('Recipe not found', { status: 404 });
+export const PATCH: RequestHandler = async ({ params, request, locals }) => {
+	const ownerId = locals.user?.id;
+	if (!ownerId) {
+		return new Response('Sign in first', { status: 401 });
 	}
 
-	const ownerId = resolveOwnerId(locals, cookies);
-	if (!ownerId) {
-		return new Response('Sign in or continue as guest first', { status: 401 });
+	if (!params.id || params.id.trim().length === 0) {
+		return new Response('Recipe not found', { status: 404 });
 	}
 
 	let body: { name?: unknown };

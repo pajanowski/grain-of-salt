@@ -43,16 +43,6 @@
 			{/if}
 			<button type="submit"> Email me a code </button>
 		</form>
-
-		<div class="my-6 flex items-center gap-3 text-xs text-gray-500">
-			<div class="h-px flex-1 bg-gray-300"></div>
-			or
-			<div class="h-px flex-1 bg-gray-300"></div>
-		</div>
-
-		<form method="POST" action="?/guestIn" use:enhance>
-			<button type="submit"> Continue as guest (demo) </button>
-		</form>
 	{:else}
 		<p class="mb-4 text-sm">
 			Code sent to <strong>{email}</strong>. Check your inbox (or Mailpit at

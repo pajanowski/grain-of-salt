@@ -3,7 +3,6 @@ import { forkRecipe } from '$lib/server/bo/recipesbo';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { recipeNodes } from '$lib/server/db/schema';
-import { DEMO_USER_ID } from '$lib/server/db/schema';
 
 /**
  * POST /api/recipe/[id]/fork
@@ -21,23 +20,13 @@ import { DEMO_USER_ID } from '$lib/server/db/schema';
  * forking). The caller must own the source chain.
  */
 
-function resolveOwnerId(
-	locals: App.Locals,
-	cookies: { get: (name: string) => string | undefined }
-): string | null {
-	if (locals.user?.id) return locals.user.id;
-	if (cookies.get('guest') === '1') return DEMO_USER_ID;
-	return null;
-}
-
-export const POST: RequestHandler = async ({ params, request, locals, cookies }) => {
-	const ownerId = resolveOwnerId(locals, cookies);
+export const POST: RequestHandler = async ({ params, request, locals }) => {
+	const ownerId = locals.user?.id;
 	if (!ownerId) {
-		return new Response('Sign in or continue as guest first', { status: 401 });
+		return new Response('Sign in first', { status: 401 });
 	}
 
-	// Verify the source node exists and the caller can see it (same
-	// owner — guests can only fork their own demo tree).
+	// Verify the source node exists and the caller owns it.
 	const rows = await db
 		.select({ id: recipeNodes.id })
 		.from(recipeNodes)

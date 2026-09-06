@@ -8,7 +8,7 @@ and [ADR 0002](../adr/0002-fork-as-chain-extension.md).
 
 ## User-facing
 
-- [Authentication](./authentication.md) — OTP email sign-in, guest session, account page, sign-out
+- [Authentication](./authentication.md) — OTP email sign-in, account page, sign-out
 - [Recipe tree](./recipe-tree.md) — Nested list of all recipes on the home page
 - [Recipe creation](./recipe-creation.md) — Inline form on the home page
 - [Recipe view](./recipe-view.md) — `/recipes/[slug]` with materialized state and parent breadcrumbs

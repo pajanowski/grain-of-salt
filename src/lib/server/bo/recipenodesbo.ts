@@ -83,7 +83,7 @@ export async function appendRecipeNode(
  * proportional to chain length.
  *
  * Authorization: the caller is responsible for having confirmed the user
- * owns the root (or that the chain belongs to DEMO_USER_ID for guests).
+ * owns the root.
  */
 export async function getRecipeNodesByRecipeId(rootNodeId: string): Promise<RecipeNode[]> {
 	const nodes: RecipeNode[] = [];

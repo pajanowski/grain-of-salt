@@ -17,8 +17,8 @@ extension**, not a separate recipe. See
 
 ## Ownership
 
-The caller must own the source chain. Guests can fork only within
-`DEMO_USER_ID`'s tree.
+The caller must own the source chain. Unauthenticated requests are
+rejected with 401.
 
 ## Files
 

@@ -3,15 +3,12 @@ import type { RequestEvent } from '@sveltejs/kit';
 import type { User } from '@supabase/supabase-js';
 
 /**
- * Gate a server load/action: requires a real (non-guest) Supabase user.
+ * Gate a server load/action: requires a Supabase-authenticated user.
  *
  * Usage:
  *   const user = await requireUser(event);
  *
  * On failure: 303 redirect to /auth?next=<current path>.
- *
- * Note: this only validates "real" users. If you want to allow guests but
- * block anonymous browsers, check `event.locals.session` instead.
  */
 export async function requireUser(event: RequestEvent): Promise<User> {
 	const { user } = await event.locals.safeGetSession();
