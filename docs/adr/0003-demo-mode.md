@@ -7,14 +7,19 @@ Proposed
 
 A visitor at `demo.grainofsalt.app` must be able to explore the full app UI without
 creating an account or touching the real Supabase database. They can create, rename,
-fork, and delete recipes. All state lives in the browser's memory and is seeded from
-static data on first load. The experience is indistinguishable from the production app
+fork, and delete recipes. All state lives in the browser and is seeded from static
+data on first visit. The experience is indistinguishable from the production app
 from the user's perspective.
 
 Constraint: **one codebase**, no build fork, no separate deployment artifact. The app
 morphs at boot based on the hostname.
 
 ## Decision
+
+Two implementations of a `RecipeStore` interface — a server-side Supabase adapter
+and a client-side in-memory adapter — fronted by a single set of dispatch
+functions. SSR in demo mode returns a stub Supabase client and empty data; the
+client mounts a Svelte writable store and components subscribe to it.
 
 ### 1. Detection — `src/lib/demo-init.ts`
 
@@ -23,222 +28,225 @@ morphs at boot based on the hostname.
 export const isDemoMode =
   typeof window !== 'undefined' &&
   (window.location.hostname.startsWith('demo.') ||
-    new URLSearchParams(window.location.search).has('demo'));
+    import.meta.env.VITE_DEMO_MODE === '1');
 
-// Server-side only (no window)
+// Server-side only (no window, no Vite env)
 export function isDemoHost(hostname: string): boolean {
-  return hostname.startsWith('demo.') || !!process.env.VITE_DEMO_MODE;
+  return hostname.startsWith('demo.');
 }
 ```
 
-`VITE_DEMO_MODE` env var enables demo mode in local dev without needing to edit
-`/etc/hosts`.
+Client and server use disjoint detection paths. `import.meta.env` is Vite's
+client-side env access; `process.env.VITE_DEMO_MODE` would crash the browser
+bundle. Defense in depth: client-side demo requires **both** the `demo.`
+hostname and the env flag, so a misconfigured env var on prod cannot silently
+activate demo mode.
 
-### 2. Shared state — `src/lib/demo-store.ts`
-
-A plain ES module singleton. The same module is imported by both the client-side
-interceptor and the server-side load functions — Node.js module caching means they
-get the same instance within a single process.
+### 2. Store interface — `src/lib/recipe-store.ts`
 
 ```ts
-export interface DemoUser {
-  id: string;
-  email: string;
+export interface RecipeStore {
+  list(): Promise<RecipeSummary[]>;
+  get(id: string): Promise<RecipeTree | null>;
+  create(name: string): Promise<{ id: string }>;
+  rename(id: string, name: string): Promise<void>;
+  fork(id: string): Promise<{ id: string }>;
+  remove(id: string): Promise<void>;
+  saveNode(nodeId: string, changes: NodeChanges): Promise<void>;
 }
 
-export interface DemoNode {
-  id: string;
-  recipeId: string;
-  parentId: string | null;
-  type: 'branch' | 'leaf';
-  name: string;
-  ingredientChanges: Change<Ingredient>[];
-  directionChanges: Change<Direction>[];
-  createdAt: Date;
+export function getRecipeStore(): RecipeStore { /* server vs client impl */ }
+```
+
+`RecipeTree` and `RecipeSummary` are the existing shapes returned by
+`getRecipeTree()` and the recipe list query — the demo adapter returns the same
+shape so components are unchanged.
+
+### 3. Dispatch functions — `src/lib/recipes.ts`
+
+Mechanical rewrite of existing `api.*` call sites into typed functions:
+
+```ts
+export async function createRecipe(name: string) {
+  return getRecipeStore().create(name);
 }
 
-export interface DemoRecipe {
-  id: string;
-  ownerId: string;
-  name: string;
-  history: DemoNode[];
-  createdAt: Date;
+export async function renameRecipe(id: string, name: string) {
+  await getRecipeStore().rename(id, name);
 }
 
-export interface DemoState {
-  user: DemoUser;
-  recipes: DemoRecipe[];
+// ...forkRecipe, deleteRecipe, saveNodeChanges, loadRecipeTree
+```
+
+Components import from `$lib/recipes`. The `api` instance is untouched — the
+Supabase adapter wraps it internally, so production reads go through the same
+axios pipeline as before.
+
+Call-site changes are mechanical and bounded: ~6 functions, ~10–20 callers. Each
+follows the pattern `await api.post('/api/save', { recipeName })` → `await
+createRecipe(name)`. This refactor buys a testable seam, an explicit interface
+contract, and removes the URL/body parsing logic the interceptor would otherwise
+need.
+
+### 4. Demo adapter — `src/lib/recipe-store.demo.ts`
+
+Client-only. Backed by Svelte writables and localStorage; no module singleton,
+no SSR coupling.
+
+```ts
+import { writable, get } from 'svelte/store';
+import { SEED_RECIPES, SEED_NODES } from './demo-seed';
+
+export const demoRecipes = writable<RecipeSummary[]>(loadOrSeed());
+export const demoNodes = writable<Map<string, RecipeNode>>(new Map(SEED_NODES));
+
+function loadOrSeed(): RecipeSummary[] {
+  if (typeof localStorage === 'undefined') return SEED_RECIPES;
+  const raw = localStorage.getItem('demo:recipes');
+  if (raw) return JSON.parse(raw);
+  localStorage.setItem('demo:recipes', JSON.stringify(SEED_RECIPES));
+  return SEED_RECIPES;
 }
 
-export const demoState: DemoState = { user: DEMO_USER, recipes: [] };
+function persist(recipes: RecipeSummary[], nodes: Map<string, RecipeNode>) {
+  localStorage.setItem('demo:recipes', JSON.stringify(recipes));
+  localStorage.setItem('demo:nodes', JSON.stringify([...nodes.entries()]));
+}
 
-export const DEMO_USER: DemoUser = {
-  id: 'demo-user-id',
-  email: 'demo@grainofsalt.app'
+export const demoStore: RecipeStore = {
+  async list() {
+    return get(demoRecipes);
+  },
+  async get(id) {
+    const recipes = get(demoRecipes);
+    const summary = recipes.find((r) => r.id === id);
+    if (!summary) return null;
+    const nodes = get(demoNodes);
+    return assembleTree(summary, nodes);
+  },
+  async create(name) {
+    const id = crypto.randomUUID();
+    const summary = { id, name, ownerId: DEMO_USER.id, createdAt: new Date() };
+    const rootId = crypto.randomUUID();
+    const root = { id: rootId, recipeId: id, parentId: null, ... };
+    demoRecipes.update((rs) => [...rs, summary]);
+    demoNodes.update((ns) => ns.set(rootId, root));
+    persist(get(demoRecipes), get(demoNodes));
+    return { id };
+  },
+  async rename(id, name) {
+    demoRecipes.update((rs) =>
+      rs.map((r) => (r.id === id ? { ...r, name } : r))
+    );
+    persist(get(demoRecipes), get(demoNodes));
+  },
+  async remove(id) {
+    demoRecipes.update((rs) => rs.filter((r) => r.id !== id));
+    demoNodes.update((ns) => {
+      const next = new Map(ns);
+      for (const [nid, n] of ns) if (n.recipeId === id) next.delete(nid);
+      return next;
+    });
+    persist(get(demoRecipes), get(demoNodes));
+  },
+  async fork(id) {
+    const source = await this.get(id);
+    if (!source) throw new Error('Not found');
+    const forked = forkRecipe(source); // see fork semantics below
+    demoRecipes.update((rs) => [...rs, forked.summary]);
+    demoNodes.update((ns) => {
+      const next = new Map(ns);
+      for (const node of forked.nodes) next.set(node.id, node);
+      return next;
+    });
+    persist(get(demoRecipes), get(demoNodes));
+    return { id: forked.summary.id };
+  },
+  async saveNode(nodeId, changes) {
+    demoNodes.update((ns) => {
+      const next = new Map(ns);
+      const existing = next.get(nodeId);
+      if (existing) next.set(nodeId, { ...existing, ...changes });
+      return next;
+    });
+    persist(get(demoRecipes), get(demoNodes));
+  }
 };
-
-export function seedDemoState() {
-  demoState.recipes = [/* 2-3 pre-built DemoRecipe objects */];
-}
-
-export function resetDemoState() {
-  seedDemoState();
-}
 ```
 
-**Seed data** — 2–3 recipes with ingredient and direction rows so the demo feels
-populated on first visit. Shape matches the output of `getRecipeTree()`.
+State lives in the user's browser (localStorage) so it survives reloads and
+multi-instance deploys. There is no server-side state to coordinate. Components
+that subscribe to `demoRecipes` and `demoNodes` react automatically — no
+`invalidateAll()` needed in demo mode.
 
-### 3. Request interceptor — `src/lib/demo-interceptor.ts`
+### 5. Fork semantics
 
-Registered once on the exported `api` instance when `isDemoMode` is true. Every
-matching request is handled in-memory; **nothing is passed through to the network**.
+`forkRecipe(source)` deep-clones the recipe and all nodes with fresh IDs:
 
 ```ts
-import { api } from './api';
-import { demoState, resetDemoState } from './demo-store';
-import { isDemoMode } from './demo-init';
-import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-
-function intercepted(config: InternalAxiosRequestConfig): AxiosResponse {
+function forkRecipe(source: RecipeTree): { summary: RecipeSummary; nodes: RecipeNode[] } {
+  const idMap = new Map<string, string>();
+  for (const node of source.nodes) idMap.set(node.id, crypto.randomUUID());
+  const newRecipeId = crypto.randomUUID();
   return {
-    data: undefined,
-    status: 200,
-    statusText: 'OK',
-    headers: {},
-    config
+    summary: {
+      id: newRecipeId,
+      name: `${source.summary.name} (fork)`,
+      ownerId: DEMO_USER.id,
+      createdAt: new Date()
+    },
+    nodes: source.nodes.map((n) => ({
+      ...n,
+      id: idMap.get(n.id)!,
+      recipeId: newRecipeId,
+      parentId: n.parentId ? idMap.get(n.parentId)! : null
+    }))
   };
 }
-
-function notFound(config: InternalAxiosRequestConfig): AxiosResponse {
-  return { data: 'Not found', status: 404, statusText: 'Not Found', headers: {}, config };
-}
-
-export function registerDemoInterceptor() {
-  if (!isDemoMode) return;
-
-  seedDemoState();
-
-  api.interceptors.request.use((config) => {
-    const url = config.url ?? '';
-    const [, , , , , path1, path2, path3] = url.split('/');
-    // path1: 'api', path2: 'recipe'|'recipe-node'|'auth', path3: id or action
-
-    // Supabase auth — return a fake session immediately
-    // These prevent the browser from trying to reach *.supabase.co
-    if (path2 === 'auth') {
-      return intercepted(config);
-    }
-
-    // POST /api/save — create recipe
-    if (config.method === 'post' && path2 === 'save') {
-      const params = new URLSearchParams(config.data);
-      const name = params.get('recipeName') ?? 'Untitled';
-      const recipe = buildDemoRecipe(name);
-      demoState.recipes.push(recipe);
-      return { ...intercepted(config), data: { id: recipe.id, name: recipe.name } };
-    }
-
-    // GET /api/recipe/:id
-    if (config.method === 'get' && path2 === 'recipe' && path3) {
-      const recipe = demoState.recipes.find((r) => r.id === path3);
-      if (!recipe) return notFound(config);
-      return { ...intercepted(config), data: recipe };
-    }
-
-    // PATCH /api/recipe/:id — rename
-    if (config.method === 'patch' && path2 === 'recipe' && path3) {
-      const params = new URLSearchParams(config.data);
-      const recipe = demoState.recipes.find((r) => r.id === path3);
-      if (recipe) recipe.name = params.get('name') ?? recipe.name;
-      return { ...intercepted(config), data: { id: path3 } };
-    }
-
-    // DELETE /api/recipe/:id
-    if (config.method === 'delete' && path2 === 'recipe' && path3) {
-      demoState.recipes = demoState.recipes.filter((r) => r.id !== path3);
-      return { ...intercepted(config), data: { id: path3 } };
-    }
-
-    // POST /api/recipe/:id/fork
-    if (config.method === 'post' && path2 === 'recipe' && path3) {
-      const source = demoState.recipes.find((r) => r.id === path3);
-      if (!source) return notFound(config);
-      const forked = forkDemoRecipe(source);
-      demoState.recipes.push(forked);
-      return { ...intercepted(config), status: 201, data: { id: forked.id } };
-    }
-
-    // GET /api/recipe-node/:nodeId
-    if (config.method === 'get' && path2 === 'recipe-node' && path3) {
-      const node = demoState.recipes.flatMap((r) => r.history).find((n) => n.id === path3);
-      if (!node) return notFound(config);
-      return { ...intercepted(config), data: node };
-    }
-
-    // PUT /api/recipe-node/:nodeId — save leaf changes
-    if (config.method === 'put' && path2 === 'recipe-node' && path3) {
-      const body = JSON.parse(config.data ?? '{}');
-      for (const recipe of demoState.recipes) {
-        const node = recipe.history.find((n) => n.id === path3);
-        if (node) {
-          node.ingredientChanges = body.ingredientChanges ?? [];
-          node.directionChanges = body.directionChanges ?? [];
-          return { ...intercepted(config), data: { id: path3 } };
-        }
-      }
-      return notFound(config);
-    }
-
-    // Anything else — let it pass through (should not occur in normal use)
-    return config;
-  });
-}
 ```
 
-> **Why not return a `Promise`?** Axios interceptors support returning a resolved
-> `Promise<AxiosResponse>` — synchronous objects work too and avoid any async
-> overhead. Both are equivalent.
+Forked recipes do not share node IDs with the source — edits to the fork do not
+affect the source.
 
-### 4. Server-side awareness
+### 6. SSR — `src/hooks.server.ts`
 
-#### `src/hooks.server.ts`
+In demo mode, install a stub Supabase client so existing child
+`+page.server.ts` load functions (which call `locals.supabase.from(...)`) work
+unchanged.
 
 ```ts
-import { isDemoHost } from '$lib/demo-init';
-
 const supabase: Handle = async ({ event, resolve }) => {
   if (isDemoHost(event.url.hostname)) {
-    // Wire a fake session — no Supabase call, no cookies checked
-    event.locals.supabase = null as unknown as SupabaseClient<Database>;
+    event.locals.supabase = makeStubSupabase(); // returns { data: [], error: null } from .from()
     event.locals.safeGetSession = async () => ({
       session: { user: DEMO_USER } as Session,
       user: DEMO_USER as User
     });
-    return resolve(event, { /* filterSerializedResponseHeaders */ });
+    return resolve(event);
   }
   // ... existing Supabase init
 };
 ```
 
-#### `src/routes/+layout.server.ts`
+`makeStubSupabase()` returns an object whose `.from(table).select()` etc.
+resolve to `{ data: [], error: null }`. It only needs to support the methods
+the existing load functions call — add methods on demand.
+
+### 7. Layout — `src/routes/+layout.server.ts`
 
 ```ts
-import { isDemoHost } from '$lib/demo-init';
-import { demoState, DEMO_USER } from '$lib/demo-store';
-
 export const load: LayoutServerLoad = async ({ depends, locals, url }) => {
   depends('app:recipes');
   depends('app:recipe-tree');
 
   if (isDemoHost(url.hostname)) {
-    // demoState is the same module singleton that the interceptor mutates
     return {
-      recipeTree: buildRecipeTreeFromDemo(demoState.recipes),
+      demoMode: true,
+      recipeTree: [],
       session: { user: DEMO_USER },
       user: DEMO_USER,
       ownerId: DEMO_USER.id,
-      supabaseConfigured: true
+      supabaseConfigured: false
     };
   }
 
@@ -246,69 +254,105 @@ export const load: LayoutServerLoad = async ({ depends, locals, url }) => {
 };
 ```
 
-`buildRecipeTreeFromDemo` maps `DemoRecipe[]` to the same `RecipeTree` shape that
-`getRecipeTree()` returns, so the `RecipeList` component sees identical data.
+`recipeTree: []` is intentional — SSR shows nothing, then the client takes
+over. The layout passes `data.demoMode` to the client; the layout component
+uses it to mount the demo store and to gate the "Reset demo" button.
 
-### 5. `invalidateAll()` behavior
+### 8. Client takeover — `src/routes/+layout.svelte`
 
-After any mutation (`api.post('/api/save', ...)`, etc.) the existing code calls
-`invalidateAll()`. In demo mode this triggers an SSR re-render of `+layout.server.ts`
-which re-imports `demoState` — the **same module instance** the interceptor is
-mutating. Node.js module caching guarantees both reference the same object, so the
-SSR load returns the current state of `demoState.recipes`. The `RecipeList`
-re-renders with up-to-date data. This is a fast in-process SSR render — no
-Supabase, no network.
+```svelte
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { isDemoMode } from '$lib/demo-init';
+  import { demoRecipes, demoNodes, resetDemoState } from '$lib/recipe-store.demo';
+  import { invalidateAll } from '$app/navigation';
 
-### 6. Reset
+  export let data: LayoutData;
 
-A "Reset demo" button (demo mode only) in the header calls `resetDemoState()` and
-then `invalidateAll()`, restoring the seed and refreshing the tree.
+  onMount(() => {
+    if (data.demoMode) {
+      // Mount demo store — components subscribe to demoRecipes / demoNodes
+    }
+  });
 
-### 7. Auth in demo mode
+  async function handleReset() {
+    resetDemoState();
+    await invalidateAll();
+  }
+</script>
 
-The demo user is always "signed in" — the server `safeGetSession` returns
-`DEMO_USER` and the `session` cookie is set by a demo-aware auth handler. No OTP
-email is sent; the `/auth` page detects demo mode and skips the email/code form
-entirely, automatically signing the demo user in on page load.
+{#if data.demoMode}
+  <button on:click={handleReset}>Reset demo</button>
+{/if}
+```
+
+The recipe list component checks `data.demoMode` and reads from `$demoRecipes`
+instead of `data.recipeTree`. Or — simpler — the dispatch functions in
+`$lib/recipes` route to the right adapter transparently and the list component
+calls `loadRecipeTree()` like it does today.
+
+### 9. Auth in demo mode
+
+The `/auth` page checks `data.demoMode` and skips the OTP form, redirecting to
+the home page. `safeGetSession` returns `DEMO_USER` so any code path that reads
+the current user gets the demo user. No real Supabase call is made.
 
 ## Consequences
 
 **Pros**
+
 - Single codebase, no build fork.
-- `api` is unchanged in production — the interceptor is never registered.
-- All mutations go through `api.*` calls that are already in the codebase; no
-  call-site changes needed.
-- `invalidateAll()` works correctly because server and client share the module
-  singleton — the SSR load returns the interceptor's current state.
-- Demo state resets on each deployment (static seed), not persisted — no stale
-  state between releases, no cleanup needed.
+- No module singleton — survives Vite HMR and multi-instance deploys.
+- No URL/body parsing — the dispatch functions have typed signatures.
+- No null `SupabaseClient` cast — the stub client satisfies existing load functions.
+- Components are unaware of demo vs prod; they call `createRecipe(name)` and get
+  the right behavior.
+- Demo state survives reloads via localStorage and resets via the "Reset demo"
+  button.
+- Testable: each `RecipeStore` implementation can be unit-tested against a
+  shared fixture.
 
 **Cons**
-- **Single-process constraint**: the module singleton only works in single-process
-  Node.js deployments. Vercel Edge, Cloudflare Workers, and similar runtimes
-  isolate each request's module scope, so server-side `demoState` would be a fresh
-  import per request. For those platforms, the state would need to be serialized
-  to a cookie or header and re-read on each SSR request — add this as a follow-up
-  if multi-instance hosting is needed.
+
+- Mechanical refactor of ~10–20 call sites to use `$lib/recipes` instead of
+  `$lib/api` for mutations. Bounded and one-time.
+- The stub Supabase client must implement every method existing load functions
+  call. Add methods as needed; type errors will surface them.
+- Demo state persists per-browser, not per-deployment — release notes should
+  mention that the seed may differ across versions in user browsers until they
+  hit "Reset demo."
 - Auth flow is fully mocked — the demo never exercises the real Supabase OTP path.
 
 ## Files to create / modify
 
 | File | Change |
 |---|---|
-| `src/lib/demo-init.ts` | New — `isDemoMode`, `isDemoHost()` |
-| `src/lib/demo-store.ts` | New — `demoState`, `DEMO_USER`, `seedDemoState()`, `resetDemoState()` |
-| `src/lib/demo-interceptor.ts` | New — axios interceptor with all endpoint mocks |
-| `src/hooks.server.ts` | Add demo `safeGetSession` branch in `supabase` handle |
-| `src/routes/+layout.server.ts` | Add demo branch that returns `demoState` as `recipeTree` |
-| `src/routes/+layout.svelte` | Import `registerDemoInterceptor()`; add "Reset demo" button |
-| `src/routes/auth/+page.server.ts` | Skip OTP form in demo mode, auto sign-in as demo user |
+| `src/lib/demo-init.ts` | New — `isDemoMode`, `isDemoHost` |
+| `src/lib/demo-seed.ts` | New — static `SEED_RECIPES`, `SEED_NODES` fixtures |
+| `src/lib/recipe-store.ts` | New — `RecipeStore` interface + `getRecipeStore()` |
+| `src/lib/recipe-store.supabase.ts` | New — adapter wrapping existing handlers |
+| `src/lib/recipe-store.demo.ts` | New — localStorage-backed adapter |
+| `src/lib/supabase-stub.ts` | New — no-op client returning empty results |
+| `src/lib/recipes.ts` | Modify — dispatch functions (`createRecipe`, `renameRecipe`, etc.) |
+| `src/lib/api.ts` | Unchanged — used internally by supabase adapter |
+| `src/hooks.server.ts` | Modify — demo branch installs stub supabase + fake session |
+| `src/routes/+layout.server.ts` | Modify — demo branch returns empty + `demoMode: true` |
+| `src/routes/+layout.svelte` | Modify — mount demo store; gate reset button on `data.demoMode` |
+| `src/routes/auth/+page.server.ts` | Modify — skip OTP form in demo mode |
+| Component call sites | Mechanical refactor: `api.post(...)` → dispatch function |
+| `tests/unit/recipe-store.demo.test.ts` | New — covers each branch against a fixed seed |
 | `docs/features/demo-mode.md` | New — user-facing feature doc |
 
 ## Deployment
 
-`demo.grainofsalt.app` is a separate Vercel project with `VITE_DEMO_MODE=1` set as
-an environment variable. The same codebase is deployed to both
+`demo.grainofsalt.app` is a separate Vercel project with `VITE_DEMO_MODE=1` set
+as an environment variable. The same codebase is deployed to both
 `grainofsalt.app` and `demo.grainofsalt.app` — only the env flag differs.
 
-For local dev: `VITE_DEMO_MODE=1 pnpm run dev` to activate demo mode on any hostname.
+The demo deployment does **not** need real Supabase credentials — the stub
+client satisfies all load functions. Production (`grainofsalt.app`) must **not**
+set `VITE_DEMO_MODE`.
+
+For local dev: `VITE_DEMO_MODE=1 pnpm run dev` to activate demo mode on any
+hostname, or add `127.0.0.1 demo.local` to `/etc/hosts` and visit
+`http://demo.local:5173`.

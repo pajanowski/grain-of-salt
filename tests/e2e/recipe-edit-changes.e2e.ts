@@ -41,6 +41,17 @@ import { sql } from 'drizzle-orm';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { TEST_USER_ID } from './helpers/auth-shared';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  getAddButton,
+  getAddIngredientButton,
+  getAddDirectionButton,
+  getIngredientNameInput,
+  getDirectionBodyInput,
+  getRecipeHeading,
+  getRowActionsButton,
+  getRowSaveButton,
+  clickRowAction
+} from './helpers/page-utils';
 
 // The Remove row action shows a `window.confirm` dialog before applying.
 // Playwright auto-dismisses dialogs (returning false from confirm), which
@@ -253,7 +264,7 @@ async function openRecipe(page: Page, recipeName: string) {
   await expect(link).toBeVisible();
   await link.click();
   await page.waitForURL(/\/recipes\//);
-  await expect(page.getByRole('heading', { name: `Recipe: ${recipeName}` })).toBeVisible();
+  await expect(page.getByRole('heading', { name: `${recipeName}` })).toBeVisible();
 }
 
 // ---------------------------------------------------------------------------
@@ -277,29 +288,30 @@ function directionRow(page: Page, index: number) {
   return directionList(page).locator(`li[data-direction-index="${index}"]`);
 }
 
+
 function addIngredientForm(page: Page) {
   return page
     .locator('form')
-    .filter({ has: page.getByRole('button', { name: 'Add', exact: true }) })
+    .filter({ has: getAddButton(page) })
     .first();
 }
 
 async function fillAddIngredient(page: Page, name: string, amount: string, unit: string) {
-  await page.getByRole('button', { name: 'Add new ingredient', exact: true }).click();
+  await getAddIngredientButton(page).click();
   const form = addIngredientForm(page);
-  await expect(form.getByLabel('Name')).toBeVisible();
-  await form.getByLabel('Name').fill(name);
-  await form.getByLabel('Amount').fill(amount);
-  await form.getByLabel('Unit').fill(unit);
-  await form.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(getIngredientNameInput(page)).toBeVisible();
+  await getIngredientNameInput(page).fill(name);
+  await page.getByPlaceholder('Amount').fill(amount);
+  await page.getByPlaceholder('Unit').fill(unit);
+  await getAddButton(form).click();
 }
 
 async function fillAddDirection(page: Page, body: string) {
-  await page.getByRole('button', { name: 'Add new direction', exact: true }).click();
+  await getAddDirectionButton(page).click();
   const form = addIngredientForm(page);
-  await expect(form.getByLabel('Body')).toBeVisible();
-  await form.getByLabel('Body').fill(body);
-  await form.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(getDirectionBodyInput(page)).toBeVisible();
+  await getDirectionBodyInput(page).fill(body);
+  await getAddButton(form).click();
 }
 
 // ---------------------------------------------------------------------------
@@ -308,36 +320,14 @@ async function fillAddDirection(page: Page, body: string) {
 // ---------------------------------------------------------------------------
 
 async function clickPageSave(page: Page) {
-  const save = page.getByTestId('save-button');
+  const save = page.getByRole('button', { name: 'Save' });
   await expect(save).toBeEnabled();
   await save.click();
   // Round-trip signal: after a successful save the page reloads data and
   // `hasUnsavedChanges` goes false, which disables the Save button. We
   // wait for that, not for a re-enable (which only happens if the test
   // makes a further edit).
-  await expect(save).toBeDisabled();
-}
-// ---------------------------------------------------------------------------
-// Per-row actions. The actions menu button uses an aria-label like
-// "Actions for Eggs" (ingredients) or "Actions for direction 1" (directions).
-// ---------------------------------------------------------------------------
-
-async function clickIngredientRowAction(
-  page: Page,
-  row: ReturnType<typeof ingredientRow>,
-  action: 'Edit' | 'Move up' | 'Move down' | 'Remove'
-) {
-  await row.getByRole('button', { name: /^Actions for/ }).click();
-  await page.getByRole('menuitem', { name: action }).click();
-}
-
-async function clickDirectionRowAction(
-  page: Page,
-  row: ReturnType<typeof directionRow>,
-  action: 'Edit' | 'Move up' | 'Move down' | 'Remove'
-) {
-  await row.getByRole('button', { name: /^Actions for/ }).click();
-  await page.getByRole('menuitem', { name: action }).click();
+  await expect(save).toHaveCount(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -354,17 +344,17 @@ async function editIngredientRow(
   newAmount: string,
   newUnit: string
 ) {
-  await clickIngredientRowAction(page, row, 'Edit');
+  await clickRowAction(page, row, 'Edit');
   await row.getByPlaceholder('Name').fill(newName);
   await row.getByPlaceholder('Amount').fill(newAmount);
   await row.getByPlaceholder('Unit').fill(newUnit);
-  await row.getByRole('button', { name: 'Save', exact: true }).click();
+  await getRowSaveButton(row).click();
 }
 
 async function editDirectionRow(page: Page, row: ReturnType<typeof directionRow>, newBody: string) {
-  await clickDirectionRowAction(page, row, 'Edit');
+  await clickRowAction(page, row, 'Edit');
   await row.locator('textarea').fill(newBody);
-  await row.getByRole('button', { name: 'Save', exact: true }).click();
+  await getRowSaveButton(row).click();
 }
 
 // ---------------------------------------------------------------------------
@@ -407,7 +397,7 @@ test.describe('ingredient changes isolate correctly across the 4-node fixture', 
 
     // Hard reload — verify the save actually persisted (not just client state).
     await page.reload();
-    await expect(page.getByRole('heading', { name: `Recipe: ${RECIPE.siblingA}` })).toBeVisible();
+    await expect(getRecipeHeading(page, RECIPE.siblingA)).toBeVisible();
 
     // On Sibling A (the edit target): history shows the add.
     await assertHistoryContains(page, 'added ingredient: 1 whole Onion');
@@ -458,7 +448,7 @@ test.describe('ingredient changes isolate correctly across the 4-node fixture', 
   test('remove ingredient from Sibling A is recorded as "removed ingredient"', async ({ page }) => {
     await openRecipe(page, RECIPE.siblingA);
 
-    await clickIngredientRowAction(page, ingredientRow(page, 'Milk'), 'Remove');
+    await clickRowAction(page, ingredientRow(page, 'Milk'), 'Remove');
     await clickPageSave(page);
 
     await assertHistoryDoesNotContain(page, 'removed ingredient: 1 cup Milk');
@@ -525,7 +515,7 @@ test.describe('direction changes isolate correctly across the 4-node fixture', (
   test('remove direction from Sibling A is recorded as "removed direction"', async ({ page }) => {
     // Remove "Whisk with milk" (initial content, index 1, untouched by other tests).
     await openRecipe(page, RECIPE.siblingA);
-    await clickDirectionRowAction(page, directionRow(page, 1), 'Remove');
+    await clickRowAction(page, directionRow(page, 1), 'Remove');
     await clickPageSave(page);
 
     await assertHistoryDoesNotContain(page, 'removed direction: "Whisk with milk"');

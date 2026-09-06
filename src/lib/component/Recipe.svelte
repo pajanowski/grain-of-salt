@@ -418,6 +418,7 @@
 					<input
 						class="border rounded px-3 py-2"
 						placeholder="Ingredient name"
+						aria-label="Ingredient name"
 						bind:value={newIngredient.name}
 					/>
 					<div class="flex gap-2">
@@ -505,6 +506,7 @@
 						class="border rounded px-3 py-2 w-full"
 						rows="3"
 						placeholder="Direction"
+						aria-label="Direction"
 						bind:value={newDirection.body}
 					></textarea>
 					<div class="flex gap-2">
