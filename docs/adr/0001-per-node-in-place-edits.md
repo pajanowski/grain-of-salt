@@ -79,7 +79,7 @@ Update `src/routes/recipes/[slug]/+page.server.ts` to also return `currentNode: 
 1. Stop mutating `recipeData.ingredients[i]` / `.directions[i]` directly. Track `leafIngredientChanges` / `leafDirectionChanges` as state, initialized from `data.currentNode`.
 2. Compute ownership per visible row using `row.id` (= add change id) and the leaf's change arrays.
 3. Map per-row handlers per the case rules above (same shape for ingredients and directions).
-4. Save = `fetch('/api/recipe-node/${currentNode.id}', { method:'PUT', ... })` then `invalidateAll()`.
+4. Save = `api.put('/api/recipe-node/${currentNode.id}', { nodeId, ingredientChanges, directionChanges })` then `invalidateAll()`.
 
 ### Phase 4 — Tests
 

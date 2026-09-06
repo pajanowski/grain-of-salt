@@ -2,8 +2,9 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import RecipeList from '$lib/component/RecipeList.svelte';
-	import { invalidateAll } from '$app/navigation';
+	import { api, errorMessage } from '$lib/api';
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 
 	let { data, children } = $props();
 
@@ -36,27 +37,21 @@
 					<input bind:value={newRecipeName} />
 				</form>
 				<div class="flex flex-row gap-2">
-					<button
-						onclick={() => {
-							fetch('/api/save', {
-								method: 'POST',
-								body: new URLSearchParams({ recipeName: newRecipeName })
-							}).then((res) => {
-								// TODO: surface server errors — this handler ignores
-								//       res.ok and closes the form on any response.
-								//       See "server failure during save" in
-								//       tests/e2e/recipe-create.e2e.ts.
+				<button
+					onclick={() => {
+						api
+							.post('/api/save', new URLSearchParams({ recipeName: newRecipeName }))
+							.then(() => {
 								invalidateAll();
-								// TODO: also reset `newRecipeName = ''` here so
-								//       re-opening the form starts blank. Only
-								//       Cancel resets it today, so a successful
-								//       submit leaves a stale value in the input.
 								createRecipe = false;
+							})
+							.catch((e) => {
+								alert(`Create failed: ${errorMessage(e)}`);
 							});
-						}}
-					>
-						Create
-					</button>
+					}}
+				>
+					Create
+				</button>
 					<button
 						onclick={() => {
 							newRecipeName = '';

@@ -15,9 +15,11 @@
  */
 
 import { expect, type Page } from '@playwright/test';
+import axios from 'axios';
 import { TEST_USER_EMAIL } from './auth-shared';
 
 const INBUCKET_BASE = process.env.MAILPIT_URL ?? 'http://127.0.0.1:54324';
+const inbox = axios.create({ baseURL: INBUCKET_BASE });
 
 interface InbucketMessage {
 	mailbox: string;
@@ -42,24 +44,16 @@ async function fetchLatestCodeFor(toEmail: string): Promise<string> {
 	const localPart = toEmail.split('@')[0];
 	const mailbox = encodeURIComponent(localPart);
 
-	const list = await fetch(`${INBUCKET_BASE}/api/v1/mailbox/${mailbox}`);
-	if (!list.ok) {
-		throw new Error(`Inbucket mailbox ${localPart} fetch failed: ${list.status}`);
-	}
-	const messages = (await list.json()) as InbucketMessage[];
+	const { data: messages } = await inbox.get<InbucketMessage[]>(`/api/v1/mailbox/${mailbox}`);
 	if (messages.length === 0) {
 		throw new Error(`No Inbucket messages in mailbox ${localPart}`);
 	}
 
 	const latest = messages[messages.length - 1];
 
-	const detail = await fetch(
-		`${INBUCKET_BASE}/api/v1/mailbox/${mailbox}/${encodeURIComponent(latest.id)}`
+	const { data: msg } = await inbox.get<InbucketMessageDetail>(
+		`/api/v1/mailbox/${mailbox}/${encodeURIComponent(latest.id)}`
 	);
-	if (!detail.ok) {
-		throw new Error(`Inbucket detail failed: ${detail.status}`);
-	}
-	const msg = (await detail.json()) as InbucketMessageDetail;
 
 	const haystack = `${msg.body.html ?? ''}\n${msg.body.text ?? ''}`;
 	const match = haystack.match(/\b(\d{8})\b/);

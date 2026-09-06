@@ -48,14 +48,15 @@ async function openMenu(page: Page) {
 }
 
 async function createTempRecipe(page: Page, name: string): Promise<string> {
-  const res = await page.evaluate(
-    (name) => fetch('/api/save', { method: 'POST', body: new URLSearchParams({ recipeName: name }) }),
-    name,
-  );
-  if (!res.ok()) {
-    throw new Error(`createTempRecipe failed: ${await res.text()}`);
-  }
-  return name;
+	// page.request carries cookies from the signed-in browser context, so the
+	// API call is authenticated without needing to juggle credentials.
+	const res = await page.request.post('/api/save', {
+		form: { recipeName: name }
+	});
+	if (!res.ok()) {
+		throw new Error(`createTempRecipe failed: ${await res.text()}`);
+	}
+	return name;
 }
 
 // ---------------------------------------------------------------------------

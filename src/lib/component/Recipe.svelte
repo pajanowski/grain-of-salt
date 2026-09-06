@@ -14,6 +14,7 @@
 	import NodeChanges from './NodeChanges.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
 	import { invalidateAll, goto, invalidate } from '$app/navigation';
+	import { api, errorMessage } from '$lib/api';
 
 	const { data } = $props();
 
@@ -323,27 +324,26 @@
 	function performSave() {
 		if (!hasUnsavedChanges) return;
 		savePromise = new Promise((resolve) => (saveResolve = resolve));
-		fetch(`/api/recipe-node/${currentNode.id}`, {
-			method: 'PUT',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({
+		api
+			.put(`/api/recipe-node/${currentNode.id}`, {
 				nodeId: currentNode.id,
 				ingredientChanges: leafIngredientChanges,
 				directionChanges: leafDirectionChanges
 			})
-		}).then(async (res) => {
-			if (!res.ok) {
-				alert(`Save failed: ${await res.text()}`);
-			} else {
+			.then(async () => {
 				await invalidateAll();
 				// Force the sync $effect to re-run. The server wrote the leaf's
 				// change arrays, so data.currentNode carries the updated values.
 				// Resetting syncedNodeId makes the effect re-copy them into the
 				// leaf state vars — snapshotKey(leaf) === snapshotKey(server).
 				syncedNodeId = null;
-			}
-			saveResolve();
-		});
+			})
+			.catch((e) => {
+				alert(`Save failed: ${errorMessage(e)}`);
+			})
+			.finally(() => {
+				saveResolve();
+			});
 	}
 
 	function performReset() {
@@ -366,22 +366,15 @@
 		if (!trimmed || renameBusy) return;
 		renameBusy = true;
 		try {
-			const res = await fetch(`/api/recipe/${rootNodeId}`, {
-				method: 'PATCH',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ name: trimmed })
-			});
-			if (!res.ok) {
-				alert(`Rename failed: ${await res.text()}`);
-				return;
-			}
+			await api.patch(`/api/recipe/${rootNodeId}`, { name: trimmed });
 			await invalidate('app:recipe-tree');
 			showRenameModal = false;
+		} catch (e) {
+			alert(`Rename failed: ${errorMessage(e)}`);
 		} finally {
 			renameBusy = false;
 		}
 	}
-
 	// ---- fork modal state ----
 	let showForkModal = $state(false);
 	let forkName = $state('');
@@ -391,41 +384,33 @@
 		forkName = recipe.name + ' (fork)';
 		showForkModal = true;
 	}
-
 	async function confirmFork() {
 		const trimmed = forkName.trim();
 		if (!trimmed || forkBusy) return;
 		forkBusy = true;
 		try {
-			const res = await fetch(`/api/recipe/${currentNode.id}/fork`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ name: trimmed })
-			});
-			if (!res.ok) {
-				alert(`Fork failed: ${await res.text()}`);
-				return;
-			}
-			const newRecipe = await res.json();
+			const { data: newRecipe } = await api.post<{ id: string }>(
+				`/api/recipe/${currentNode.id}/fork`,
+				{ name: trimmed }
+			);
 			showForkModal = false;
 			await invalidate('app:recipe-tree');
 			await goto(`/recipes/${newRecipe.id}`);
 		} catch (e) {
-			alert(`Fork failed: ${(e as Error).message}`);
+			alert(`Fork failed: ${errorMessage(e)}`);
 		} finally {
 			forkBusy = false;
 		}
 	}
 
-	// ---- delete ----
 	async function confirmDelete() {
 		if (!confirm(`Delete "${recipe.name}"? This cannot be undone.`)) return;
-		const res = await fetch(`/api/recipe/${rootNodeId}`, { method: 'DELETE' });
-		if (!res.ok) {
-			alert(`Delete failed: ${await res.text()}`);
-			return;
+		try {
+			await api.delete(`/api/recipe/${rootNodeId}`);
+			await goto('/');
+		} catch (e) {
+			alert(`Delete failed: ${errorMessage(e)}`);
 		}
-		await goto('/');
 	}
 
 	const menuItems: MenuItem[] = $derived([
