@@ -9,7 +9,7 @@ import { defineConfig, devices } from '@playwright/test';
  * The container shares the host's network namespace (`--network host`),
  * so `localhost` inside the container reaches the host's preview server.
  */
-const PORT = 5173;
+const PORT = 4173;
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({

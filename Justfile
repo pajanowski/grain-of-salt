@@ -7,7 +7,7 @@ install:
     pnpm install
 
 dev:
-    pnpm dev &
+    pnpm dev
 
 run: dev
 
@@ -74,8 +74,8 @@ test-db-deps:
     pnpm db:start
     pnpm db:push
 
-playwright-install:
-    pnpm exec playwright install --with-deps chromium
+playwright-exec *extra:
+    pnpm exec playwright {{extra}} 
 
 # db deps + dev server
 test-deps: test-db-deps dev
@@ -103,6 +103,7 @@ test-e2e-ui *extra:
     DATABASE_URL='postgres://postgres:postgres@127.0.0.1:54322/postgres' \
     PUBLIC_SUPABASE_URL='http://127.0.0.1:54321' \
     MAILPIT_URL='http://127.0.0.1:54324' \
+    PLAYWRIGHT_BASE_URL='http://localhost:4173' \
     pnpm exec playwright test --ui {{extra}}
 
 # --- db ------------------------------------------------------------------------
