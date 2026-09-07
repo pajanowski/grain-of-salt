@@ -12,10 +12,21 @@
 	let createRecipe = $state(false);
 	let newRecipeName = $state('');
 	let inputEl = $state<HTMLInputElement | null>(null);
+	let importRecipe = $state(false);
+	let importUrl = $state('');
+	let importUrlInputEl = $state<HTMLInputElement | null>(null);
+	let importLoading = $state(false);
+	let importError = $state<string | null>(null);
 
 	$effect(() => {
 		if (createRecipe && inputEl) {
 			inputEl.focus();
+		}
+	});
+
+	$effect(() => {
+		if (importRecipe && importUrlInputEl) {
+			importUrlInputEl.focus();
 		}
 	});
 
@@ -39,6 +50,51 @@
 			newRecipeName = '';
 			createRecipe = false;
 		}
+	}
+
+	function importKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') handleImport();
+		if (e.key === 'Escape') {
+			importUrl = '';
+			importRecipe = false;
+		}
+	}
+
+	function handleImport() {
+		if (!importUrl.trim()) return;
+		importLoading = true;
+		importError = null;
+
+		// Step 1: client fetches the URL directly (bypasses server-side bot detection)
+		// Step 2: send HTML + URL to server for parsing
+		fetch(importUrl, {
+			signal: AbortSignal.timeout(10_000),
+			headers: {
+				'User-Agent':
+					'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+			}
+		})
+			.then((res) => {
+				if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+				return res.text();
+			})
+			.then((html) => api.post('/api/import', { url: importUrl, html }))
+			.catch(() => {
+				// CORS or fetch failed — fall back to server-side fetch
+				return api.post('/api/import', { url: importUrl });
+			})
+			.then(() => {
+				importUrl = '';
+				importError = null;
+				importRecipe = false;
+				invalidateAll();
+			})
+			.catch((e) => {
+				importError = errorMessage(e);
+			})
+			.finally(() => {
+				importLoading = false;
+			});
 	}
 </script>
 
@@ -136,7 +192,6 @@
 				</button>
 			</div>
 
-			<!-- Scrollable content -->
 			<div class="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
 				<RecipeList recipeTree={data.recipeTree} />
 
@@ -184,18 +239,95 @@
 						Create Recipe
 					</button>
 				{/if}
+
+				{#if importRecipe}
+					<div class="rounded-lg border border-stone-300 bg-stone-50 p-4 shadow-sm">
+						<p class="mb-3 font-semibold text-stone-800">Import from URL</p>
+						<div class="flex flex-col gap-3">
+							<input
+								bind:this={importUrlInputEl}
+								bind:value={importUrl}
+								onkeydown={importKeydown}
+								placeholder="https://example.com/recipe"
+								disabled={importLoading}
+								class="text-sm"
+							/>
+							{#if importError}
+								<p class="text-xs text-red-600">{importError}</p>
+							{/if}
+							<div class="flex gap-2">
+								<button onclick={handleImport} disabled={importLoading}>
+									{importLoading ? 'Importing…' : 'Import'}
+								</button>
+								<button
+									class="secondary"
+									disabled={importLoading}
+									onclick={() => {
+										importUrl = '';
+										importError = null;
+										importRecipe = false;
+									}}
+								>
+									Cancel
+								</button>
+							</div>
+						</div>
+					</div>
+				{:else}
+					<button
+						onclick={() => (importRecipe = true)}
+						class="flex items-center gap-2"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							class="h-4 w-4"
+							aria-hidden="true"
+						>
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+							<polyline points="7 10 12 15 17 10" />
+							<line x1="12" x2="12" y1="15" y2="3" />
+						</svg>
+						Import from URL
+					</button>
+				{/if}
 			</div>
 
 			<!-- Auth footer -->
 			<div class="border-t border-stone-200 p-4">
-				{#if data.user}
-					<div class="flex flex-col gap-2">
-						<span class="text-xs text-stone-500">Signed in as {data.user.email}</span>
-						<form method="POST" action="/auth?/logout" use:enhance>
-							<button type="submit" class="secondary w-full text-sm">Sign out</button>
-						</form>
-					</div>
-				{:else}
+			{#if data.user}
+				<div class="flex flex-col gap-2">
+					<span class="text-xs text-stone-500">Signed in as {data.user.email}</span>
+					<a
+						href="/me"
+						class="secondary flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							class="h-4 w-4"
+							aria-hidden="true"
+						>
+							<circle cx="12" cy="8" r="4" />
+							<path d="M6 20c0-4 2.7-6 6-6s6 2 6 6" />
+						</svg>
+						Profile
+					</a>
+					<form method="POST" action="/auth?/logout" use:enhance>
+						<button type="submit" class="secondary w-full text-sm">Sign out</button>
+					</form>
+				</div>
+			{:else}
 					<a
 						href="/auth"
 						class="secondary flex items-center gap-2 rounded-lg px-3 py-2 text-sm"

@@ -4,6 +4,7 @@ import {
 	InvalidChangeError,
 	type UpdateRecipeNodePayload
 } from '$lib/server/bo/recipenodesbo';
+import { getProfile } from '$lib/server/profiles';
 
 /**
  * PUT /api/recipe-node/[nodeId]
@@ -41,7 +42,9 @@ export const PUT: RequestHandler = async ({ request, params, locals }) => {
 	}
 
 	try {
-		const state = await updateRecipeNode(body, ownerId);
+		const profile = await getProfile(ownerId);
+		const author = profile?.displayName ?? null;
+		const state = await updateRecipeNode(body, ownerId, author);
 		return new Response(JSON.stringify(state), {
 			status: 200,
 			headers: { 'content-type': 'application/json' }

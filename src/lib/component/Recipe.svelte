@@ -269,7 +269,6 @@
 		return dir.body || '(empty)';
 	}
 
-
 	function snapshotKey(
 		changes: { id: string; changeType: string; body: unknown; note: string | null }[]
 	): string {
@@ -361,12 +360,13 @@
 
 	async function confirmDelete() {
 		if (!confirm(`Delete "${recipe.name}"? This cannot be undone.`)) return;
-		try {
-			await api.delete(`/api/recipe/${rootNodeId}`);
-			await goto('/');
-		} catch (e) {
-			alert(`Delete failed: ${errorMessage(e)}`);
+		const res = await fetch(`/api/recipe/${rootNodeId}`, { method: 'DELETE' });
+		if (!res.ok) {
+			alert(`Delete failed: ${res.status} ${res.statusText}`);
+			return;
 		}
+		await invalidate('app:recipe-tree');
+		await goto('/');
 	}
 
 	const menuItems: MenuItem[] = $derived([
@@ -379,7 +379,15 @@
 <div class="mx-auto flex max-w-3xl flex-col gap-6">
 	<!-- Recipe header -->
 	<div class="flex items-center justify-between">
-		<h1 class="text-2xl font-bold">{recipe.name}</h1>
+		<div>
+			<h1 class="text-2xl font-bold">{recipe.name}</h1>
+			{#if data.currentNode.author}
+				<p class="text-sm text-stone-500">by {data.currentNode.author}</p>
+			{/if}
+			{#if data.currentNode.source}
+				<p class="text-sm text-stone-400">via {data.currentNode.source}</p>
+			{/if}
+		</div>
 		<ContextMenu items={menuItems} label="Recipe actions" />
 	</div>
 
@@ -507,8 +515,7 @@
 						rows="3"
 						placeholder="Direction"
 						aria-label="Direction"
-						bind:value={newDirection.body}
-					></textarea>
+						bind:value={newDirection.body}></textarea>
 					<div class="flex gap-2">
 						<button
 							type="button"
@@ -580,7 +587,12 @@
 
 <Modal bind:showModal={showRenameModal}>
 	{#snippet header()}<h2 class="font-semibold">Rename recipe</h2>{/snippet}
-	<form onsubmit={(e) => { e.preventDefault(); confirmRename(); }}>
+	<form
+		onsubmit={(e) => {
+			e.preventDefault();
+			confirmRename();
+		}}
+	>
 		<label class="flex flex-col gap-1">
 			<span class="text-sm font-medium">New name</span>
 			<input bind:value={renameName} aria-label="New recipe name" />
@@ -596,15 +608,19 @@
 
 <Modal bind:showModal={showForkModal}>
 	{#snippet header()}<h2 class="font-semibold">Fork recipe</h2>{/snippet}
-	<form onsubmit={(e) => { e.preventDefault(); confirmFork(); }}>
+	<form
+		onsubmit={(e) => {
+			e.preventDefault();
+			confirmFork();
+		}}
+	>
 		<label class="flex flex-col gap-1">
 			<span class="text-sm font-medium">Fork name</span>
 			<input bind:value={forkName} aria-label="Forked recipe name" />
 		</label>
 		<div class="mt-3 flex gap-2">
 			<button type="submit" disabled={forkBusy}>{forkBusy ? 'Forking…' : 'Fork'}</button>
-			<button type="button" class="secondary" onclick={() => (showForkModal = false)}
-				>Cancel</button
+			<button type="button" class="secondary" onclick={() => (showForkModal = false)}>Cancel</button
 			>
 		</div>
 	</form>

@@ -46,9 +46,11 @@ function node(
     name: partial.name ?? 'Test Recipe',
     parentId: partial.parentId ?? null,
     label: partial.label ?? null,
-    timestamp: partial.timestamp ?? 0,
+    timestamp: partial.timestamp ?? new Date(0),
     ingredientChanges: partial.ingredientChanges ?? [],
     directionChanges: partial.directionChanges ?? [],
+    author: null,
+    source: null,
   };
 }
 
@@ -712,10 +714,12 @@ function seedNode(
     id,
     name,
     parentId,
+    timestamp: 0 as unknown as Date,
     label,
-    timestamp: 0,
     ingredientChanges: changes.ingredientChanges,
     directionChanges: changes.directionChanges,
+    author: null,
+    source: null,
   };
 }
 

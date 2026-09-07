@@ -46,4 +46,8 @@ export interface RecipeNode {
   timestamp: Date;
   ingredientChanges: IngredientChange[];
   directionChanges: DirectionChange[];
+  /** Author display name, set on first fork/edit. */
+  author: string | null;
+  /** Source hostname, set on import. */
+  source: string | null;
 }

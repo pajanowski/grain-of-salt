@@ -39,7 +39,9 @@ export const recipeNodes = pgTable('recipe_nodes', {
 	directionChanges: jsonb('direction_changes')
 		.$type<DirectionChange[]>()
 		.notNull()
-		.default([])
+		.default([]),
+	author: text('author'),
+	source: text('source'),
 });
 
 

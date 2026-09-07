@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Ingredient } from '$lib/obj/Recipe.svelte';
+	import { formatAmount } from '$lib/formatAmount';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 
 	type Props = {
@@ -91,7 +92,7 @@
 		<span class="flex-1">
 			<span class="opacity-60 mr-2">{index + 1}.</span>
 			<span>{ingredient.name}</span>
-			<span class="opacity-60 ml-1">{ingredient.amount}</span>
+			<span class="opacity-60 ml-1">{formatAmount(ingredient.amount)}</span>
 			<span class="opacity-60 ml-1">{ingredient.unit}</span>
 		</span>
 		{#if note}

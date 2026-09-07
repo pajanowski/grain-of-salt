@@ -54,9 +54,11 @@ function node(
     name: partial.name ?? 'Test',
     parentId: partial.parentId ?? null,
     label: partial.label ?? null,
-    timestamp: partial.timestamp ?? 0,
+    timestamp: partial.timestamp ?? new Date(0),
     ingredientChanges: partial.ingredientChanges ?? [],
     directionChanges: partial.directionChanges ?? [],
+    author: null,
+    source: null,
   };
 }
 

@@ -1,5 +1,6 @@
 import type { RequestHandler } from './$types';
 import { forkRecipe } from '$lib/server/bo/recipesbo';
+import { getProfile } from '$lib/server/profiles';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { recipeNodes } from '$lib/server/db/schema';
@@ -51,7 +52,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	}
 
 	try {
-		const newRecipe = await forkRecipe(sourceNodeId, body.name.trim());
+		const profile = await getProfile(ownerId);
+		const author = profile?.displayName ?? null;
+		const newRecipe = await forkRecipe(sourceNodeId, body.name.trim(), author);
 		return new Response(JSON.stringify(newRecipe), {
 			status: 201,
 			headers: { 'content-type': 'application/json' }

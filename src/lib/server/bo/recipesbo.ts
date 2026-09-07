@@ -1,25 +1,35 @@
-import type { Recipe } from '$lib/obj/Recipe.svelte';
-import { and, eq } from 'drizzle-orm';
-import { db } from '../db/index';
-import { recipeNodes } from '../db/schema';
-import {
-	appendRecipeNode,
-	createRootRecipeNode,
-	getRecipeNodesByRecipeId,
-} from './recipenodesbo';
-import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
+import { eq, and } from 'drizzle-orm';
+import { db } from '$lib/server/db';
+import { recipeNodes } from '$lib/server/db/schema';
+import { toUiRecipeNode, createRootRecipeNode, getRecipeNodesByRecipeId } from './recipenodesbo';
+import type { IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
 
+export async function saveNewRecipe(
+	recipe: Recipe,
+	ownerId: string,
+	author?: string | null,
+	source?: string | null,
+): Promise<Recipe> {
+	const ingredientChanges: IngredientChange[] = recipe.ingredients.map((ing: Ingredient) => ({
+		changeType: 'add' as const,
+		id: ing.id,
+		body: { ...ing },
+	}));
+	const directionChanges: DirectionChange[] = recipe.directions.map((dir: Direction) => ({
+		changeType: 'add' as const,
+		id: dir.id,
+		body: { ...dir },
+	}));
 
-/**
- * Create a new recipe owned by `ownerId`. The initial root node is created in
- * the same flow so the history is well-formed from the start.
- *
- * After creation, the recipe's identity is the new root node's id, which is
- * what `recipe.id` is set to.
- */
-export async function saveNewRecipe(recipe: Recipe, ownerId: string): Promise<Recipe> {
 	recipe.id = '';
-	const root = await createRootRecipeNode(recipe.name, ownerId);
+	const root = await createRootRecipeNode(
+		recipe.name,
+		ownerId,
+		author,
+		source,
+		ingredientChanges,
+		directionChanges,
+	);
 	recipe.id = root.id;
 	return recipe;
 }
@@ -27,10 +37,10 @@ export async function saveNewRecipe(recipe: Recipe, ownerId: string): Promise<Re
 /**
  * Fork a recipe: append a new node to the chain rooted at `fromLeafNodeId`.
  *
- * Per ADR 0002, "fork" means chain extension — the new node joins the
- * existing chain with `parentId = fromLeafNodeId` and empty change arrays.
- * The new node's materialized state is identical to the source's until
- * the user adds their own changes. Ownership is propagated from the
+ * Per ADR 0002, "fork" means chain extension: a new node is appended to
+ * the existing chain with `parentId = fromLeafNodeId` and empty change
+ * arrays. The new node's materialized state is identical to the source's
+ * until the user adds their own changes. Ownership is propagated from the
  * parent inside `appendRecipeNode`; the route handler is responsible for
  * having verified the caller can see the source chain.
  *
@@ -41,11 +51,10 @@ export async function saveNewRecipe(recipe: Recipe, ownerId: string): Promise<Re
 export async function forkRecipe(
 	fromLeafNodeId: string,
 	newName: string,
+	author?: string | null,
 ): Promise<RecipeNode> {
-	return await appendRecipeNode(fromLeafNodeId, newName, [], []);
+	return await appendRecipeNode(fromLeafNodeId, newName, [], [], null, author);
 }
-
-
 
 /**
  * Delete a recipe by deleting its root node. Refuses to delete a recipe

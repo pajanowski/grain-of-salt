@@ -14,21 +14,23 @@ export interface RecipeState {
 	directions: Direction[];
 }
 
-/**
- * Create a root node for a brand-new recipe owned by `ownerId`.
- * The root node has parentId = null.
- */
 export async function createRootRecipeNode(
 	name: string,
 	ownerId: string,
+	author?: string | null,
+	source?: string | null,
+	ingredientChanges: IngredientChange[] = [],
+	directionChanges: DirectionChange[] = [],
 ): Promise<RecipeNode> {
 	const row: InsertRecipeNode = {
 		parentId: null,
 		ownerId,
 		name,
 		label: null,
-		ingredientChanges: [],
-		directionChanges: [],
+		ingredientChanges,
+		directionChanges,
+		author: author ?? null,
+		source: source ?? null,
 	};
 	const [inserted] = await db.insert(recipeNodes).values(row).returning();
 	return toUiRecipeNode(inserted);
@@ -49,6 +51,7 @@ export async function appendRecipeNode(
 	ingredientChanges: IngredientChange[],
 	directionChanges: DirectionChange[],
 	label: string | null = null,
+	author?: string | null,
 ): Promise<RecipeNode> {
 	// Look up the parent to inherit ownerId.
 	const parentRows = await db
@@ -68,6 +71,7 @@ export async function appendRecipeNode(
 		label,
 		ingredientChanges,
 		directionChanges,
+		author: author ?? null,
 	};
 	const [inserted] = await db.insert(recipeNodes).values(row).returning();
 	return toUiRecipeNode(inserted);
@@ -236,6 +240,8 @@ function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 		timestamp: row.timestamp instanceof Date ? row.timestamp : new Date(row.timestamp),
 		ingredientChanges: (row.ingredientChanges ?? []) as IngredientChange[],
 		directionChanges: (row.directionChanges ?? []) as DirectionChange[],
+		author: row.author ?? null,
+		source: row.source ?? null,
 	};
 }
 
@@ -393,6 +399,7 @@ async function assertNodeOwnership(nodeId: string, ownerId: string): Promise<voi
 export async function updateRecipeNode(
 	payload: UpdateRecipeNodePayload,
 	ownerId: string,
+	author?: string | null,
 ): Promise<RecipeState> {
 	validatePayload(payload);
 	await assertNodeOwnership(payload.nodeId, ownerId);
@@ -411,6 +418,7 @@ export async function updateRecipeNode(
 		directionChanges: DirectionChange[];
 		timestamp: Date;
 		label?: string | null;
+		author?: string | null;
 	} = {
 		ingredientChanges: payload.ingredientChanges,
 		directionChanges: payload.directionChanges,
@@ -418,6 +426,10 @@ export async function updateRecipeNode(
 	};
 	if (payload.label !== undefined) {
 		set.label = payload.label;
+	}
+	// First-edit-wins: only write author when the node has no author yet.
+	if (author != null) {
+		set.author = author;
 	}
 
 	await db.update(recipeNodes).set(set).where(eq(recipeNodes.id, payload.nodeId));
