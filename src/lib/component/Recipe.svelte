@@ -287,7 +287,7 @@
 	function performSave() {
 		if (!hasUnsavedChanges) return;
 		api
-			.put(`/api/recipe-node/${currentNode.id}`, {
+			.put(`/mise/api/recipe-node/${currentNode.id}`, {
 				nodeId: currentNode.id,
 				ingredientChanges: leafIngredientChanges,
 				directionChanges: leafDirectionChanges
@@ -320,7 +320,7 @@
 		if (!trimmed || renameBusy) return;
 		renameBusy = true;
 		try {
-			await api.patch(`/api/recipe/${rootNodeId}`, { name: trimmed });
+			await api.patch(`/mise/api/recipe/${rootNodeId}`, { name: trimmed });
 			await invalidate('app:recipe-tree');
 			showRenameModal = false;
 		} catch (e) {
@@ -345,12 +345,12 @@
 		forkBusy = true;
 		try {
 			const { data: newRecipe } = await api.post<{ id: string }>(
-				`/api/recipe/${currentNode.id}/fork`,
+			`/mise/api/recipe/${currentNode.id}/fork`,
 				{ name: trimmed }
 			);
 			showForkModal = false;
 			await invalidate('app:recipe-tree');
-			await goto(`/recipes/${newRecipe.id}`);
+			await goto(`/mise/recipes/${newRecipe.id}`);
 		} catch (e) {
 			alert(`Fork failed: ${errorMessage(e)}`);
 		} finally {
@@ -360,13 +360,13 @@
 
 	async function confirmDelete() {
 		if (!confirm(`Delete "${recipe.name}"? This cannot be undone.`)) return;
-		const res = await fetch(`/api/recipe/${rootNodeId}`, { method: 'DELETE' });
+		const res = await fetch(`/mise/api/recipe/${rootNodeId}`, { method: 'DELETE' });
 		if (!res.ok) {
 			alert(`Delete failed: ${res.status} ${res.statusText}`);
 			return;
 		}
 		await invalidate('app:recipe-tree');
-		await goto('/');
+		await goto('/mise');
 	}
 
 	const menuItems: MenuItem[] = $derived([

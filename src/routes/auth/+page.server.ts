@@ -1,13 +1,14 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { env } from '$env/dynamic/public';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const { session, user } = await locals.safeGetSession();
 	if (session && user) {
 		// Already logged in — bounce home.
-		throw redirect(303, url.searchParams.get('next') ?? '/');
+		throw redirect(303, url.searchParams.get('next') ?? '/mise');
 	}
-	return {};
+	return { supabaseConfigured: Boolean(env.PUBLIC_SUPABASE_URL), isLocal: /localhost|127\.0\.0\.1/.test(env.PUBLIC_SUPABASE_URL ?? '') };
 };
 
 export const actions: Actions = {
@@ -32,7 +33,7 @@ export const actions: Actions = {
 				// `site_url` happens to be set to. Supabase still requires
 				// this origin be present in Auth → URL Configuration →
 				// Additional Redirect URLs on the hosted project.
-				emailRedirectTo: `${url.origin}/auth`
+			emailRedirectTo: `${url.origin}/auth`
 			}
 		});
 
@@ -66,7 +67,7 @@ export const actions: Actions = {
 			return fail(400, { step: 'verify', email, error: error.message });
 		}
 
-		throw redirect(303, url.searchParams.get('next') ?? '/');
+		throw redirect(303, url.searchParams.get('next') ?? '/mise');
 	},
 
 	/**

@@ -158,7 +158,7 @@ export default async function globalSetup() {
  * playwright.config.ts); `signInAsTestUser` navigates to relative URLs.
  */
 async function captureTestUserStorageState() {
-	const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173';
+	const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:4173';
 
 	const browser = await chromium.launch();
 	try {

@@ -10,7 +10,7 @@
 	{#if parentChain.length > 0}
 		<nav class="mb-4 text-sm text-stone-500">
 			{#each parentChain as p, i (p.id)}
-				<a href="/recipes/{p.id}" class="hover:underline">{p.name}</a>{i < parentChain.length - 1 ? ' → ' : ''}
+			<a href="/mise/recipes/{p.id}" class="hover:underline">{p.name}</a>{i < parentChain.length - 1 ? ' → ' : ''}
 			{/each}
 			<span>→ </span>
 		</nav>

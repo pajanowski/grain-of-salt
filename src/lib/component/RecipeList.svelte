@@ -144,7 +144,7 @@
 									</svg>
 								</button>
 								<a
-									href="/recipes/{node.id}"
+									href="/mise/recipes/{node.id}"
 									class="flex-1 truncate rounded px-1.5 py-0.5 hover:underline"
 								>
 									{node.name}

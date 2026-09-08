@@ -256,7 +256,7 @@ if (process.env.PLAYWRIGHT_USE_DEV) {
  * helper works for the 4 fixture nodes and any other recipes in the tree.
  */
 async function openRecipe(page: Page, recipeName: string) {
-  await page.goto('/');
+  await page.goto('/mise');
   await expect(page.getByRole('heading', { name: 'Recipe List' })).toBeVisible();
   const link = page
     .getByRole('link', { name: new RegExp(`^\\s*(↳\\s+)?${recipeName}\\b`) })

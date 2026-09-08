@@ -23,7 +23,7 @@ test('delete recipe removes it from the list and returns 404', async ({ page }) 
   const recipeName = uuidv4();
 
   // Create the recipe via the home page form
-  await page.goto('/');
+  await page.goto('/mise');
   await openCreateForm(page);
   await getRecipeNameInput(page).fill(recipeName);
   await getCreateButton(page).click();
@@ -45,7 +45,7 @@ test('delete recipe removes it from the list and returns 404', async ({ page }) 
   await page.getByRole('menuitem', { name: 'Delete recipe' }).click();
 
   // Assert the recipe link is gone from the home page list
-  await expect(page).toHaveURL('/');
+  await expect(page).toHaveURL('/mise');
   await expect(getRecipeLink(page, recipeName)).not.toBeVisible();
 
   // Assert navigating directly to the recipe URL returns 404

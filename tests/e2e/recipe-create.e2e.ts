@@ -27,7 +27,7 @@ import {
 test('create recipe: uuid name appears in the recipe list and persists across reload', async ({
   page
 }) => {
-  await page.goto('/');
+  await page.goto('/mise');
 
   const recipeName = uuidv4();
 
@@ -50,7 +50,7 @@ test('create recipe: uuid name appears in the recipe list and persists across re
 });
 
 test('cancel closes the form without creating a recipe', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/mise');
 
   const recipeName = uuidv4();
 
@@ -66,7 +66,7 @@ test('cancel closes the form without creating a recipe', async ({ page }) => {
 });
 
 test('cancel clears the form so a reopen starts blank', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/mise');
 
   await openCreateForm(page);
   await getRecipeNameInput(page).fill('first attempt');
@@ -83,7 +83,7 @@ test('cancel clears the form so a reopen starts blank', async ({ page }) => {
 test('creating two recipes in sequence makes both visible in the list', async ({
   page
 }) => {
-  await page.goto('/');
+  await page.goto('/mise');
 
   const nameA = uuidv4();
   const nameB = uuidv4();
@@ -108,7 +108,7 @@ test('creating two recipes in sequence makes both visible in the list', async ({
 });
 
 test('clicking the new recipe link navigates to its detail page', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/mise');
 
   const recipeName = uuidv4();
 
@@ -141,7 +141,7 @@ test('server failure during save closes the form but does not add the recipe', a
     route.fulfill({ status: 500, body: 'simulated server error' });
   });
 
-  await page.goto('/');
+  await page.goto('/mise');
 
   const recipeName = uuidv4();
 
