@@ -213,13 +213,12 @@ async function setupRecipeEditFixture(db: PostgresJsDatabase, testOwnerId: strin
     await db.execute(sql`
       insert into public.recipe_nodes (
         id, parent_id, owner_id,
-        name, label, ingredient_changes, direction_changes
+        name, ingredient_changes, direction_changes
       ) values (
         ${row.id}::uuid,
         ${row.parentId}::uuid,
         ${testOwnerId}::uuid,
         ${row.name},
-        null,
         ${toJsonb(row.ingredients)},
         ${toJsonb(row.directions)}
       )
