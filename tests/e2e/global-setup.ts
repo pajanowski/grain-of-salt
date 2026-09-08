@@ -31,12 +31,12 @@ import { TEST_USER_ID, TEST_USER_EMAIL } from './helpers/auth-shared';
 const STORAGE_STATE_PATH = '.auth/test-user.json';
 
 async function ensureUser(
-	db: ReturnType<typeof drizzle>,
-	id: string,
-	email: string,
-	displayName: string
+  db: ReturnType<typeof drizzle>,
+  id: string,
+  email: string,
+  displayName: string
 ) {
-	await db.execute(sql`
+  await db.execute(sql`
 		insert into auth.users (
 			instance_id, id, aud, role, email,
 			encrypted_password, email_confirmed_at,
@@ -74,78 +74,76 @@ async function ensureUser(
  * what a real fresh user would see after creating recipes.
  */
 async function cloneDemoRecipesToTestUser(
-	db: ReturnType<typeof drizzle>,
-	demoOwnerId: string,
-	testOwnerId: string
+  db: ReturnType<typeof drizzle>,
+  demoOwnerId: string,
+  testOwnerId: string
 ) {
-	const demoRows = await db.execute<{
-		id: string;
-		parent_id: string | null;
-		name: string;
-		label: string | null;
-		ingredient_changes: unknown;
-		direction_changes: unknown;
-	}>(sql`
-		select id, parent_id, name, label, ingredient_changes, direction_changes
+  const demoRows = await db.execute<{
+    id: string;
+    parent_id: string | null;
+    name: string;
+    ingredient_changes: unknown;
+    direction_changes: unknown;
+  }>(sql`
+		select id, parent_id, name, ingredient_changes, direction_changes
 		from public.recipe_nodes
 		where owner_id = ${demoOwnerId}::uuid
 		order by timestamp asc
 	`);
 
-	const oldToNew = new Map<string, string>();
-	for (const row of demoRows) {
-		const newId = uuidv4();
-		oldToNew.set(row.id, newId);
-		await db.execute(sql`
+  const oldToNew = new Map<string, string>();
+  for (const row of demoRows) {
+    const newId = uuidv4();
+    oldToNew.set(row.id, newId);
+    await db.execute(sql`
 			insert into public.recipe_nodes (
 				id, parent_id, owner_id,
-				name, label, ingredient_changes, direction_changes
+				name, ingredient_changes, direction_changes
 			) values (
 				${newId}::uuid,
 				${row.parent_id ? (oldToNew.get(row.parent_id) ?? null) : null}::uuid,
 				${testOwnerId}::uuid,
 				${row.name},
-				${row.label},
 				${sql.raw(`'${JSON.stringify(row.ingredient_changes).replace(/'/g, "''")}'::jsonb`)},
 				${sql.raw(`'${JSON.stringify(row.direction_changes).replace(/'/g, "''")}'::jsonb`)}
 			)
 		`);
-	}
+  }
 }
 
 export default async function globalSetup() {
-	const dbUrl = process.env.DATABASE_URL;
-	if (!dbUrl) {
-		throw new Error('DATABASE_URL must be set for e2e tests to run');
-	}
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    throw new Error('DATABASE_URL must be set for e2e tests to run');
+  }
 
-	const client = postgres(dbUrl, { prepare: false });
-	const db = drizzle(client);
+  const client = postgres(dbUrl, { prepare: false });
+  const db = drizzle(client);
 
-	try {
-		console.log('[e2e global-setup] Provisioning demo + test users');
-		await ensureUser(
-			db,
-			'00000000-0000-0000-0000-000000000001',
-			'demo@grain-of-salt.local',
-			'Demo User'
-		);
-		await ensureUser(db, TEST_USER_ID, TEST_USER_EMAIL, 'Test User');
+  try {
+    console.log('[e2e global-setup] Provisioning demo + test users');
+    await ensureUser(
+      db,
+      '00000000-0000-0000-0000-000000000001',
+      'demo@grain-of-salt.local',
+      'Demo User'
+    );
+    await ensureUser(db, TEST_USER_ID, TEST_USER_EMAIL, 'Test User');
 
-		console.log('[e2e global-setup] Re-seeding database from scripts/seed.ts');
-		execSync('node node_modules/tsx/dist/cli.mjs scripts/seed.ts', {
-			stdio: 'inherit',
-			env: { ...process.env, DATABASE_URL: dbUrl }
-		});
+    console.log('[e2e global-setup] Re-seeding database from scripts/seed.ts');
+    execSync('node node_modules/tsx/dist/cli.mjs scripts/seed.ts', {
+      stdio: 'inherit',
+      env: { ...process.env, DATABASE_URL: dbUrl }
+    });
 
-		console.log('[e2e global-setup] Cloning demo recipes under test user');
-		await cloneDemoRecipesToTestUser(db, '00000000-0000-0000-0000-000000000001', TEST_USER_ID);
-	} finally {
-		await client.end();
-	}
+    console.log('[e2e global-setup] Cloning demo recipes under test user');
+    await cloneDemoRecipesToTestUser(db, '00000000-0000-0000-0000-000000000001', TEST_USER_ID);
+  } finally {
+    await client.end();
+  }
 
-	console.log('[e2e global-setup] Capturing shared test-user storage state');
-	await captureTestUserStorageState();
+  console.log('[e2e global-setup] Capturing shared test-user storage state');
+  await captureTestUserStorageState();
 }
 
 /**
@@ -158,15 +156,15 @@ export default async function globalSetup() {
  * playwright.config.ts); `signInAsTestUser` navigates to relative URLs.
  */
 async function captureTestUserStorageState() {
-	const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:4173';
+  const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:4173';
 
-	const browser = await chromium.launch();
-	try {
-		const context = await browser.newContext({ baseURL });
-		const page = await context.newPage();
-		await signInAsTestUser(page);
-		await context.storageState({ path: STORAGE_STATE_PATH });
-	} finally {
-		await browser.close();
-	}
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext({ baseURL });
+    const page = await context.newPage();
+    await signInAsTestUser(page);
+    await context.storageState({ path: STORAGE_STATE_PATH });
+  } finally {
+    await browser.close();
+  }
 }
