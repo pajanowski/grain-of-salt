@@ -88,7 +88,6 @@ export async function seedForUser(ownerId: string): Promise<void> {
 		parentId: null,
 		ownerId,
 		name: 'Simple Omelette',
-		label: 'initial recipe',
 		ingredientChanges: [
 			ingredientAdd(SIMPLE_INGREDIENT_IDS.eggs, { name: 'Eggs', amount: 3, unit: '' }),
 			ingredientAdd(SIMPLE_INGREDIENT_IDS.butter, { name: 'Butter', amount: 1, unit: 'tbsp' }),
@@ -108,7 +107,6 @@ export async function seedForUser(ownerId: string): Promise<void> {
 		parentId: simpleNodeId,
 		ownerId,
 		name: 'French Omelette',
-		label: 'bump butter, add chives; cook low and slow, no browning',
 		ingredientChanges: [
 			ingredientEdit(SIMPLE_INGREDIENT_IDS.butter, { name: 'Butter', amount: 2, unit: 'tbsp' }),
 			ingredientAdd(FRENCH_INGREDIENT_IDS.chives, { name: 'Chives', amount: 1, unit: 'tbsp' }),
@@ -133,7 +131,6 @@ export async function seedForUser(ownerId: string): Promise<void> {
 		parentId: simpleNodeId,
 		ownerId,
 		name: 'Cheese Omelette',
-		label: 'add cheese, fold with cheese inside',
 		ingredientChanges: [
 			ingredientAdd(CHEESE_INGREDIENT_ID, { name: 'Cheddar', amount: 50, unit: 'g' }),
 		],
@@ -151,7 +148,6 @@ export async function seedForUser(ownerId: string): Promise<void> {
 		parentId: cheeseNodeId,
 		ownerId,
 		name: 'Denver Omelette',
-		label: 'add diced ham, bell pepper, and onion',
 		ingredientChanges: [
 			ingredientAdd(DENVER_INGREDIENT_IDS.ham, { name: 'Ham', amount: 50, unit: 'g' }),
 			ingredientAdd(DENVER_INGREDIENT_IDS.pepper, { name: 'Bell pepper', amount: 1, unit: '' }),

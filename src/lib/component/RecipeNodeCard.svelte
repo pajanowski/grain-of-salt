@@ -1,16 +1,38 @@
 <script lang="ts">
 	import { Handle, Position, type NodeProps } from '@xyflow/svelte';
-	import type { Ingredient, Direction } from '$lib/obj/Recipe.svelte';
+	import type { IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
+
 	type NodeData = {
 		name: string;
 		isCurrent: boolean;
-		ingredients: Ingredient[];
-		directions: Direction[];
+		ingredientChanges: IngredientChange[];
+		directionChanges: DirectionChange[];
 	};
 
 	type Props = NodeProps & { data: NodeData };
 
 	let { data }: Props = $props();
+
+	function changeBg(changeType: string): string {
+		if (changeType === 'add') return '#dcfce7'; // green-100
+		if (changeType === 'remove') return '#fee2e2'; // red-100
+		return '#fef3c7'; // amber-100
+	}
+
+	function changeLabel(changeType: string): string {
+		if (changeType === 'add') return 'ADD';
+		if (changeType === 'remove') return 'REMOVE';
+		return 'EDIT';
+	}
+
+	function changeText(c: IngredientChange): string {
+		if (!c.body) return '';
+		return `${c.body.amount || ''} ${c.body.unit || ''} ${c.body.name || ''}`.trim();
+	}
+
+	function directionText(c: DirectionChange): string {
+		return c.body?.body ?? '';
+	}
 </script>
 
 <div
@@ -19,7 +41,7 @@
 	class:border-stone-400={!data.isCurrent}
 	class:bg-sky-50={data.isCurrent}
 	style:border-width={data.isCurrent ? '2px' : '1px'}
-	style:width="200px"
+	style:width="220px"
 >
 	<Handle type="target" position={Position.Top} />
 
@@ -27,27 +49,31 @@
 		{data.name}
 	</div>
 
-	{#if data.ingredients.length > 0}
+	{#if data.ingredientChanges.length > 0}
 		<div class="mt-1">
 			<div class="mb-0.5 text-[10px] font-semibold text-stone-500">INGREDIENTS</div>
-			{#each data.ingredients as i (i.id)}
-				<div class="text-stone-700">
-					{i.amount || ''} {i.unit || ''} {i.name || ''}
+			{#each data.ingredientChanges as c (c.id)}
+				<div class="mb-0.5 rounded px-1 py-0.5" style:background-color={changeBg(c.changeType)}>
+					<span class="mr-1 font-mono text-[9px] font-bold uppercase">{changeLabel(c.changeType)}</span>
+					<span class="text-stone-700">{changeText(c)}</span>
 				</div>
 			{/each}
 		</div>
 	{/if}
 
-	{#if data.directions.length > 0}
+	{#if data.directionChanges.length > 0}
 		<div class="mt-1">
 			<div class="mb-0.5 text-[10px] font-semibold text-stone-500">DIRECTIONS</div>
-			{#each data.directions as d (d.id)}
-				<div class="text-stone-700">{d.body}</div>
+			{#each data.directionChanges as c (c.id)}
+				<div class="mb-0.5 rounded px-1 py-0.5" style:background-color={changeBg(c.changeType)}>
+					<span class="mr-1 font-mono text-[9px] font-bold uppercase">{changeLabel(c.changeType)}</span>
+					<span class="text-stone-700">{directionText(c)}</span>
+				</div>
 			{/each}
 		</div>
 	{/if}
 
-	{#if data.ingredients.length === 0 && data.directions.length === 0}
+	{#if data.ingredientChanges.length === 0 && data.directionChanges.length === 0}
 		<div class="italic text-stone-400">No changes</div>
 	{/if}
 

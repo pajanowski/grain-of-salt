@@ -50,13 +50,18 @@
 							<p class="opacity-60 italic">(no changes)</p>
 						{:else}
 							<ul class="mt-1 pl-4 list-disc">
-								{#each entry.changes as c, j (j)}
-									<li class="flex items-start gap-2">
-										<span
-											class:text-green-700={c.changeType === 'add'}
-											class:text-amber-700={c.changeType === 'edit'}
-											class:text-red-700={c.changeType === 'remove'}>{c.text}</span
-										>
+							{#each entry.changes as c, j (j)}
+								{@const spaceIdx = c.text.indexOf(' ')}
+								{@const badge = spaceIdx >= 0 ? c.text.slice(0, spaceIdx) : c.text}
+								{@const content = spaceIdx >= 0 ? c.text.slice(spaceIdx + 1) : ''}
+									<li
+										class="flex items-start gap-2 mb-1 px-1 py-0.5 rounded"
+										class:bg-green-100={c.changeType === 'add'}
+										class:bg-red-100={c.changeType === 'remove'}
+										class:bg-amber-100={c.changeType === 'edit'}
+									>
+										<span class="mr-1 font-mono text-[9px] font-bold uppercase">{badge}</span>
+										<span class="text-stone-700">{content}</span>
 										{#if c.note}
 											<button
 												type="button"

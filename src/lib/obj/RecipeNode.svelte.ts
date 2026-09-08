@@ -40,8 +40,6 @@ export interface RecipeNode {
   name: string;
   /** Parent node id within the same recipe. null only on the root node. */
   parentId: string | null;
-  /** Optional human-readable label ("added garlic", "doubled the salt"). */
-  label: string | null;
   /** Unix epoch milliseconds. */
   timestamp: Date;
   ingredientChanges: IngredientChange[];

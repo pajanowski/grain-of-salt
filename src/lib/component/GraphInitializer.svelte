@@ -2,12 +2,7 @@
 	import { useStore, type Node, type Edge } from '@xyflow/svelte';
 	import * as dagre from '@dagrejs/dagre';
 	import type { RecipeTreeNode } from '$lib/server/bo/recipenodesbo';
-	import type {
-		RecipeNode,
-		IngredientChange,
-		DirectionChange
-	} from '$lib/obj/RecipeNode.svelte';
-	import type { Ingredient, Direction } from '$lib/obj/Recipe.svelte';
+	import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
 
 	interface Props {
 		subtree: RecipeTreeNode;
@@ -18,37 +13,6 @@
 	let { subtree, subtreeNodes, currentId }: Props = $props();
 
 	const store = useStore();
-
-	function applyNodes(
-		nodes: RecipeNode[]
-	): { ingredients: Ingredient[]; directions: Direction[] } {
-		const im = new Map<string, Ingredient>();
-		const dm = new Map<string, Direction>();
-		for (const node of nodes) {
-			for (const change of node.ingredientChanges) applyIngredientChange(im, change);
-			for (const change of node.directionChanges) applyDirectionChange(dm, change);
-		}
-		return {
-			ingredients: [...im.values()],
-			directions: [...dm.values()]
-		};
-	}
-
-	function applyIngredientChange(m: Map<string, Ingredient>, change: IngredientChange): void {
-		if (change.changeType === 'add') m.set(change.id, change.body!);
-		else if (change.changeType === 'edit') {
-			const ex = m.get(change.targetId!);
-			if (ex) m.set(change.targetId!, { ...ex, ...change.body! });
-		} else if (change.changeType === 'remove') m.delete(change.targetId!);
-	}
-
-	function applyDirectionChange(m: Map<string, Direction>, change: DirectionChange): void {
-		if (change.changeType === 'add') m.set(change.id, change.body!);
-		else if (change.changeType === 'edit') {
-			const ex = m.get(change.targetId!);
-			if (ex) m.set(change.targetId!, { ...ex, ...change.body! });
-		} else if (change.changeType === 'remove') m.delete(change.targetId!);
-	}
 
 	type FlatNode = {
 		id: string;
@@ -67,9 +31,9 @@
 	}
 	let hasInitialized = false;
 
-	const computed = $derived(_compute(subtree, subtreeNodes, currentId));
+	const computed = $derived(_compute(subtree, currentId));
 
-	function _compute(tree: RecipeTreeNode, nodes: RecipeNode[], currentId: string) {
+	function _compute(tree: RecipeTreeNode, currentId: string) {
 		const flat = flattenSubtree(tree);
 
 		const g = new dagre.graphlib.Graph();
@@ -84,7 +48,8 @@
 
 		const flowNodes: Node[] = flat.map((fn) => {
 			const pos = g.node(fn.id);
-			const state = applyNodes(fn.chain);
+			// The leaf of the chain holds this node's own changes
+			const leaf = fn.chain[fn.chain.length - 1];
 			return {
 				id: fn.id,
 				type: 'recipe',
@@ -92,8 +57,8 @@
 				data: {
 					name: fn.name,
 					isCurrent: fn.id === currentId,
-					ingredients: state.ingredients,
-					directions: state.directions
+					ingredientChanges: leaf.ingredientChanges,
+					directionChanges: leaf.directionChanges
 				}
 			};
 		});

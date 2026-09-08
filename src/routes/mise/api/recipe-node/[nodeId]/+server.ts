@@ -13,8 +13,7 @@ import { getProfile } from '$lib/server/profiles';
  *   {
  *     nodeId: string,
  *     ingredientChanges: IngredientChange[],
- *     directionChanges: DirectionChange[],
- *     label?: string | null
+ *     directionChanges: DirectionChange[]
  *   }
  *
  * Replaces the leaf node's JSONB change columns. Does NOT create a new node —

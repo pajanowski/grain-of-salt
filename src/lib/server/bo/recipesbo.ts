@@ -53,7 +53,7 @@ export async function forkRecipe(
 	newName: string,
 	author?: string | null,
 ): Promise<RecipeNode> {
-	return await appendRecipeNode(fromLeafNodeId, newName, [], [], null, author);
+	return await appendRecipeNode(fromLeafNodeId, newName, [], [], author);
 }
 
 /**

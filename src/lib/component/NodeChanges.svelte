@@ -108,11 +108,10 @@
 	}
 
 	function changeText(item: AnnotatedChange<IngredientChange | DirectionChange>): string {
-		const c = item.change;
 		const label = labelFor(item);
-		if (c.changeType === 'add') return `+ ${label}`;
-		if (c.changeType === 'remove') return `− ${label}`;
-		return `~ ${label}`;
+		if (item.change.changeType === 'add') return `ADD ${label}`;
+		if (item.change.changeType === 'remove') return `REMOVE ${label}`;
+		return `EDIT ${label}`;
 	}
 
 	// Note editor — single open-at-a-time. State lives here so the
@@ -186,49 +185,54 @@
 	{#if annotated.length === 0}
 		<p class="text-sm opacity-60 italic">No changes yet. Use the form above to add or edit.</p>
 	{:else}
-		<ol class="flex flex-col gap-1 list-none p-0" data-testid="node-changes-list">
+		<ol
+			class="flex flex-col gap-0 list-none p-0 border rounded overflow-hidden"
+			data-testid="node-changes-list"
+		>
 			{#each annotated as item (item.change.id)}
-				<li
-					class="flex items-center gap-2 border rounded px-2 py-1"
-					data-change-id={item.change.id}
-					data-status={item.status}
-				>
+			{@const text = changeText(item)}
+			{@const spaceIdx = text.indexOf(' ')}
+			{@const badge = spaceIdx >= 0 ? text.slice(0, spaceIdx) : text}
+			{@const content = spaceIdx >= 0 ? text.slice(spaceIdx + 1) : ''}
+			<li
+				class="flex items-center gap-2 px-2 py-1"
+				class:bg-green-100={item.change.changeType === 'add'}
+				class:bg-red-100={item.change.changeType === 'remove'}
+				class:bg-amber-100={item.change.changeType === 'edit'}
+				data-change-id={item.change.id}
+				data-status={item.status}
+			>
+				<span class="mr-1 font-mono text-[9px] font-bold uppercase">{badge}</span>
+				<span class="text-xs flex-1 truncate text-stone-700">{content}</span>
+
+				{#if item.change.note}
 					<span
-						class="text-sm flex-1 truncate"
-						class:text-green-700={item.change.changeType === 'add'}
-						class:text-amber-700={item.change.changeType === 'edit'}
-						class:text-red-700={item.change.changeType === 'remove'}
+						class="text-xs opacity-70 italic max-w-[18rem] truncate"
+						title={item.change.note}
 					>
-						{changeText(item)}
+						📝 {item.change.note}
 					</span>
+				{/if}
 
-					{#if item.change.note}
-						<span
-							class="text-xs opacity-70 italic max-w-[18rem] truncate"
-							title={item.change.note}
-						>
-							📝 {item.change.note}
-						</span>
-					{/if}
+				{#if item.status === 'unsaved'}
+					<span
+						class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200 text-amber-800"
+						data-status="unsaved"
+					>
+						unsaved
+					</span>
+				{/if}
 
-					{#if item.status === 'unsaved'}
-						<span
-							class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800"
-							data-status="unsaved"
-						>
-							unsaved
-						</span>
-					{/if}
-
-					<ContextMenu
-						items={menuItems(item)}
-						label={`Actions for change ${item.change.id}`}
-					/>
-				</li>
+				<ContextMenu
+					items={menuItems(item)}
+					label={`Actions for change ${item.change.id}`}
+				/>
+			</li>
 			{/each}
 		</ol>
 	{/if}
-</section>
+
+	</section>
 
 <NoteSidebar
 	note={openEditor}

@@ -2,8 +2,8 @@
 	import { SvelteFlow, SvelteFlowProvider, type Node } from '@xyflow/svelte';
 	import RecipeNodeCard from '$lib/component/RecipeNodeCard.svelte';
 	import type { RecipeTreeNode } from '$lib/server/bo/recipenodesbo';
+	import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
 	import GraphInitializer from '$lib/component/GraphInitializer.svelte';
-
 	interface Props {
 		subtree: RecipeTreeNode;
 		subtreeNodes: RecipeNode[];

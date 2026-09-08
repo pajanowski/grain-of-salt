@@ -38,48 +38,30 @@ export function formatIngredientChange(
   change: IngredientChange,
   priorState: Map<string, Ingredient>,
 ): string {
-  switch (change.changeType) {
-    case 'add':
-      return change.body ? `added ingredient: ${ingredientLabel(change.body)}` : 'added ingredient (missing body)';
-    case 'edit': {
-      if (!change.body) return 'edited ingredient (missing body)';
-      const before = change.targetId ? priorState.get(change.targetId) : undefined;
-      const after = ingredientLabel(change.body);
-      return before
-        ? `edited ingredient: ${ingredientLabel(before)} → ${after}`
-        : `edited ingredient → ${after}`;
-    }
-    case 'remove': {
-      const before = change.targetId ? priorState.get(change.targetId) : undefined;
-      return before
-        ? `removed ingredient: ${ingredientLabel(before)}${change.note ? ` — ${change.note}` : ''}`
-        : `removed ingredient${change.note ? ` — ${change.note}` : ''}`;
-    }
+  const label = change.body ? ingredientLabel(change.body) : '(missing)';
+  if (change.changeType === 'add') return `ADD ${label}`;
+  if (change.changeType === 'remove') {
+    const before = change.targetId ? priorState.get(change.targetId) : undefined;
+    return before ? `REMOVE ${ingredientLabel(before)}` : `REMOVE ${label}`;
   }
+  // edit
+  const before = change.targetId ? priorState.get(change.targetId) : undefined;
+  return before ? `EDIT ${ingredientLabel(before)} → ${label}` : `EDIT ${label}`;
 }
 
 export function formatDirectionChange(
   change: DirectionChange,
   priorState: Map<string, Direction>,
 ): string {
-  switch (change.changeType) {
-    case 'add':
-      return change.body ? `added direction: "${directionLabel(change.body)}"` : 'added direction (missing body)';
-    case 'edit': {
-      if (!change.body) return 'edited direction (missing body)';
-      const before = change.targetId ? priorState.get(change.targetId) : undefined;
-      const after = directionLabel(change.body);
-      return before
-        ? `edited direction: "${directionLabel(before)}" → "${after}"`
-        : `edited direction → "${after}"`;
-    }
-    case 'remove': {
-      const before = change.targetId ? priorState.get(change.targetId) : undefined;
-      return before
-        ? `removed direction: "${directionLabel(before)}"${change.note ? ` — ${change.note}` : ''}`
-        : `removed direction${change.note ? ` — ${change.note}` : ''}`;
-    }
+  const label = change.body ? `"${directionLabel(change.body)}"` : '(empty)';
+  if (change.changeType === 'add') return `ADD ${label}`;
+  if (change.changeType === 'remove') {
+    const before = change.targetId ? priorState.get(change.targetId) : undefined;
+    return before ? `REMOVE "${directionLabel(before)}"` : `REMOVE ${label}`;
   }
+  // edit
+  const before = change.targetId ? priorState.get(change.targetId) : undefined;
+  return before ? `EDIT "${directionLabel(before)}" → ${label}` : `EDIT ${label}`;
 }
 
 export interface FormattedChange {
@@ -214,17 +196,12 @@ function applyDirectionChange(state: Map<string, Direction>, change: DirectionCh
     }
   }
 }
-
 /**
- * Fallback label for a node when its `label` field is null.
+ * Display label for a node in the history breadcrumb.
  */
 export function nodeDisplayLabel(node: RecipeNode, index: number): string {
-  if (node.label) return node.label;
-  if (node.parentId === null) return 'Initial state';
-  const total = node.ingredientChanges.length + node.directionChanges.length;
-  if (total === 0) return `Edit #${index}`;
-  if (total === 1) return `Edit: 1 change`;
-  return `Edit: ${total} changes`;
+	if (node.parentId === null) return 'Initial state';
+	return node.name;
 }
 
 /**

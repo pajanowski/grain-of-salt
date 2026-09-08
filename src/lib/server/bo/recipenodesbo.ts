@@ -26,7 +26,6 @@ export async function createRootRecipeNode(
 		parentId: null,
 		ownerId,
 		name,
-		label: null,
 		ingredientChanges,
 		directionChanges,
 		author: author ?? null,
@@ -50,7 +49,6 @@ export async function appendRecipeNode(
 	name: string,
 	ingredientChanges: IngredientChange[],
 	directionChanges: DirectionChange[],
-	label: string | null = null,
 	author?: string | null,
 ): Promise<RecipeNode> {
 	// Look up the parent to inherit ownerId.
@@ -68,7 +66,6 @@ export async function appendRecipeNode(
 		parentId,
 		ownerId,
 		name,
-		label,
 		ingredientChanges,
 		directionChanges,
 		author: author ?? null,
@@ -236,7 +233,6 @@ export function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 		id: row.id,
 		name: row.name,
 		parentId: row.parentId,
-		label: row.label,
 		timestamp: row.timestamp instanceof Date ? row.timestamp : new Date(row.timestamp),
 		ingredientChanges: (row.ingredientChanges ?? []) as IngredientChange[],
 		directionChanges: (row.directionChanges ?? []) as DirectionChange[],
@@ -244,8 +240,6 @@ export function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 		source: row.source ?? null,
 	};
 }
-
-
 
 /**
  * Wire payload for `PUT /api/recipe-node/[nodeId]`. The client sends the leaf
@@ -257,7 +251,6 @@ export interface UpdateRecipeNodePayload {
 	nodeId: string;
 	ingredientChanges: IngredientChange[];
 	directionChanges: DirectionChange[];
-	label?: string | null;
 }
 
 /**
@@ -360,9 +353,6 @@ function validatePayload(payload: UpdateRecipeNodePayload): void {
 	}
 	payload.ingredientChanges.forEach((c, i) => validateIngredientChange(c, i));
 	payload.directionChanges.forEach((c, i) => validateDirectionChange(c, i));
-	if (payload.label !== undefined && payload.label !== null && typeof payload.label !== 'string') {
-		throw new InvalidChangeError('label must be a string or null');
-	}
 }
 
 /**
@@ -406,8 +396,7 @@ export async function updateRecipeNode(
 
 	const noChanges =
 		payload.ingredientChanges.length === 0 && payload.directionChanges.length === 0;
-	const noLabel = payload.label === undefined;
-	if (noChanges && noLabel) {
+	if (noChanges) {
 		const root = await getRootRecipeNode(payload.nodeId);
 		if (!root) throw new Error('Node not found');
 		return applyNodes(await getRecipeNodesByRecipeId(root.id));
@@ -417,16 +406,12 @@ export async function updateRecipeNode(
 		ingredientChanges: IngredientChange[];
 		directionChanges: DirectionChange[];
 		timestamp: Date;
-		label?: string | null;
 		author?: string | null;
 	} = {
 		ingredientChanges: payload.ingredientChanges,
 		directionChanges: payload.directionChanges,
 		timestamp: new Date(),
 	};
-	if (payload.label !== undefined) {
-		set.label = payload.label;
-	}
 	// First-edit-wins: only write author when the node has no author yet.
 	if (author != null) {
 		set.author = author;

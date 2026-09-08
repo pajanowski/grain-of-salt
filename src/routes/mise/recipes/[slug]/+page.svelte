@@ -14,11 +14,6 @@
 			{/each}
 			<span>→ </span>
 	</nav>
-	<div class="mb-4">
-		<a href="/mise/recipes/{data.currentNode.id}/graph" class="text-sm text-sky-700 hover:underline">
-			View graph →
-		</a>
-	</div>
 	{/if}
 
 	<Recipe {data} />

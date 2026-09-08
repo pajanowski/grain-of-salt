@@ -29,7 +29,6 @@ export const recipeNodes = pgTable('recipe_nodes', {
 	}),
 	ownerId: uuid('owner_id').notNull(),
 	name: text('name').notNull(),
-	label: text('label'),
 	timestamp: timestamp('timestamp', { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 	ingredientChanges: jsonb('ingredient_changes')

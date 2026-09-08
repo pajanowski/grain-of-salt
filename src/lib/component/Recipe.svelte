@@ -379,14 +379,30 @@
 <div class="mx-auto flex max-w-3xl flex-col gap-6">
 	<!-- Recipe header -->
 	<div class="flex items-center justify-between">
-		<div>
-			<h1 class="text-2xl font-bold">{recipe.name}</h1>
-			{#if data.currentNode.author}
-				<p class="text-sm text-stone-500">by {data.currentNode.author}</p>
-			{/if}
-			{#if data.currentNode.source}
-				<p class="text-sm text-stone-400">via {data.currentNode.source}</p>
-			{/if}
+		<div class="flex items-center gap-3">
+			<a
+				href="/mise/recipes/{data.currentNode.id}/graph"
+				class="flex items-center gap-1 rounded border border-stone-300 bg-stone-50 px-2 py-1 text-xs text-stone-600 hover:border-stone-400 hover:bg-stone-100"
+				title="View recipe graph"
+			>
+				<svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+					<circle cx="8" cy="3" r="1.5" />
+					<circle cx="3" cy="13" r="1.5" />
+					<circle cx="13" cy="13" r="1.5" />
+					<line x1="8" y1="4.5" x2="3" y2="11.5" />
+					<line x1="8" y1="4.5" x2="13" y2="11.5" />
+				</svg>
+				Graph
+			</a>
+			<div>
+				<h1 class="text-2xl font-bold">{recipe.name}</h1>
+				{#if data.currentNode.author}
+					<p class="text-sm text-stone-500">by {data.currentNode.author}</p>
+				{/if}
+				{#if data.currentNode.source}
+					<p class="text-sm text-stone-400">via {data.currentNode.source}</p>
+				{/if}
+			</div>
 		</div>
 		<ContextMenu items={menuItems} label="Recipe actions" />
 	</div>
