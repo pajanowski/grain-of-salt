@@ -2,8 +2,8 @@
  * E2E tests for the /mise/recipes/[slug]/graph page.
  *
  * The test user (TEST_USER_ID) owns a seeded "Simple Omelette" recipe tree
- * cloned from the demo recipes in global-setup.ts. We use that recipe's id
- * (looked up from the DB via a direct query) as the slug.
+ * cloned from the demo recipes in global-setup.ts. We look up that recipe's
+ * id from the DB once per worker so the slug doesn't drift if the seed changes.
  *
  * These tests verify:
  *   1. The page loads without crashing (no SvelteFlowProvider error).
@@ -21,30 +21,33 @@ import { TEST_USER_ID } from './helpers/auth-shared';
 const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgres://postgres:postgres@127.0.0.1:54322/postgres';
 
-test.skip('recipe graph page', () => {
-  /**
-   * Resolve the test user's root recipe id once per worker.
-   * This avoids hard-coding a UUID that would drift if the seed changes.
-   */
-  test.beforeAll(async () => {
-    const sql = postgres(DATABASE_URL, { max: 1 });
-    const db = drizzle(sql);
+/**
+ * Resolve the test user's root recipe slug once per worker.
+ * Stored in a module-level variable so the hard-coded slug doesn't drift.
+ */
+let TEST_RECIPE_SLUG: string;
 
-    const rows = await db
-      .select({ id: recipeNodes.id })
-      .from(recipeNodes)
-      .where(eq(recipeNodes.ownerId, TEST_USER_ID))
-      .limit(1);
-    sql.end();
+test.beforeAll(async () => {
+  const sql = postgres(DATABASE_URL, { max: 1 });
+  const db = drizzle(sql);
 
-    if (rows.length === 0) {
-      throw new Error(
-        `No recipe found for TEST_USER_ID=${TEST_USER_ID}. ` +
-        'Run global-setup or use the profile seed-recipes button first.'
-      );
-    }
-  });
+  const rows = await db
+    .select({ id: recipeNodes.id })
+    .from(recipeNodes)
+    .where(eq(recipeNodes.ownerId, TEST_USER_ID))
+    .limit(1);
+  sql.end();
 
+  if (rows.length === 0) {
+    throw new Error(
+      `No recipe found for TEST_USER_ID=${TEST_USER_ID}. ` +
+      'Run global-setup or use the profile seed-recipes button first.'
+    );
+  }
+  TEST_RECIPE_SLUG = rows[0].id;
+});
+
+test.describe('recipe graph page', () => {
   test('page loads without SvelteFlowProvider error', async ({ page }) => {
     // Intercept console errors so we can assert none were emitted.
     const consoleErrors: string[] = [];
@@ -53,18 +56,15 @@ test.skip('recipe graph page', () => {
     });
     page.on('pageerror', (err) => consoleErrors.push(String(err)));
 
-    // Navigate to the graph page.
-    await page.goto('/mise/recipes/42aaf138-be57-49fa-b741-402347f28f2c/graph');
+    await page.goto(`/mise/recipes/${TEST_RECIPE_SLUG}/graph`);
 
-    // Wait for either the SvelteFlow canvas or the "Sign in" fallback.
-    // If SvelteFlowProvider is missing the error is thrown synchronously
-    // during component initialisation, before any network request.
+    // Wait for the heading — if SvelteFlowProvider is missing the error is
+    // thrown synchronously during component initialisation.
     await expect(page.getByRole('heading', { name: 'Recipe Graph' })).toBeVisible();
 
     // Allow network-heavy dynamic import up to 10 s.
     await page.waitForFunction(
-      () => document.querySelector('.svelte-flow') !== null ||
-        console.error('SvelteFlowProvider missing'),
+      () => document.querySelector('.svelte-flow') !== null,
       { timeout: 10_000 }
     ).catch(() => { });
 
@@ -76,7 +76,7 @@ test.skip('recipe graph page', () => {
   });
 
   test('SvelteFlow canvas is rendered', async ({ page }) => {
-    await page.goto('/mise/recipes/42aaf138-be57-49fa-b741-402347f28f2c/graph');
+    await page.goto(`/mise/recipes/${TEST_RECIPE_SLUG}/graph`);
     await expect(page.getByRole('heading', { name: 'Recipe Graph' })).toBeVisible();
 
     // The canvas root element added by @xyflow/svelte.
@@ -84,26 +84,29 @@ test.skip('recipe graph page', () => {
   });
 
   test('clicking a node navigates to its recipe page', async ({ page }) => {
-    await page.goto('/mise/recipes/42aaf138-be57-49fa-b741-402347f28f2c/graph');
+    await page.goto(`/mise/recipes/${TEST_RECIPE_SLUG}/graph`);
     await expect(page.locator('.svelte-flow')).toBeVisible({ timeout: 10_000 });
 
     // SvelteFlow nodes use the .svelte-flow__node class.
-    const firstNode = page.locator('.svelte-flow__node').first();
-    await expect(firstNode).toBeVisible();
+    // The first node is the root (current recipe) which links to the recipe list,
+    // not a recipe detail page. Click a child node instead.
+    const nodes = page.locator('.svelte-flow__node');
+    await expect(nodes).toHaveCount(4, { timeout: 10_000 }); // root + 3 descendants
+    const childNode = nodes.nth(1);
+    await expect(childNode).toBeVisible();
 
-    await firstNode.click();
+    await childNode.click();
 
     // The URL should now point at a recipe detail page.
     await expect(page).toHaveURL(/\/mise\/recipes\/[a-f0-9-]+$/);
-    await expect(page.getByRole('heading')).toBeVisible();
   });
 
   test('"Back to recipe" link returns to the source recipe page', async ({ page }) => {
-    await page.goto('/mise/recipes/42aaf138-be57-49fa-b741-402347f28f2c/graph');
+    await page.goto(`/mise/recipes/${TEST_RECIPE_SLUG}/graph`);
     await expect(page.getByRole('heading', { name: 'Recipe Graph' })).toBeVisible();
 
     await page.getByRole('link', { name: '← Back to recipe' }).click();
 
-    await expect(page).toHaveURL(/\/mise\/recipes\/42aaf138-be57-49fa-b741-402347f28f2c$/);
+    await expect(page).toHaveURL(new RegExp(`^http://localhost:4173/mise/recipes/${TEST_RECIPE_SLUG}$`));
   });
 });
