@@ -5,11 +5,31 @@
 	let displayName = $state(data.displayName ?? '');
 	let saved = $state(false);
 	let timer: ReturnType<typeof setTimeout> | null = null;
+	let seeding = $state(false);
+	let seedMsg = $state<{ ok: boolean; msg: string } | null>(null);
 
 	function handleSave() {
 		saved = true;
 		if (timer) clearTimeout(timer);
 		timer = setTimeout(() => { saved = false; }, 2000);
+	}
+
+	async function seedRecipes() {
+		seeding = true;
+		seedMsg = null;
+		try {
+			const res = await fetch('/mise/api/seed', { method: 'POST' });
+			const json = await res.json() as { ok: boolean; error?: string };
+			if (json.ok) {
+				seedMsg = { ok: true, msg: 'Sample recipes seeded! Reload to see them.' };
+			} else {
+				seedMsg = { ok: false, msg: json.error ?? 'Seed failed' };
+			}
+		} catch {
+			seedMsg = { ok: false, msg: 'Network error — is the server running?' };
+		} finally {
+			seeding = false;
+		}
 	}
 </script>
 
@@ -53,8 +73,22 @@
 		<dt class="text-gray-500">Created</dt>
 		<dd>{new Date(data.createdAt).toLocaleString()}</dd>
 	</dl>
-	<p class="mt-6 text-xs text-gray-500">
-		Loading this page required a Supabase session. Guests and unauthenticated
-		browsers are redirected to <a href="/auth" class="underline">/auth</a>.
-	</p>
+
+	{#if data.recipeCount === 0}
+		<div class="mt-8 rounded border border-stone-200 bg-stone-50 p-4">
+			<p class="mb-3 text-sm text-stone-600">You have no recipes yet.</p>
+			<button
+				type="button"
+				class="rounded bg-sky-700 px-4 py-2 text-sm text-white hover:bg-sky-600"
+				onclick={seedRecipes}
+			>
+				{seeding ? 'Seeding…' : 'Seed sample recipes'}
+			</button>
+			{#if seedMsg}
+				<p class="mt-2 text-sm" class:text-green-600={seedMsg.ok} class:text-red-600={!seedMsg.ok}>
+					{seedMsg.msg}
+				</p>
+			{/if}
+		</div>
+	{/if}
 </div>

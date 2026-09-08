@@ -231,7 +231,7 @@ function applyDirectionChange(
 	}
 }
 
-function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
+export function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 	return {
 		id: row.id,
 		name: row.name,

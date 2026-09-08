@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@xyflow/svelte/dist/base.css";
 
 /* Base button — amber, used as default for in-app actions.
    Components that need different sizing override locally. */

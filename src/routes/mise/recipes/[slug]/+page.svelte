@@ -13,7 +13,12 @@
 			<a href="/mise/recipes/{p.id}" class="hover:underline">{p.name}</a>{i < parentChain.length - 1 ? ' → ' : ''}
 			{/each}
 			<span>→ </span>
-		</nav>
+	</nav>
+	<div class="mb-4">
+		<a href="/mise/recipes/{data.currentNode.id}/graph" class="text-sm text-sky-700 hover:underline">
+			View graph →
+		</a>
+	</div>
 	{/if}
 
 	<Recipe {data} />
