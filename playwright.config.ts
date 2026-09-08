@@ -12,18 +12,20 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = 4173;
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 
+const IGNORE_PATTERNS = [
+  '**/node_modules/**',
+  '**/build/**',
+  '**/.svelte-kit/**',
+  '**/.auth/**',
+  'tests/archive/**'
+];
+
 export default defineConfig({
   testDir: '.',
   testMatch: '**/*.e2e.{ts,js}',
   globalSetup: './tests/e2e/global-setup.ts',
-  // Tests live next to the routes they exercise; ignore everything else.
-  // Artifact paths are relative to /work (the project root in the docker
-  // container, see scripts/run-e2e-docker.sh). The docker script
-  // bind-mounts these dirs onto the host so `actions/upload-artifact`
-  // can find them and so leftover dirs are visible (not silently lost
-  // inside the container's /tmp).
   outputDir: 'pw-test-results',
-  testIgnore: ['**/node_modules/**', '**/build/**', '**/.svelte-kit/**', '**/.auth/**', 'tests/archive/**'],
+  testIgnore: IGNORE_PATTERNS,
 
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -40,9 +42,6 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
-    // Dev server is much slower than preview due to on-demand compilation
-    // and HMR overhead. Double the per-action and per-navigation budgets
-    // when running against it.
     actionTimeout: process.env.PLAYWRIGHT_USE_DEV ? 60_000 : 10_000,
     navigationTimeout: process.env.PLAYWRIGHT_USE_DEV ? 60_000 : 10_000
   },
@@ -50,15 +49,22 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testMatch: '**/*.e2e.ts',
+      testIgnore: [...IGNORE_PATTERNS, '**/auth.e2e.ts'],
       use: {
         ...devices['Desktop Chrome'],
         channel: 'chromium',
-        // Pre-seed every test with the Supabase session captured by
-        // global-setup.ts — saves ~3s per test by skipping the OTP
-        // round-trip. Tests that exercise the sign-in flow itself must
-        // override `storageState` to undefined (e.g. via a separate
-        // project) so they start unauthenticated.
         storageState: '.auth/test-user.json'
+      }
+    },
+    {
+      name: 'chromium-noauth',
+      testMatch: '**/auth.e2e.ts',
+      testIgnore: IGNORE_PATTERNS,
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: 'chromium',
+        storageState: undefined
       }
     }
   ],

@@ -131,3 +131,27 @@ export async function clickRowAction(
   await getRowActionsButton(row).click();
   await page.getByRole('menuitem', { name: action }).click();
 }
+/** "Email me a code" or "Sending…" button on the auth page request step. */
+export function getAuthSendCodeButton(page: Page) {
+	return page.getByRole('button', { name: /Email me a code|Sending/ });
+}
+
+/** "Verify" or "Verifying…" button on the auth page verify step. */
+export function getAuthVerifyButton(page: Page) {
+	return page.getByRole('button', { name: /Verify/ });
+}
+
+/** 8-digit OTP code input on the auth page verify step. */
+export function getAuthCodeInput(page: Page) {
+	return page.getByLabel(/8-digit code/i);
+}
+
+/** "Use a different email" button on the auth page verify step. */
+export function getAuthUseDifferentEmailButton(page: Page) {
+	return page.getByRole('button', { name: 'Use a different email' });
+}
+
+/** Email input on the auth page request step. */
+export function getAuthEmailInput(page: Page) {
+	return page.getByLabel('Email');
+}
