@@ -399,11 +399,11 @@ test.describe('ingredient changes isolate correctly across the 4-node fixture', 
     await expect(getRecipeHeading(page, RECIPE.siblingA)).toBeVisible();
 
     // On Sibling A (the edit target): history shows the add.
-    await assertHistoryContains(page, 'added ingredient: 1 whole Onion');
+    await assertHistoryContains(page, 'ADD 1 whole Onion');
 
     // On Grandchild (descendant, inherits chain): history shows the add.
     await openRecipe(page, RECIPE.grandchild);
-    await assertHistoryContains(page, 'added ingredient: 1 whole Onion');
+    await assertHistoryContains(page, 'ADD 1 whole Onion');
 
     // On Root (parent, no upward inheritance): history does NOT contain.
     await openRecipe(page, RECIPE.root);
@@ -427,13 +427,13 @@ test.describe('ingredient changes isolate correctly across the 4-node fixture', 
     await clickPageSave(page);
 
     // On Sibling A (the edit target): history shows the (mutated) add.
-    await assertHistoryContains(page, 'added ingredient: 5 whole Eggs');
+    await assertHistoryContains(page, 'ADD 5 whole Eggs');
     // And the original amount must NOT be present — the add was rewritten.
-    await assertHistoryDoesNotContain(page, 'added ingredient: 3 whole Eggs');
+    await assertHistoryDoesNotContain(page, 'ADD 3 whole Eggs');
 
     // On Grandchild: same mutated add visible via the chain.
     await openRecipe(page, RECIPE.grandchild);
-    await assertHistoryContains(page, 'added ingredient: 5 whole Eggs');
+    await assertHistoryContains(page, 'ADD 5 whole Eggs');
 
     // On Root: no Eggs history — Root's chain doesn't include Sibling A's diff.
     await openRecipe(page, RECIPE.root);
@@ -475,11 +475,10 @@ test.describe('direction changes isolate correctly across the 4-node fixture', (
 
     // Directions are rendered with surrounding quotes in the history
     // view (see src/lib/obj/recipeDiff.ts#formatDirectionChange).
-    await assertHistoryContains(page, `added direction: "${BODY}"`);
+    await assertHistoryContains(page, `ADD "${BODY}"`);
 
     await openRecipe(page, RECIPE.grandchild);
-    await assertHistoryContains(page, `added direction: "${BODY}"`);
-
+    await assertHistoryContains(page, `ADD "${BODY}"`);
     await openRecipe(page, RECIPE.root);
     await assertHistoryDoesNotContain(page, BODY);
 
@@ -498,12 +497,11 @@ test.describe('direction changes isolate correctly across the 4-node fixture', (
     await editDirectionRow(page, directionRow(page, 0), 'Crack the eggs gently');
     await clickPageSave(page);
 
-    await assertHistoryContains(page, 'added direction: "Crack the eggs gently"');
-    await assertHistoryDoesNotContain(page, 'added direction: "Crack the eggs"');
+    await assertHistoryContains(page, 'ADD "Crack the eggs gently"');
+    await assertHistoryDoesNotContain(page, 'ADD "Crack the eggs"');
 
     await openRecipe(page, RECIPE.grandchild);
-    await assertHistoryContains(page, 'added direction: "Crack the eggs gently"');
-
+    await assertHistoryContains(page, 'ADD "Crack the eggs gently"');
     await openRecipe(page, RECIPE.root);
     await assertHistoryDoesNotContain(page, 'Crack the eggs');
 

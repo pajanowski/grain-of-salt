@@ -102,16 +102,34 @@
 			});
 		}
 	}
-	function moveIngredient(rowId: string) {
-		const visible = displayedIngredients.find((i) => i.id === rowId);
-		if (!visible) return;
-		removeIngredient(rowId);
-		leafIngredientChanges.push({
-			id: uuid(),
-			changeType: 'add',
-			targetId: null,
-			note: null,
-			body: { ...visible }
+	function moveIngredient(rowId: string, direction: 'up' | 'down') {
+		const currentIdx = displayedIngredients.findIndex((i) => i.id === rowId);
+		if (currentIdx < 0) return;
+		const targetIdx = direction === 'up' ? currentIdx - 1 : currentIdx + 1;
+		if (targetIdx < 0 || targetIdx >= displayedIngredients.length) return;
+
+		// Build the reordered visible list by swapping current and target
+		const reordered = [...displayedIngredients];
+		[reordered[currentIdx], reordered[targetIdx]] = [reordered[targetIdx], reordered[currentIdx]];
+
+		// Rebuild leafIngredientChanges so the server applies them in the new order.
+		// For ingredients that already have an 'add' in this node, reuse the record
+		// (with a fresh UUID so the server accepts it as a new entry).
+		// For ingredients that originated in an ancestor, emit a fresh 'add'.
+		leafIngredientChanges = reordered.map((ing) => {
+			const existing = currentNode.ingredientChanges.find(
+				(c) => c.changeType === 'add' && c.body?.id === ing.id
+			);
+			if (existing) {
+				return { ...existing, id: uuid() };
+			}
+			return {
+				id: uuid(),
+				changeType: 'add' as const,
+				targetId: null,
+				note: null,
+				body: { ...ing }
+			};
 		});
 	}
 	function addIngredient(input: Ingredient) {
@@ -156,16 +174,29 @@
 			});
 		}
 	}
-	function moveDirection(rowId: string) {
-		const visible = displayedDirections.find((d) => d.id === rowId);
-		if (!visible) return;
-		removeDirection(rowId);
-		leafDirectionChanges.push({
-			id: uuid(),
-			changeType: 'add',
-			targetId: null,
-			note: null,
-			body: { ...visible }
+	function moveDirection(rowId: string, direction: 'up' | 'down') {
+		const currentIdx = displayedDirections.findIndex((d) => d.id === rowId);
+		if (currentIdx < 0) return;
+		const targetIdx = direction === 'up' ? currentIdx - 1 : currentIdx + 1;
+		if (targetIdx < 0 || targetIdx >= displayedDirections.length) return;
+
+		const reordered = [...displayedDirections];
+		[reordered[currentIdx], reordered[targetIdx]] = [reordered[targetIdx], reordered[currentIdx]];
+
+		leafDirectionChanges = reordered.map((dir) => {
+			const existing = currentNode.directionChanges.find(
+				(c) => c.changeType === 'add' && c.body?.id === dir.id
+			);
+			if (existing) {
+				return { ...existing, id: uuid() };
+			}
+			return {
+				id: uuid(),
+				changeType: 'add' as const,
+				targetId: null,
+				note: null,
+				body: { ...dir }
+			};
 		});
 	}
 	function addDirection(input: Direction) {
@@ -486,7 +517,7 @@
 							onNote={() => openRowNote(ing.id, 'ingredient')}
 							onUpdate={(next) => editIngredient(ing.id, next)}
 							onRemove={() => removeIngredient(ing.id)}
-							onMove={(_dir) => moveIngredient(ing.id)}
+							onMove={(dir) => moveIngredient(ing.id, dir)}
 						/>
 					</li>
 				{/each}
@@ -559,7 +590,7 @@
 							onNote={() => openRowNote(dir.id, 'direction')}
 							onUpdate={(next) => editDirection(dir.id, next)}
 							onRemove={() => removeDirection(dir.id)}
-							onMove={(_dir) => moveDirection(dir.id)}
+							onMove={(moveDir) => moveDirection(dir.id, moveDir)}
 						/>
 					</li>
 				{/each}

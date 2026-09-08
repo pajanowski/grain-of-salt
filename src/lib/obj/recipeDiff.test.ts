@@ -73,12 +73,12 @@ const emptyMaps = () => ({
 describe('formatIngredientChange', () => {
   it('formats an add with quantity and unit', () => {
     const change = ingredientAdd('i1', { name: 'Flour', amount: 200, unit: 'g' });
-    expect(formatIngredientChange(change, new Map())).toBe('added ingredient: 200 g Flour');
+    expect(formatIngredientChange(change, new Map())).toBe('ADD 200 g Flour');
   });
 
   it('formats an add without quantity or unit', () => {
     const change = ingredientAdd('i1', { name: 'Eggs', amount: 0, unit: '' });
-    expect(formatIngredientChange(change, new Map())).toBe('added ingredient: Eggs');
+    expect(formatIngredientChange(change, new Map())).toBe('ADD Eggs');
   });
 
   it('formats an edit with before → after when target exists in prior state', () => {
@@ -87,13 +87,13 @@ describe('formatIngredientChange', () => {
       ['i1', ingredient({ id: 'i1', name: 'Butter', amount: 1, unit: 'tbsp' })],
     ]);
     expect(formatIngredientChange(change, prior)).toBe(
-      'edited ingredient: 1 tbsp Butter → 2 tbsp Butter',
+      'EDIT 1 tbsp Butter → 2 tbsp Butter',
     );
   });
 
   it('formats an edit with only the new value when target is missing from prior state', () => {
     const change = ingredientEdit('ghost', { name: 'Butter', amount: 2, unit: 'tbsp' });
-    expect(formatIngredientChange(change, new Map())).toBe('edited ingredient → 2 tbsp Butter');
+    expect(formatIngredientChange(change, new Map())).toBe('EDIT 2 tbsp Butter');
   });
 
   it('formats a remove showing what was removed', () => {
@@ -101,7 +101,7 @@ describe('formatIngredientChange', () => {
     const prior = new Map<string, Ingredient>([
       ['i1', ingredient({ id: 'i1', name: 'Flour', amount: 200, unit: 'g' })],
     ]);
-    expect(formatIngredientChange(change, prior)).toBe('removed ingredient: 200 g Flour');
+    expect(formatIngredientChange(change, prior)).toBe('REMOVE 200 g Flour');
   });
 
   it('formats a remove with a note', () => {
@@ -109,9 +109,7 @@ describe('formatIngredientChange', () => {
     const prior = new Map<string, Ingredient>([
       ['i1', ingredient({ id: 'i1', name: 'Sugar', amount: 2, unit: 'tbsp' })],
     ]);
-    expect(formatIngredientChange(change, prior)).toBe(
-      'removed ingredient: 2 tbsp Sugar — substituted with honey',
-    );
+    expect(formatIngredientChange(change, prior)).toBe('REMOVE 2 tbsp Sugar');
   });
 });
 
@@ -119,7 +117,7 @@ describe('formatDirectionChange', () => {
   it('formats an add with quoted body', () => {
     const change = directionAdd('d1', 'Mix flour and water.');
     expect(formatDirectionChange(change, new Map())).toBe(
-      'added direction: "Mix flour and water."',
+      'ADD "Mix flour and water."',
     );
   });
 
@@ -127,22 +125,21 @@ describe('formatDirectionChange', () => {
     const change = directionEdit('d1', 'Whisk flour and water.');
     const prior = new Map<string, Direction>([['d1', direction({ id: 'd1', body: 'Mix flour and water.' })]]);
     expect(formatDirectionChange(change, prior)).toBe(
-      'edited direction: "Mix flour and water." → "Whisk flour and water."',
+      'EDIT "Mix flour and water." → "Whisk flour and water."',
     );
   });
 
   it('formats an edit with only the new value when target is missing', () => {
     const change = directionEdit('ghost', 'Whisk flour and water.');
     expect(formatDirectionChange(change, new Map())).toBe(
-      'edited direction → "Whisk flour and water."',
+      'EDIT "Whisk flour and water."',
     );
   });
-
   it('formats a remove showing what was removed', () => {
     const change = directionRemove('d1');
     const prior = new Map<string, Direction>([['d1', direction({ id: 'd1', body: 'Mix flour and water.' })]]);
     expect(formatDirectionChange(change, prior)).toBe(
-      'removed direction: "Mix flour and water."',
+      'REMOVE "Mix flour and water."',
     );
   });
 });
@@ -179,7 +176,7 @@ describe('formatChain', () => {
       }),
     ];
     const entries = formatChain(nodes);
-    expect(entries[1].changes[0].text).toBe('edited ingredient: 1 tbsp Butter → 2 tbsp Butter');
+    expect(entries[1].changes[0].text).toBe('EDIT 1 tbsp Butter → 2 tbsp Butter');
   });
 
   it('a remove formats against the state before its node, even after multiple prior nodes', () => {
@@ -201,7 +198,7 @@ describe('formatChain', () => {
     ];
     const entries = formatChain(nodes);
     // The remove should reference the post-edit value (250 g Flour), not the original.
-    expect(entries[2].changes[0].text).toBe('removed ingredient: 250 g Flour');
+    expect(entries[2].changes[0].text).toBe('REMOVE 250 g Flour');
   });
 
   it('each entry stateAfter matches the accumulated state up to that node', () => {
@@ -237,8 +234,8 @@ describe('formatChain', () => {
     ];
     const entries = formatChain(nodes);
     expect(entries[1].changes).toHaveLength(2);
-    expect(entries[1].changes[0]).toMatchObject({ kind: 'ingredient', text: 'edited ingredient: 200 g Flour → 250 g Flour' });
-    expect(entries[1].changes[1]).toMatchObject({ kind: 'direction', text: 'edited direction: "Mix flour." → "Whisk flour."' });
+    expect(entries[1].changes[0]).toMatchObject({ kind: 'ingredient', text: 'EDIT 200 g Flour → 250 g Flour' });
+    expect(entries[1].changes[1]).toMatchObject({ kind: 'direction', text: 'EDIT "Mix flour." → "Whisk flour."' });
   });
 
   it('threads through the change note so the UI can show a note icon', () => {
@@ -300,16 +297,16 @@ describe('formatChain', () => {
 
     // First node: all adds
     const first = entries[0].changes.map((c) => c.text);
-    expect(first).toContain('added ingredient: 1 tbsp Butter');
-    expect(first).toContain('added ingredient: 3 Eggs');
-    expect(first).toContain('added direction: "Beat eggs with salt."');
+    expect(first).toContain('ADD 1 tbsp Butter');
+    expect(first).toContain('ADD 3 Eggs');
+    expect(first).toContain('ADD "Beat eggs with salt."');
 
     // Second node: butter edit shows before -> after; chives add; directions edit.
     const second = entries[1].changes.map((c) => c.text);
-    expect(second).toContain('edited ingredient: 1 tbsp Butter → 2 tbsp Butter');
-    expect(second).toContain('added ingredient: 1 tbsp Chives');
-    expect(second).toContain('edited direction: "Melt butter in a pan over medium heat." → "Melt butter over low heat until foamy."');
-    expect(second).toContain('edited direction: "Pour in eggs, cook, stirring gently until set." → "Pour in eggs and stir constantly with the flat of a fork, keeping the curds moving. Do not brown."');
+    expect(second).toContain('EDIT 1 tbsp Butter → 2 tbsp Butter');
+    expect(second).toContain('ADD 1 tbsp Chives');
+    expect(second).toContain('EDIT "Melt butter in a pan over medium heat." → "Melt butter over low heat until foamy."');
+    expect(second).toContain('EDIT "Pour in eggs, cook, stirring gently until set." → "Pour in eggs and stir constantly with the flat of a fork, keeping the curds moving. Do not brown."');
   });
 });
 
@@ -327,7 +324,7 @@ describe('formatNode', () => {
     const prior = emptyMaps();
     prior.ingredients.set('i1', ingredient({ id: 'i1', name: 'Butter', amount: 1, unit: 'tbsp' }));
     const changes = formatNode(nd, prior);
-    expect(changes[0].text).toBe('edited ingredient: 1 tbsp Butter → 2 tbsp Butter');
+    expect(changes[0].text).toBe('EDIT 1 tbsp Butter → 2 tbsp Butter');
   });
 
   it('does not mutate the supplied prior state maps', () => {
