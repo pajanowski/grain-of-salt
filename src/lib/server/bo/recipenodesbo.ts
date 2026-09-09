@@ -238,6 +238,7 @@ export function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 		directionChanges: (row.directionChanges ?? []) as DirectionChange[],
 		author: row.author ?? null,
 		source: row.source ?? null,
+		isPublic: row.isPublic ?? false,
 	};
 }
 

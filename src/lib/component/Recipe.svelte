@@ -400,9 +400,29 @@
 		await goto('/mise');
 	}
 
+	let shareLinkCopied = $state(false);
+	async function togglePublic() {
+		const next = !currentNode.isPublic;
+		try {
+			await api.patch(`/mise/api/recipe-node/${currentNode.id}/public`, {
+				isPublic: next
+			});
+			await invalidateAll();
+		} catch (e) {
+			alert(`Failed to update visibility: ${errorMessage(e)}`);
+		}
+	}
+	async function copyShareLink() {
+		const url = `${window.location.origin}/recipe/${currentNode.id}`;
+		await navigator.clipboard.writeText(url);
+		shareLinkCopied = true;
+		setTimeout(() => (shareLinkCopied = false), 2000);
+	}
+
 	const menuItems: MenuItem[] = $derived([
 		{ label: 'Rename recipe', onSelect: openRename },
 		{ label: 'Fork recipe', onSelect: openFork },
+		{ label: currentNode.isPublic ? 'Make private' : 'Make public', onSelect: togglePublic },
 		{ label: 'Delete recipe', onSelect: confirmDelete, danger: true }
 	]);
 </script>
@@ -429,17 +449,36 @@
 					<line x1="8" y1="4.5" x2="3" y2="11.5" />
 					<line x1="8" y1="4.5" x2="13" y2="11.5" />
 				</svg>
-				Graph
-			</a>
-			<div>
-				<h1 class="text-2xl font-bold">{recipe.name}</h1>
-				{#if data.currentNode.author}
-					<p class="text-sm text-stone-500">by {data.currentNode.author}</p>
-				{/if}
-				{#if data.currentNode.source}
-					<p class="text-sm text-stone-400">via {data.currentNode.source}</p>
-				{/if}
-			</div>
+			Graph
+		</a>
+		</div>
+		<div>
+			<h1 class="text-2xl font-bold">{recipe.name}</h1>
+			{#if data.currentNode.author}
+				<p class="text-sm text-stone-500">by {data.currentNode.author}</p>
+			{/if}
+			{#if data.currentNode.source}
+				<p class="text-sm text-stone-400">via {data.currentNode.source}</p>
+			{/if}
+			{#if data.currentNode.isPublic}
+				<p class="mt-1 flex items-center gap-1.5 text-xs text-stone-400">
+					<a
+						href="/recipe/{data.currentNode.id}"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="underline hover:text-stone-600"
+					>
+						/recipe/{data.currentNode.id}
+					</a>
+					<button
+						type="button"
+						class="rounded border border-stone-300 bg-stone-50 px-1.5 py-0.5 text-xs hover:bg-stone-100"
+						onclick={copyShareLink}
+					>
+						{shareLinkCopied ? 'Copied!' : 'Copy'}
+					</button>
+				</p>
+			{/if}
 		</div>
 		<ContextMenu items={menuItems} label="Recipe actions" />
 	</div>

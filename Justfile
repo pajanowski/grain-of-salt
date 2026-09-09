@@ -90,6 +90,13 @@ playwright-exec *extra:
 # db deps + dev server
 test-deps: test-db-deps dev
 
+test-e2e-run-headless *extra:
+    DATABASE_URL='postgres://postgres:postgres@127.0.0.1:54322/postgres' \
+    PUBLIC_SUPABASE_URL='http://127.0.0.1:54321' \
+    MAILPIT_URL='http://127.0.0.1:54324' \
+    PLAYWRIGHT_BASE_URL='http://localhost:4173' \
+    pnpm exec playwright test {{extra}} 
+
 # Run e2e in Docker (no host browser install needed)
 # Builds, starts vite preview on port 4173, runs tests, then stops the server.
 test-e2e *extra:

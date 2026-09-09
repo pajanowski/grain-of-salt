@@ -12,9 +12,10 @@
 		onUpdate: (next: Ingredient) => void;
 		onRemove: () => void;
 		onMove: (direction: 'up' | 'down') => void;
+		readOnly?: boolean;
 	};
 
-	let { ingredient, index, total, note, onNote, onUpdate, onRemove, onMove }: Props = $props();
+	let { ingredient, index, total, note, onNote, onUpdate, onRemove, onMove, readOnly = false }: Props = $props();
 
 	let editing = $state(false);
 	let draft = $state<Ingredient>({ ...ingredient });
@@ -96,17 +97,16 @@
 			<span class="opacity-60 ml-1">{ingredient.unit}</span>
 		</span>
 		{#if note}
-			<button
-				type="button"
-				class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200"
-				aria-label="Edit note"
+			<span
+				class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800"
 				title={note}
-				onclick={onNote}
 				data-testid="ingredient-note-button"
 			>
 				📝
-			</button>
+			</span>
 		{/if}
-		<ContextMenu {items} label={`Actions for ${ingredient.name}`} />
+		{#if !readOnly}
+			<ContextMenu {items} label={`Actions for ${ingredient.name}`} />
+		{/if}
 	{/if}
 </li>

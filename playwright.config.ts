@@ -59,7 +59,7 @@ export default defineConfig({
     },
     {
       name: 'chromium-noauth',
-      testMatch: '**/auth.e2e.ts',
+      testMatch: ['**/auth.e2e.ts', '**/public-recipe-unauth.e2e.ts'],
       testIgnore: IGNORE_PATTERNS,
       use: {
         ...devices['Desktop Chrome'],

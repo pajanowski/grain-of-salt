@@ -11,9 +11,10 @@
 		onUpdate: (next: Direction) => void;
 		onRemove: () => void;
 		onMove: (direction: 'up' | 'down') => void;
+		readOnly?: boolean;
 	};
 
-	let { direction, index, total, note, onNote, onUpdate, onRemove, onMove }: Props = $props();
+	let { direction, index, total, note, onNote, onUpdate, onRemove, onMove, readOnly = false }: Props = $props();
 
 	let editing = $state(false);
 	let draft = $state<Direction>({ ...direction });
@@ -85,18 +86,30 @@
 			<span class="opacity-60 mr-2">{index + 1}.</span>
 			{direction.body}
 		</span>
-	<ContextMenu {items} label={`Actions for direction ${index + 1}`} />
-	{#if note}
-		<button
-			type="button"
-			class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200"
-			aria-label="Edit note"
-			title={note}
-			onclick={onNote}
-			data-testid="direction-note-button"
-		>
-			📝
-		</button>
+	{#if !readOnly}
+		<ContextMenu {items} label={`Actions for direction ${index + 1}`} />
 	{/if}
-{/if}
+	{#if note}
+		{#if readOnly}
+			<span
+				class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800"
+				title={note}
+				data-testid="direction-note-button"
+			>
+				📝
+			</span>
+		{:else}
+			<button
+				type="button"
+				class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200"
+				aria-label="Edit note"
+				title={note}
+				onclick={onNote}
+				data-testid="direction-note-button"
+			>
+				📝
+			</button>
+		{/if}
+	{/if}
+	{/if}
 </li>

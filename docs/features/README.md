@@ -16,6 +16,7 @@ and [ADR 0002](../adr/0002-fork-as-chain-extension.md).
 - [Recipe history](./recipe-history.md) — Chain of nodes with color-coded diffs
 - [Forking](./forking.md) — Append a new node to a recipe's chain (ADR 0002)
 - [Recipe management](./recipe-management.md) — Rename and delete a recipe
+- [Public recipe](./public-recipe.md) — Mark a node public; read-only view at `/recipe/[id]` without auth
 
 ## Development
 

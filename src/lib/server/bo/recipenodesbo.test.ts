@@ -50,6 +50,7 @@ function node(
     directionChanges: partial.directionChanges ?? [],
     author: null,
     source: null,
+    isPublic: false,
   };
 }
 
@@ -718,6 +719,7 @@ function seedNode(
     directionChanges: changes.directionChanges,
     author: null,
     source: null,
+    isPublic: false,
   };
 }
 

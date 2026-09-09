@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, jsonb, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, jsonb, boolean, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { IngredientChange, DirectionChange } from '../../obj/RecipeNode.svelte';
 
 /**
@@ -41,6 +41,7 @@ export const recipeNodes = pgTable('recipe_nodes', {
 		.default([]),
 	author: text('author'),
 	source: text('source'),
+	isPublic: boolean('is_public').notNull().default(false),
 });
 
 
@@ -51,8 +52,6 @@ export type SelectRecipeNode = typeof recipeNodes.$inferSelect;
  * Public-side user profile. The matching `auth.users` row is created/managed
  * by Supabase Auth; this table holds app-level fields and is auto-populated
  * by a trigger defined in supabase/migrations.
- *
- *
  */
 export const profiles = pgTable('profiles', {
 	id: uuid('id').primaryKey(),

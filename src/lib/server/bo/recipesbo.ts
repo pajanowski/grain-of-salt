@@ -1,8 +1,14 @@
 import { eq, and } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { recipeNodes } from '$lib/server/db/schema';
-import { toUiRecipeNode, createRootRecipeNode, getRecipeNodesByRecipeId } from './recipenodesbo';
+import {
+	createRootRecipeNode,
+	getRecipeNodesByRecipeId,
+	appendRecipeNode
+} from './recipenodesbo';
+import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
 import type { IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
+import type { Recipe, Ingredient, Direction } from '$lib/obj/Recipe.svelte';
 
 export async function saveNewRecipe(
 	recipe: Recipe,
@@ -12,11 +18,15 @@ export async function saveNewRecipe(
 ): Promise<Recipe> {
 	const ingredientChanges: IngredientChange[] = recipe.ingredients.map((ing: Ingredient) => ({
 		changeType: 'add' as const,
+		targetId: null,
+		note: null,
 		id: ing.id,
 		body: { ...ing },
 	}));
 	const directionChanges: DirectionChange[] = recipe.directions.map((dir: Direction) => ({
 		changeType: 'add' as const,
+		targetId: null,
+		note: null,
 		id: dir.id,
 		body: { ...dir },
 	}));
@@ -61,12 +71,9 @@ export async function forkRecipe(
  * owned by a different user.
  *
  * The ON DELETE CASCADE on recipe_nodes.parent_id removes the rest of the
- * chain in one statement.
+ * chain automatically.
  */
 export async function deleteRecipe(rootNodeId: string, ownerId: string) {
-	if (!rootNodeId || rootNodeId.trim().length === 0) {
-		throw new Error('Invalid Recipe ID');
-	}
 	await assertOwnership(rootNodeId, ownerId);
 	await db.delete(recipeNodes).where(eq(recipeNodes.id, rootNodeId));
 }
@@ -81,23 +88,18 @@ export async function renameRecipe(
 	ownerId: string,
 	newName: string,
 ): Promise<void> {
-	const trimmed = newName.trim();
-	if (!rootNodeId || rootNodeId.trim().length === 0) {
-		throw new Error('Invalid Recipe ID');
-	}
-	if (!trimmed) {
-		throw new Error('Recipe name cannot be empty');
-	}
 	await assertOwnership(rootNodeId, ownerId);
+
+	// Walk the chain and update name on every node.
 	const nodes = await getRecipeNodesByRecipeId(rootNodeId);
-	await db.transaction(async (tx) => {
-		for (const node of nodes) {
-			await tx
+	await Promise.all(
+		nodes.map((node) =>
+			db
 				.update(recipeNodes)
-				.set({ name: trimmed })
-				.where(eq(recipeNodes.id, node.id));
-		}
-	});
+				.set({ name: newName })
+				.where(and(eq(recipeNodes.id, node.id), eq(recipeNodes.ownerId, ownerId)))
+		)
+	);
 }
 
 /**
