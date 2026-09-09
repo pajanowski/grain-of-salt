@@ -37,7 +37,7 @@
 	<title>Me · Grain of Salt</title>
 </svelte:head>
 
-<div class="mx-auto mt-12 max-w-md">
+<div class="mx-auto mt-12 max-w-md px-4 sm:px-6">
 	<h1 class="mb-4 text-2xl font-semibold">Account</h1>
 	<form method="POST" use:enhance={() => {
 		return async ({ update }) => {

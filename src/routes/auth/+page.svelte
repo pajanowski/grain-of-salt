@@ -19,7 +19,7 @@
 	<title>Sign in · Grain of Salt</title>
 </svelte:head>
 
-<div class="flex min-h-screen flex-col items-center justify-center gap-8 bg-white p-4">
+<div class="flex min-h-screen flex-col items-center justify-center gap-8 bg-white p-4 sm:p-8">
 	<GrainOfSaltTitle />
 	<div class="w-full max-w-sm rounded-lg border border-stone-200 bg-white p-6 shadow-md">
 		<h2 class="mb-6 text-2xl font-semibold text-stone-800">Sign in</h2>

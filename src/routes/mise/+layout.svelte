@@ -5,10 +5,10 @@
 	import MobileFloatingButtons from '$lib/component/MobileFloatingButtons.svelte';
 	import { api, errorMessage } from '$lib/api';
 	import { enhance } from '$app/forms';
-	import { invalidateAll } from '$app/navigation';
+	import { afterNavigate, invalidateAll } from '$app/navigation';
+	import { browser } from '$app/environment';
 
 	let { data, children } = $props();
-
 	let sidebarCollapsed = $state(false);
 	let createRecipe = $state(false);
 	let newRecipeName = $state('');
@@ -30,6 +30,28 @@
 	$effect(() => {
 		if (importRecipe && importUrlInputEl) {
 			importUrlInputEl.focus();
+		}
+	});
+
+	// On mobile, start with the sidebar collapsed so the user lands on the recipe
+	// they're navigating to (not the recipe list covering it). On desktop the
+	// push layout keeps the sidebar visible.
+	$effect(() => {
+		if (!browser) return;
+		if (window.matchMedia('(max-width: 767px)').matches) {
+			sidebarCollapsed = true;
+		}
+	});
+
+	// On mobile, the sidebar is an overlay covering the main content. Close it
+	// whenever the user navigates so the destination page (recipe, profile, etc.)
+	// becomes visible without a second tap on the menu button.
+	afterNavigate(({ from, to }) => {
+		if (!browser) return;
+		if (!from || !to) return;
+		if (from.route.id === to.route.id) return;
+		if (window.innerWidth < 768) {
+			sidebarCollapsed = true;
 		}
 	});
 
@@ -99,11 +121,17 @@
 				importLoading = false;
 			});
 	}
-
 	function handleFloatingSearch() {
-		if (sidebarCollapsed) sidebarCollapsed = false;
-		// Let the sidebar render, then focus the search input.
-		queueMicrotask(() => recipeListRef?.focusSearch());
+		const needsOpen = sidebarCollapsed;
+		if (needsOpen) sidebarCollapsed = false;
+		// The sidebar slides in over ~200ms; defer the focus so the input is on
+		// screen when the mobile keyboard appears. If the sidebar is already
+		// open, focus immediately.
+		if (needsOpen) {
+			setTimeout(() => recipeListRef?.focusSearch(), 220);
+		} else {
+			queueMicrotask(() => recipeListRef?.focusSearch());
+		}
 	}
 
 	function handleFloatingToggleSidebar() {
@@ -174,11 +202,15 @@
 		</div>
 	{/if}
 
-	<!-- Full sidebar -->
-	{#if !sidebarCollapsed}
-		<aside
-			class="flex h-full w-full md:w-64 shrink-0 flex-col border-r border-stone-200 bg-stone-100 shadow-[2px_0_8px_rgba(0,0,0,0.08)] z-40 md:z-auto"
-		>
+	<!-- Full sidebar — always rendered so RecipeList state (search query, expanded
+	     nodes, create/import forms) persists across open/close. CSS handles the
+	     mobile overlay vs desktop push-layout split. -->
+	<aside
+		class="fixed inset-y-0 left-0 z-40 flex w-full shrink-0 flex-col border-r border-stone-200 bg-stone-100 shadow-[2px_0_8px_rgba(0,0,0,0.08)] transition-transform duration-200 ease-out md:static md:z-auto md:w-64 md:translate-x-0 md:shadow-none {sidebarCollapsed
+			? '-translate-x-full md:hidden'
+			: 'translate-x-0'}"
+		inert={sidebarCollapsed}
+	>
 			<!-- Sidebar header -->
 			<div class="flex items-center justify-between border-b border-stone-200 px-4 py-3">
 				<span class="font-semibold text-stone-700">Grain of Salt</span>
@@ -364,7 +396,6 @@
 				{/if}
 			</div>
 		</aside>
-	{/if}
 
 	<!-- Main content -->
 	<main class="min-w-0 flex-1 overflow-y-auto bg-white pb-[calc(1rem+48px)] md:pb-0">
