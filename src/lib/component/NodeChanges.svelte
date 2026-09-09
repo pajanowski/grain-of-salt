@@ -5,6 +5,7 @@
 	} from '$lib/obj/RecipeNode.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
+	import type { Ingredient } from '$lib/obj/Recipe.svelte';
 
 	/**
 	 * The current node's changes, rendered inline beneath the recipe editor.
@@ -97,8 +98,8 @@
 		if (c.changeType === 'remove') return item.kind;
 		if (!c.body) return item.kind;
 		if (item.kind === 'ingredient') {
-			const ing = c.body as { name: string; amount?: number; unit?: string };
-			const parts = [ing.name];
+			const ing = c.body as Ingredient;
+			const parts: string[] = [ing.name];
 			if (ing.amount) parts.push(String(ing.amount));
 			if (ing.unit) parts.push(ing.unit);
 			return parts.join(' ');
@@ -203,7 +204,7 @@
 				data-status={item.status}
 			>
 				<span class="mr-1 font-mono text-[9px] font-bold uppercase">{badge}</span>
-				<span class="text-xs flex-1 truncate text-stone-700">{content}</span>
+				<span class="text-xs flex-1 text-stone-700 break-words">{content}</span>
 
 				{#if item.change.note}
 					<span
@@ -232,7 +233,7 @@
 		</ol>
 	{/if}
 
-	</section>
+</section>
 
 <NoteSidebar
 	note={openEditor}

@@ -4,7 +4,6 @@
 		formatChain,
 		nodeDisplayLabel,
 		formatTimestamp,
-		type FormattedChange
 	} from '$lib/obj/recipeDiff';
 	import NoteSidebar from './NoteSidebar.svelte';
 
@@ -47,10 +46,10 @@
 			<p class="opacity-60 italic">No history yet.</p>
 		{:else}
 			<ol id="recipe-history-entries" class="flex flex-col gap-2 list-none p-0">
-				{#each entries as entry, i (entry.node.id)}
+			{#each entries as entry (entry.node.id)}
 					<li class="border rounded p-2">
 						<header class="flex justify-between items-baseline">
-							<strong>{nodeDisplayLabel(entry.node, i)}</strong>
+							<strong>{nodeDisplayLabel(entry.node)}</strong>
 							<small class="opacity-70">{formatTimestamp(entry.node.timestamp.getTime())}</small>
 						</header>
 
@@ -68,8 +67,8 @@
 										class:bg-red-100={c.changeType === 'remove'}
 										class:bg-amber-100={c.changeType === 'edit'}
 									>
-										<span class="mr-1 font-mono text-[9px] font-bold uppercase">{badge}</span>
-										<span class="text-stone-700">{content}</span>
+									<span class="mr-1 font-mono text-[9px] font-bold uppercase">{badge}</span>
+									<span class="text-stone-700">{content}</span>
 										{#if c.note}
 											<button
 												type="button"

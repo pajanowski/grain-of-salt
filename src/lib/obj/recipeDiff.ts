@@ -30,46 +30,134 @@ function directionLabel(dir: Direction): string {
 }
 
 /**
- * Format a single change with access to the state that existed BEFORE this
- * change was applied. With that, 'edit' can show "old → new" and 'remove'
- * can show what was removed.
+ * Word-level diff between two strings.
+ * Returns an array of tokens where:
+ *   'same' — unchanged word, rendered as-is
+ *   'new'  — word that only appears in `next`; render with highlight
+ *
+ * Used for 'edit' change segments: the new words get a darker yellow bg.
  */
-export function formatIngredientChange(
-  change: IngredientChange,
-  priorState: Map<string, Ingredient>,
-): string {
-  const label = change.body ? ingredientLabel(change.body) : '(missing)';
-  if (change.changeType === 'add') return `ADD ${label}`;
-  if (change.changeType === 'remove') {
-    const before = change.targetId ? priorState.get(change.targetId) : undefined;
-    return before ? `REMOVE ${ingredientLabel(before)}` : `REMOVE ${label}`;
-  }
-  // edit
-  const before = change.targetId ? priorState.get(change.targetId) : undefined;
-  return before ? `EDIT ${ingredientLabel(before)} → ${label}` : `EDIT ${label}`;
-}
+export type DiffSegment = { text: string; kind: 'same' | 'new' };
 
-export function formatDirectionChange(
-  change: DirectionChange,
-  priorState: Map<string, Direction>,
-): string {
-  const label = change.body ? `"${directionLabel(change.body)}"` : '(empty)';
-  if (change.changeType === 'add') return `ADD ${label}`;
-  if (change.changeType === 'remove') {
-    const before = change.targetId ? priorState.get(change.targetId) : undefined;
-    return before ? `REMOVE "${directionLabel(before)}"` : `REMOVE ${label}`;
+export function wordDiff(prev: string, next: string): DiffSegment[] {
+  const a = prev.split(/\s+/).filter(Boolean);
+  const b = next.split(/\s+/).filter(Boolean);
+  const out: DiffSegment[] = [];
+
+  let i = 0, j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) {
+      out.push({ text: a[i], kind: 'same' });
+      i++;
+      j++;
+    } else if (j < b.length) {
+      // If this token appears later in `a`, treat the skipped `a` tokens
+      // as replacements and mark them 'new'.
+      const skipIdx = a.indexOf(b[j], i + 1);
+      if (skipIdx > i) {
+        while (i < skipIdx) {
+          out.push({ text: a[i], kind: 'new' });
+          i++;
+        }
+        out.push({ text: b[j], kind: 'same' });
+        i++;
+        j++;
+      } else {
+        out.push({ text: b[j], kind: 'new' });
+        j++;
+      }
+    } else {
+      // a has extra tokens — removals rendered as 'new' so the arrow
+      // clearly means "was → now".
+      out.push({ text: a[i], kind: 'new' });
+      i++;
+    }
   }
-  // edit
-  const before = change.targetId ? priorState.get(change.targetId) : undefined;
-  return before ? `EDIT "${directionLabel(before)}" → ${label}` : `EDIT ${label}`;
+
+  return out;
 }
 
 export interface FormattedChange {
   kind: 'ingredient' | 'direction';
   changeType: 'add' | 'edit' | 'remove';
   text: string;
+  /**
+   * For 'edit' changes: word-level diff of the before/after value.
+   * Render 'new' tokens with a darker yellow background to show what changed.
+   * Null for 'add' / 'remove' (the full text is the added/removed thing).
+   */
+  segments: DiffSegment[] | null;
   /** Author-provided note, surfaced as a clickable icon in the UI. */
   note: string | null;
+}
+
+// Internal: format a single ingredient change to the full FormattedChange shape.
+function formatIngredientChangeFull(
+  change: IngredientChange,
+  priorState: Map<string, Ingredient>,
+): FormattedChange {
+  const label = change.body ? ingredientLabel(change.body) : '(missing)';
+  if (change.changeType === 'add') {
+    return { kind: 'ingredient', changeType: 'add', text: `ADD ${label}`, segments: null, note: change.note };
+  }
+  if (change.changeType === 'remove') {
+    const before = change.targetId ? priorState.get(change.targetId) : undefined;
+    const text = before ? `REMOVE ${ingredientLabel(before)}` : `REMOVE ${label}`;
+    return { kind: 'ingredient', changeType: 'remove', text, segments: null, note: change.note };
+  }
+  // edit
+  const before = change.targetId ? priorState.get(change.targetId) : undefined;
+  const beforeLabel = before ? ingredientLabel(before) : '';
+  const text = before ? `EDIT ${beforeLabel} → ${label}` : `EDIT ${label}`;
+  const segments = before ? wordDiff(beforeLabel, label) : null;
+  return { kind: 'ingredient', changeType: 'edit', text, segments, note: change.note };
+}
+
+// Internal: format a single direction change to the full FormattedChange shape.
+function formatDirectionChangeFull(
+  change: DirectionChange,
+  priorState: Map<string, Direction>,
+): FormattedChange {
+  const body = change.body ?? null;
+  const label = body ? `"${directionLabel(body)}"` : '(empty)';
+  if (change.changeType === 'add') {
+    return { kind: 'direction', changeType: 'add', text: `ADD ${label}`, segments: null, note: change.note };
+  }
+  if (change.changeType === 'remove') {
+    const before = change.targetId ? priorState.get(change.targetId) : undefined;
+    const text = before ? `REMOVE "${directionLabel(before)}"` : `REMOVE ${label}`;
+    return { kind: 'direction', changeType: 'remove', text, segments: null, note: change.note };
+  }
+  // edit
+  const before = change.targetId ? priorState.get(change.targetId) : undefined;
+  const beforeLabel = before ? directionLabel(before) : '';
+  const beforeQuoted = before ? `"${beforeLabel}"` : '';
+  const newLabel = body ? directionLabel(body) : '';
+  const text = before ? `EDIT ${beforeQuoted} → ${label}` : `EDIT ${label}`;
+  const segments = before ? wordDiff(beforeLabel, newLabel) : null;
+  return { kind: 'direction', changeType: 'edit', text, segments, note: change.note };
+}
+
+/**
+ * Format a single ingredient change to a human-readable string.
+ * (Segments are available via `formatIngredientChangeFull`.)
+ */
+export function formatIngredientChange(
+  change: IngredientChange,
+  priorState: Map<string, Ingredient>,
+): string {
+  return formatIngredientChangeFull(change, priorState).text;
+}
+
+/**
+ * Format a single direction change to a human-readable string.
+ * (Segments are available via `formatDirectionChangeFull`.)
+ */
+export function formatDirectionChange(
+  change: DirectionChange,
+  priorState: Map<string, Direction>,
+): string {
+  return formatDirectionChangeFull(change, priorState).text;
 }
 
 /**
@@ -83,20 +171,10 @@ export function formatNode(
 ): FormattedChange[] {
   const out: FormattedChange[] = [];
   for (const c of node.ingredientChanges) {
-    out.push({
-      kind: 'ingredient',
-      changeType: c.changeType,
-      text: formatIngredientChange(c, priorState.ingredients),
-      note: c.note,
-    });
+    out.push(formatIngredientChangeFull(c, priorState.ingredients));
   }
   for (const c of node.directionChanges) {
-    out.push({
-      kind: 'direction',
-      changeType: c.changeType,
-      text: formatDirectionChange(c, priorState.directions),
-      note: c.note,
-    });
+    out.push(formatDirectionChangeFull(c, priorState.directions));
   }
   return out;
 }
@@ -196,12 +274,13 @@ function applyDirectionChange(state: Map<string, Direction>, change: DirectionCh
     }
   }
 }
+
 /**
  * Display label for a node in the history breadcrumb.
  */
-export function nodeDisplayLabel(node: RecipeNode, index: number): string {
-	if (node.parentId === null) return 'Initial state';
-	return node.name;
+export function nodeDisplayLabel(node: RecipeNode): string {
+  if (node.parentId === null) return 'Initial state';
+  return node.name;
 }
 
 /**
