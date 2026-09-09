@@ -2,6 +2,7 @@
 	import '../../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import RecipeList from '$lib/component/RecipeList.svelte';
+	import MobileFloatingButtons from '$lib/component/MobileFloatingButtons.svelte';
 	import { api, errorMessage } from '$lib/api';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
@@ -17,6 +18,8 @@
 	let importUrlInputEl = $state<HTMLInputElement | null>(null);
 	let importLoading = $state(false);
 	let importError = $state<string | null>(null);
+	let searchQuery = $state('');
+	let recipeListRef = $state<{ focusSearch: () => void } | null>(null);
 
 	$effect(() => {
 		if (createRecipe && inputEl) {
@@ -81,7 +84,7 @@
 			.then((html) => api.post('/mise/api/import', { url: importUrl, html }))
 			.catch(() => {
 				// CORS or fetch failed — fall back to server-side fetch
-			return api.post('/mise/api/import', { url: importUrl });
+				return api.post('/mise/api/import', { url: importUrl });
 			})
 			.then(() => {
 				importUrl = '';
@@ -96,6 +99,16 @@
 				importLoading = false;
 			});
 	}
+
+	function handleFloatingSearch() {
+		if (sidebarCollapsed) sidebarCollapsed = false;
+		// Let the sidebar render, then focus the search input.
+		queueMicrotask(() => recipeListRef?.focusSearch());
+	}
+
+	function handleFloatingToggleSidebar() {
+		sidebarCollapsed = !sidebarCollapsed;
+	}
 </script>
 
 <svelte:head>
@@ -104,12 +117,14 @@
 
 <div class="flex h-screen w-screen overflow-hidden">
 	<!-- Collapsed strip -->
+	<!-- Collapsed strip — desktop only. On mobile, the sidebar hides entirely so
+	     the floating buttons drive the toggle. -->
 	{#if sidebarCollapsed}
 		<div
-			class="flex h-full w-12 shrink-0 flex-col items-center border-r border-stone-200 bg-stone-100 py-4 shadow-[2px_0_8px_rgba(0,0,0,0.08)]"
+			class="hidden md:flex h-full w-12 shrink-0 flex-col items-center border-r border-stone-200 bg-stone-100 py-4 shadow-[2px_0_8px_rgba(0,0,0,0.08)]"
 		>
 			<button
-				class="secondary flex h-10 w-10 items-center justify-center rounded-lg"
+				class="btn-amber secondary flex h-10 w-10 items-center justify-center rounded-lg"
 				onclick={() => {
 					sidebarCollapsed = false;
 				}}
@@ -162,13 +177,13 @@
 	<!-- Full sidebar -->
 	{#if !sidebarCollapsed}
 		<aside
-			class="flex h-full w-64 shrink-0 flex-col border-r border-stone-200 bg-stone-100 shadow-[2px_0_8px_rgba(0,0,0,0.08)]"
+			class="flex h-full w-full md:w-64 shrink-0 flex-col border-r border-stone-200 bg-stone-100 shadow-[2px_0_8px_rgba(0,0,0,0.08)] z-40 md:z-auto"
 		>
 			<!-- Sidebar header -->
 			<div class="flex items-center justify-between border-b border-stone-200 px-4 py-3">
 				<span class="font-semibold text-stone-700">Grain of Salt</span>
 				<button
-					class="secondary flex h-10 w-10 items-center justify-center rounded-lg"
+					class="btn-amber secondary flex h-10 w-10 items-center justify-center rounded-lg"
 					onclick={() => {
 						sidebarCollapsed = true;
 					}}
@@ -192,8 +207,8 @@
 				</button>
 			</div>
 
-			<div class="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
-				<RecipeList recipeTree={data.recipeTree} />
+				<div class="flex flex-1 flex-col gap-3 overflow-y-auto p-4 pb-[calc(1rem+48px)] md:pb-0">
+				<RecipeList bind:this={recipeListRef} bind:searchQuery recipeTree={data.recipeTree} />
 
 				{#if createRecipe}
 					<div class="rounded-lg border border-stone-300 bg-stone-50 p-4 shadow-sm">
@@ -207,9 +222,9 @@
 								class="text-sm"
 							/>
 							<div class="flex gap-2">
-								<button onclick={handleCreate}>Create</button>
+								<button class="btn-amber" onclick={handleCreate}>Create</button>
 								<button
-									class="secondary"
+									class="btn-amber secondary"
 									onclick={() => {
 										newRecipeName = '';
 										createRecipe = false;
@@ -221,7 +236,7 @@
 						</div>
 					</div>
 				{:else}
-					<button onclick={() => (createRecipe = true)} class="flex items-center gap-2">
+					<button class="btn-amber flex items-center gap-2" onclick={() => (createRecipe = true)}>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							viewBox="0 0 24 24"
@@ -256,11 +271,11 @@
 								<p class="text-xs text-red-600">{importError}</p>
 							{/if}
 							<div class="flex gap-2">
-								<button onclick={handleImport} disabled={importLoading}>
+								<button class="btn-amber" onclick={handleImport} disabled={importLoading}>
 									{importLoading ? 'Importing…' : 'Import'}
 								</button>
 								<button
-									class="secondary"
+									class="btn-amber secondary"
 									disabled={importLoading}
 									onclick={() => {
 										importUrl = '';
@@ -274,10 +289,7 @@
 						</div>
 					</div>
 				{:else}
-					<button
-						onclick={() => (importRecipe = true)}
-						class="flex items-center gap-2"
-					>
+					<button class="btn-amber flex items-center gap-2" onclick={() => (importRecipe = true)}>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							viewBox="0 0 24 24"
@@ -299,38 +311,38 @@
 			</div>
 
 			<!-- Auth footer -->
-			<div class="border-t border-stone-200 p-4">
-			{#if data.user}
-				<div class="flex flex-col gap-2">
-					<span class="text-xs text-stone-500">Signed in as {data.user.email}</span>
-					<a
-						href="/me"
-						class="secondary flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
-					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							class="h-4 w-4"
-							aria-hidden="true"
+			<div class="border-t border-stone-200 p-4 pb-[calc(1rem+48px)] md:pb-4">
+				{#if data.user}
+					<div class="flex flex-col gap-2">
+						<span class="text-xs text-stone-500">Signed in as {data.user.email}</span>
+						<a
+							href="/me"
+							class="btn-amber secondary flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
 						>
-							<circle cx="12" cy="8" r="4" />
-							<path d="M6 20c0-4 2.7-6 6-6s6 2 6 6" />
-						</svg>
-						Profile
-					</a>
-				<form method="POST" action="/auth?/logout" use:enhance>
-						<button type="submit" class="secondary w-full text-sm">Sign out</button>
-					</form>
-				</div>
-			{:else}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								class="h-4 w-4"
+								aria-hidden="true"
+							>
+								<circle cx="12" cy="8" r="4" />
+								<path d="M6 20c0-4 2.7-6 6-6s6 2 6 6" />
+							</svg>
+							Profile
+						</a>
+						<form method="POST" action="/auth?/logout" use:enhance>
+							<button type="submit" class="btn-amber secondary w-full text-sm">Sign out</button>
+						</form>
+					</div>
+				{:else}
 					<a
 						href="/auth"
-						class="secondary flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+						class="btn-amber secondary flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -355,14 +367,20 @@
 	{/if}
 
 	<!-- Main content -->
-	<main class="min-w-0 flex-1 overflow-y-auto bg-white">
+	<main class="min-w-0 flex-1 overflow-y-auto bg-white pb-[calc(1rem+48px)] md:pb-0">
 		{@render children()}
 	</main>
 	<style>
-	/* Override global button { padding: 0.5rem } for expand/collapse — icon fills the button */
-	button[aria-label='Expand recipe list'],
-	button[aria-label='Collapse recipe list'] {
-		padding: 0;
-	}
+		/* Override global button { padding: 0.5rem } for expand/collapse — icon fills the button */
+		button[aria-label='Expand recipe list'],
+		button[aria-label='Collapse recipe list'] {
+			padding: 0;
+		}
 	</style>
+
+	<MobileFloatingButtons
+		{sidebarCollapsed}
+		onSearch={handleFloatingSearch}
+		onToggleSidebar={handleFloatingToggleSidebar}
+	/>
 </div>

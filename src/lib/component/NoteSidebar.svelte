@@ -76,7 +76,7 @@
 			</h2>
 			<button
 				type="button"
-				class="text-sm font-bold opacity-70 hover:opacity-100"
+				class="btn-amber secondary text-sm font-bold opacity-70 hover:opacity-100"
 				aria-label="Close"
 				onclick={onclose}>X</button
 			>
@@ -99,12 +99,11 @@
 					class="border rounded px-2 py-1 text-sm w-full"
 					rows="6"
 					bind:value={draft}
-					placeholder="Write a note about this change…"
-				></textarea>
+					placeholder="Write a note about this change…"></textarea>
 				<div class="flex gap-2 mt-1">
 					<button
 						type="button"
-						class="flat-button"
+						class="btn-amber flat-button"
 						onclick={commit}
 						data-testid="note-confirm"
 					>
@@ -113,18 +112,14 @@
 					{#if note.currentNote && ondelete}
 						<button
 							type="button"
-							class="flat-button text-red-700"
+							class="btn-amber flat-button text-red-700 hover:bg-red-100"
 							onclick={remove}
 							data-testid="note-delete"
 						>
 							Delete
 						</button>
 					{/if}
-					<button
-						type="button"
-						class="flat-button"
-						onclick={onclose}
-					>
+					<button type="button" class="btn-amber secondary flat-button" onclick={onclose}>
 						Cancel
 					</button>
 				</div>

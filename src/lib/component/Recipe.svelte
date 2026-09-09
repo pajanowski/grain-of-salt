@@ -376,7 +376,7 @@
 		forkBusy = true;
 		try {
 			const { data: newRecipe } = await api.post<{ id: string }>(
-			`/mise/api/recipe/${currentNode.id}/fork`,
+				`/mise/api/recipe/${currentNode.id}/fork`,
 				{ name: trimmed }
 			);
 			showForkModal = false;
@@ -416,7 +416,13 @@
 				class="flex items-center gap-1 rounded border border-stone-300 bg-stone-50 px-2 py-1 text-xs text-stone-600 hover:border-stone-400 hover:bg-stone-100"
 				title="View recipe graph"
 			>
-				<svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+				<svg
+					class="h-4 w-4"
+					viewBox="0 0 16 16"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.5"
+				>
 					<circle cx="8" cy="3" r="1.5" />
 					<circle cx="3" cy="13" r="1.5" />
 					<circle cx="13" cy="13" r="1.5" />
@@ -443,7 +449,7 @@
 		<div class="flex items-center justify-between border-b border-stone-100 px-4 py-3">
 			<h2 class="font-semibold text-stone-800">Ingredients</h2>
 			<button
-				class="secondary flex items-center gap-1.5 text-sm"
+				class="btn-amber secondary flex items-center gap-1.5 text-sm"
 				onclick={() => {
 					if (!addingIngredient) newIngredient = EmptyIngredient();
 					addingIngredient = !addingIngredient;
@@ -492,15 +498,17 @@
 					</div>
 					<div class="flex gap-2">
 						<button
-							type="button"
+							class="btn-amber"
 							onclick={() => {
 								addIngredient(newIngredient);
 								addingIngredient = false;
 								newIngredient = EmptyIngredient();
 							}}>Add</button
 						>
-						<button type="button" class="secondary" onclick={() => (addingIngredient = false)}
-							>Cancel</button
+						<button
+							type="button"
+							class="btn-amber secondary"
+							onclick={() => (addingIngredient = false)}>Cancel</button
 						>
 					</div>
 				</form>
@@ -530,7 +538,7 @@
 		<div class="flex items-center justify-between border-b border-stone-100 px-4 py-3">
 			<h2 class="font-semibold text-stone-800">Directions</h2>
 			<button
-				class="secondary flex items-center gap-1.5 text-sm"
+				class="btn-amber secondary flex items-center gap-1.5 text-sm"
 				onclick={() => {
 					if (!addingDirection) newDirection = EmptyDirection();
 					addingDirection = !addingDirection;
@@ -565,15 +573,17 @@
 						bind:value={newDirection.body}></textarea>
 					<div class="flex gap-2">
 						<button
-							type="button"
+							class="btn-amber"
 							onclick={() => {
 								addDirection(newDirection);
 								addingDirection = false;
 								newDirection = EmptyDirection();
 							}}>Add</button
 						>
-						<button type="button" class="secondary" onclick={() => (addingDirection = false)}
-							>Cancel</button
+						<button
+							type="button"
+							class="btn-amber secondary"
+							onclick={() => (addingDirection = false)}>Cancel</button
 						>
 					</div>
 				</form>
@@ -605,8 +615,8 @@
 		>
 			<span class="text-sm font-medium text-amber-900">Unsaved changes</span>
 			<div class="flex gap-2">
-				<button type="button" class="secondary" onclick={performReset}>Reset</button>
-				<button type="button" onclick={performSave}>Save</button>
+				<button type="button" class="btn-amber secondary" onclick={performReset}>Reset</button>
+				<button type="button" class="btn-amber" onclick={performSave}>Save</button>
 			</div>
 		</div>
 	{/if}
@@ -645,8 +655,10 @@
 			<input bind:value={renameName} aria-label="New recipe name" />
 		</label>
 		<div class="mt-3 flex gap-2">
-			<button type="submit" disabled={renameBusy}>{renameBusy ? 'Saving…' : 'Save'}</button>
-			<button type="button" class="secondary" onclick={() => (showRenameModal = false)}
+			<button type="submit" class="btn-amber" disabled={renameBusy}
+				>{renameBusy ? 'Saving…' : 'Save'}</button
+			>
+			<button type="button" class="btn-amber secondary" onclick={() => (showRenameModal = false)}
 				>Cancel</button
 			>
 		</div>
@@ -666,8 +678,11 @@
 			<input bind:value={forkName} aria-label="Forked recipe name" />
 		</label>
 		<div class="mt-3 flex gap-2">
-			<button type="submit" disabled={forkBusy}>{forkBusy ? 'Forking…' : 'Fork'}</button>
-			<button type="button" class="secondary" onclick={() => (showForkModal = false)}>Cancel</button
+			<button type="submit" class="btn-amber" disabled={forkBusy}
+				>{forkBusy ? 'Forking…' : 'Fork'}</button
+			>
+			<button type="button" class="btn-amber secondary" onclick={() => (showForkModal = false)}
+				>Cancel</button
 			>
 		</div>
 	</form>

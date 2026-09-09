@@ -1,50 +1,103 @@
-@import "tailwindcss";
-@import "@xyflow/svelte/dist/base.css";
+@import 'tailwindcss';
+@import '@xyflow/svelte/dist/base.css';
 
-/* Base button — amber, used as default for in-app actions.
-   Components that need different sizing override locally. */
-button {
-	@apply bg-amber-300;
-	@apply border border-amber-600;
-	@apply shadow-md;
-	@apply px-4 py-2;
-	@apply rounded;
-	@apply font-semibold;
-	@apply text-amber-950;
-	@apply transition-colors duration-150;
+/* shadcn-svelte (vega / neutral) — minimal tokens for the Button /
+   ButtonGroup components. Dark-mode tokens omitted (light-only).
+   Plain `<button>` elements elsewhere on the page keep the project's
+   amber styling (`.btn-amber` class below), so shadcn-rendered buttons
+   and ad-hoc amber buttons no longer fight over the bare `button`
+   selector. */
+@theme inline {
+	--radius: 0.5rem;
+	--radius-md: calc(var(--radius) - 2px);
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
 }
 
-button:hover:not(:disabled) {
-	@apply bg-amber-400;
+:root {
+	--background: oklch(1 0 0);
+	--foreground: oklch(0.145 0 0);
+	--card: oklch(1 0 0);
+	--card-foreground: oklch(0.145 0 0);
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(0.145 0 0);
+	--primary: oklch(0.205 0 0);
+	--primary-foreground: oklch(0.985 0 0);
+	--secondary: oklch(0.97 0 0);
+	--secondary-foreground: oklch(0.205 0 0);
+	--muted: oklch(0.97 0 0);
+	--muted-foreground: oklch(0.556 0 0);
+	--accent: oklch(0.97 0 0);
+	--accent-foreground: oklch(0.205 0 0);
+	--destructive: oklch(0.577 0.245 27.325);
+	--border: oklch(0.922 0 0);
+	--input: oklch(0.922 0 0);
+	--ring: oklch(0.708 0 0);
 }
 
-button:active:not(:disabled) {
-	@apply bg-amber-500;
-}
+/* Base layer — sits below utilities so shadcn utility classes always
+   win against any element-level reset. Existing amber buttons opt in
+   via the `.btn-amber` class (or `.btn-amber.secondary` for the
+   outlined variant), so shadcn-rendered buttons are untouched. */
+@layer base {
+	button.btn-amber {
+		@apply bg-amber-300;
+		@apply border border-amber-600;
+		@apply shadow-md;
+		@apply px-4 py-2;
+		@apply rounded;
+		@apply font-semibold;
+		@apply text-amber-950;
+		@apply transition-colors duration-150;
+	}
 
-button:disabled {
-	@apply bg-amber-100;
-	@apply text-amber-700;
-	@apply border-amber-300;
-	@apply shadow-none;
-	@apply cursor-not-allowed;
-}
+	button.btn-amber:hover:not(:disabled) {
+		@apply bg-amber-400;
+	}
 
-/* Secondary / cancel buttons — outlined, not filled */
-button.secondary {
-	@apply bg-transparent;
-	@apply text-amber-800;
-}
+	button.btn-amber:active:not(:disabled) {
+		@apply bg-amber-500;
+	}
 
-button.secondary:hover:not(:disabled) {
-	@apply bg-amber-100;
-}
+	button.btn-amber:disabled {
+		@apply bg-amber-100;
+		@apply text-amber-700;
+		@apply border-amber-300;
+		@apply shadow-none;
+		@apply cursor-not-allowed;
+	}
 
-input {
-	@apply border-2 border-stone-300;
-	@apply rounded;
-	@apply px-3 py-2;
-	@apply w-full;
-	@apply focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200;
-	@apply transition-colors duration-150;
+	button.btn-amber.secondary {
+		@apply bg-transparent;
+		@apply text-amber-800;
+	}
+
+	button.btn-amber.secondary:hover:not(:disabled) {
+		@apply bg-amber-100;
+	}
+
+	input {
+		@apply border-2 border-stone-300;
+		@apply rounded;
+		@apply px-3 py-2;
+		@apply w-full;
+		@apply focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200;
+		@apply transition-colors duration-150;
+	}
 }

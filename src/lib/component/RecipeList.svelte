@@ -1,7 +1,10 @@
 <script lang="ts">
 	import type { RecipeTreeNode } from '$lib/server/bo/recipenodesbo';
 
-	let { recipeTree }: { recipeTree: RecipeTreeNode[] } = $props();
+	let {
+		recipeTree,
+		searchQuery = $bindable('')
+	}: { recipeTree: RecipeTreeNode[]; searchQuery?: string } = $props();
 
 	// Set of node ids whose subtrees are collapsed. Local state — the
 	// tree resets on full reload, which is fine for a list view.
@@ -25,14 +28,28 @@
 		return out;
 	}
 
-	let expandableIds = $derived(collectIdsWithChildren(recipeTree));
-
-	function expandAll() {
-		collapsed = new Set();
+	function nameMatches(node: RecipeTreeNode, q: string): boolean {
+		return node.name.toLowerCase().includes(q);
 	}
 
-	function collapseAll() {
-		collapsed = new Set(expandableIds);
+	// Keep a node if its name matches OR any descendant matches; rebuild
+	// `children` with only the surviving branch so the rendered tree stays
+	// connected to its visible ancestors.
+	function filterTree(nodes: RecipeTreeNode[], q: string): RecipeTreeNode[] {
+		if (!q) return nodes;
+		const out: RecipeTreeNode[] = [];
+		for (const node of nodes) {
+			const filteredChildren = filterTree(node.children, q);
+			if (nameMatches(node, q) || filteredChildren.length > 0) {
+				out.push({
+					id: node.id,
+					name: node.name,
+					parentId: node.parentId,
+					children: filteredChildren
+				});
+			}
+		}
+		return out;
 	}
 
 	function countDescendants(node: RecipeTreeNode): number {
@@ -67,9 +84,24 @@
 
 	type TreeGroup = { root: RecipeTreeNode; rows: Row[] };
 
+	// Case-insensitive trim of the query. Empty string disables filtering.
+	let normalizedQuery = $derived(searchQuery.trim().toLowerCase());
+
+	let filteredTree = $derived<RecipeTreeNode[]>(filterTree(recipeTree, normalizedQuery));
+
+	let expandableIds = $derived(collectIdsWithChildren(filteredTree));
+
+	function expandAll() {
+		collapsed = new Set();
+	}
+
+	function collapseAll() {
+		collapsed = new Set(expandableIds);
+	}
+
 	// Each top-level tree becomes its own card. Index drives the alternating palette.
 	let treeGroups = $derived<TreeGroup[]>(
-		recipeTree.map((root) => ({
+		filteredTree.map((root) => ({
 			root,
 			rows: flatten([root])
 		}))
@@ -78,43 +110,68 @@
 	// Subtle alternating backgrounds. Two tones is enough to make the seam
 	// between trees obvious without being loud.
 	const TREE_PALETTES = ['bg-white', 'bg-stone-50'] as const;
+
+	let searchInputEl = $state<HTMLInputElement | null>(null);
+	export function focusSearch() {
+		searchInputEl?.focus();
+		searchInputEl?.select();
+	}
 </script>
 
 <div class="flex flex-col gap-3">
 	<header class="flex items-center justify-between gap-3">
 		<h1 class="text-xl font-semibold">Recipe List</h1>
 		<div class="flex gap-1">
-			<button
-				type="button"
-				class="rl-btn rounded"
-				onclick={expandAll}
-				aria-label="Expand all"
-			>
-				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4" aria-hidden="true">
+			<button type="button" class="rl-btn rounded" onclick={expandAll} aria-label="Expand all">
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					class="h-4 w-4"
+					aria-hidden="true"
+				>
 					<polyline points="15 3 21 3 21 9" />
 					<polyline points="9 21 3 21 3 15" />
 					<line x1="21" x2="14" y1="3" y2="10" />
 					<line x1="3" x2="10" y1="21" y2="14" />
 				</svg>
 			</button>
-			<button
-				type="button"
-				class="rl-btn rounded"
-				onclick={collapseAll}
-				aria-label="Collapse all"
-			>
-				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4" aria-hidden="true">
+			<button type="button" class="rl-btn rounded" onclick={collapseAll} aria-label="Collapse all">
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					class="h-4 w-4"
+					aria-hidden="true"
+				>
 					<polyline points="4 14 10 14 10 20" />
 					<polyline points="20 10 14 10 14 4" />
-					<line x1="14" x2="21" y1="10" y2="3" />
+					<line x1="14" x2="21" y1="3" y2="10" />
 					<line x1="3" x2="10" y1="21" y2="14" />
 				</svg>
 			</button>
 		</div>
 	</header>
 
+	<input
+		bind:this={searchInputEl}
+		bind:value={searchQuery}
+		type="search"
+		placeholder="Search recipes…"
+		aria-label="Search recipes"
+		class="rl-search"
+	/>
+
 	{#if treeGroups.length === 0}
-		<p class="text-gray-600">No recipes yet.</p>
+		<p class="text-gray-600">{normalizedQuery ? 'No matches.' : 'No recipes yet.'}</p>
 	{:else}
 		<div class="flex flex-col gap-3">
 			{#each treeGroups as group, i (group.root.id)}
@@ -194,5 +251,9 @@
 	.rl-toggle:hover {
 		background: rgba(0, 0, 0, 0.08);
 		color: #111827;
+	}
+	/* Override the global input rule for this scoped input. */
+	.rl-search {
+		font-size: 0.875rem;
 	}
 </style>
