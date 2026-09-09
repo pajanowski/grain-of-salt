@@ -91,8 +91,8 @@ test.describe('recipe graph page', () => {
     // The first node is the root (current recipe) which links to the recipe list,
     // not a recipe detail page. Click a child node instead.
     const nodes = page.locator('.svelte-flow__node');
-    // await expect(nodes).toHaveCount(4, { timeout: 10_000 }); // root + 3 descendants
-    const childNode = nodes.nth(0);
+    await expect(nodes).toHaveCount(4, { timeout: 10_000 }); // root + 3 descendants
+    const childNode = nodes.nth(1);
     await expect(childNode).toBeVisible();
 
     await childNode.click();
