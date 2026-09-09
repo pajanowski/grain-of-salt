@@ -35,7 +35,7 @@ start-dev:
     pnpm dev
 
 # Bootstrap from scratch: deps, supabase, push, seed, preview
-start-all:
+start-all-deps:
     #!/usr/bin/env bash
     if [ ! -d node_modules ]; then
         just install
@@ -45,7 +45,15 @@ start-all:
     just db-push
     just db-seed
     just build
-    just preview
+
+start-all:
+  just start-all-deps
+  just preview
+
+
+start-all-dev:
+  just start-all-deps
+  just dev
 
 # Hard reset + bootstrap
 start-fresh:
