@@ -3,6 +3,7 @@
 	import { formatAmount } from '$lib/formatAmount';
 	import { parseAmount } from '$lib/parseAmount';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
+	import Tabs from './Tabs.svelte';
 
 	type Props = {
 		ingredient: Ingredient;
@@ -11,22 +12,38 @@
 		note: string | null;
 		onNote: () => void;
 		onUpdate: (next: Ingredient) => void;
+		onUpdateNote: (note: string | null) => void;
 		onRemove: () => void;
 		onMove: (direction: 'up' | 'down') => void;
 		readOnly?: boolean;
 	};
 
-	let { ingredient, index, total, note, onNote, onUpdate, onRemove, onMove, readOnly = false }: Props = $props();
+	let {
+		ingredient,
+		index,
+		total,
+		note,
+		onNote,
+		onUpdate,
+		onUpdateNote,
+		onRemove,
+		onMove,
+		readOnly = false
+	}: Props = $props();
 
 	let editing = $state(false);
 	let draft = $state<Ingredient>({ ...ingredient });
 	let amountDraft = $state('');
 	let amountError = $state<string | null>(null);
+	let editTab = $state<'details' | 'note'>('details');
+	let noteDraft = $state('');
 
 	function startEdit() {
 		draft = { ...ingredient };
 		amountDraft = ingredient.amount ? String(ingredient.amount) : '';
 		amountError = null;
+		noteDraft = note ?? '';
+		editTab = 'details';
 		editing = true;
 	}
 
@@ -42,6 +59,8 @@
 		}
 		amountError = null;
 		onUpdate({ ...draft, amount: amtResult.value! });
+		const trimmedNote = noteDraft.trim();
+		onUpdateNote(trimmedNote.length > 0 ? trimmedNote : null);
 		editing = false;
 	}
 
@@ -53,7 +72,7 @@
 
 	// Focus the name input when editing starts — avoids bind:this hydration issues
 	$effect(() => {
-		if (editing) {
+		if (editing && editTab === 'details') {
 			requestAnimationFrame(() => {
 				(document.querySelector('[data-editing-ingredient]') as HTMLInputElement)?.focus();
 			});
@@ -91,29 +110,47 @@
 				}
 			}}
 		>
-			<input
-				class="border rounded px-3 py-2"
-				placeholder="Ingredient name"
-				aria-label="Ingredient name"
-				data-editing-ingredient
-				bind:value={draft.name}
+			<Tabs
+				tabs={[
+					{ id: 'details', label: 'Details' },
+					{ id: 'note', label: noteDraft.length > 0 ? 'Note ●' : 'Note' }
+				]}
+				selected={editTab}
+				onchange={(id) => (editTab = id)}
 			/>
-			<div class="flex gap-2">
+			{#if editTab === 'details'}
 				<input
-					class="border rounded px-3 py-2 w-24"
-					placeholder="Amount (e.g. 1/3, 1 1/2)"
-					type="text"
-					inputmode="numeric"
-					bind:value={amountDraft}
+					class="border rounded px-3 py-2"
+					placeholder="Ingredient name"
+					aria-label="Ingredient name"
+					data-editing-ingredient
+					bind:value={draft.name}
 				/>
-				<input
-					class="border rounded px-3 py-2 flex-1"
-					placeholder="Unit"
-					bind:value={draft.unit}
-				/>
-			</div>
-			{#if amountError}
-				<p class="text-sm text-red-600">{amountError}</p>
+				<div class="flex gap-2">
+					<input
+						class="border rounded px-3 py-2 w-24"
+						placeholder="Amount (e.g. 1/3, 1 1/2)"
+						type="text"
+						inputmode="numeric"
+						bind:value={amountDraft}
+					/>
+					<input
+						class="border rounded px-3 py-2 flex-1"
+						placeholder="Unit"
+						bind:value={draft.unit}
+					/>
+				</div>
+				{#if amountError}
+					<p class="text-sm text-red-600">{amountError}</p>
+				{/if}
+			{:else}
+				<textarea
+					class="border rounded px-3 py-2 text-sm w-full"
+					rows="3"
+					placeholder="Optional note for this ingredient…"
+					aria-label="Note"
+					bind:value={noteDraft}
+				></textarea>
 			{/if}
 			<div class="flex gap-2">
 				<button type="button" class="btn-amber" onclick={doEdit}>Save</button>
@@ -128,13 +165,16 @@
 			<span class="opacity-60 ml-1">{ingredient.unit}</span>
 		</span>
 		{#if note}
-			<span
-				class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800"
+			<button
+				type="button"
+				class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200"
 				title={note}
+				aria-label="Edit note"
+				onclick={onNote}
 				data-testid="ingredient-note-button"
 			>
 				📝
-			</span>
+			</button>
 		{/if}
 		{#if !readOnly}
 			<ContextMenu {items} label={`Actions for ${ingredient.name}`} />

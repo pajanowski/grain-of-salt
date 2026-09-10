@@ -13,6 +13,7 @@
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import Modal from './Modal.svelte';
 	import NodeChanges from './NodeChanges.svelte';
+	import Tabs from './Tabs.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
 	import { invalidateAll, goto, invalidate } from '$app/navigation';
 	import { api, errorMessage } from '$lib/api';
@@ -133,12 +134,12 @@
 			};
 		});
 	}
-	function addIngredient(input: Ingredient) {
+	function addIngredient(input: Ingredient, note: string | null = null) {
 		leafIngredientChanges.push({
 			id: uuid(),
 			changeType: 'add',
 			targetId: null,
-			note: null,
+			note,
 			body: { ...input }
 		});
 	}
@@ -200,12 +201,12 @@
 			};
 		});
 	}
-	function addDirection(input: Direction) {
+	function addDirection(input: Direction, note: string | null = null) {
 		leafDirectionChanges.push({
 			id: uuid(),
 			changeType: 'add',
 			targetId: null,
-			note: null,
+			note,
 			body: { ...input }
 		});
 	}
@@ -216,6 +217,10 @@
 	let amountRaw = $state('');
 	let newIngredient = $state(EmptyIngredient());
 	let newDirection = $state(EmptyDirection());
+	let addIngredientTab = $state<'details' | 'note'>('details');
+	let addDirectionTab = $state<'details' | 'note'>('details');
+	let addIngredientNote = $state('');
+	let addDirectionNote = $state('');
 
 	function doAddIngredient() {
 		const amtResult = parseAmount(amountRaw);
@@ -224,11 +229,28 @@
 			return;
 		}
 		amountError = null;
-		addIngredient({ ...newIngredient, amount: amtResult.value! });
+		const trimmedNote = addIngredientNote.trim();
+		addIngredient(
+			{ ...newIngredient, amount: amtResult.value! },
+			trimmedNote.length > 0 ? trimmedNote : null
+		);
 		newIngredient = EmptyIngredient();
 		amountRaw = '';
+		addIngredientNote = '';
+		addIngredientTab = 'details';
 		requestAnimationFrame(() => {
 			(document.querySelector('[data-add-ingredient-name]') as HTMLInputElement | null)?.focus();
+		});
+	}
+
+	function doAddDirection() {
+		const trimmedNote = addDirectionNote.trim();
+		addDirection({ ...newDirection }, trimmedNote.length > 0 ? trimmedNote : null);
+		newDirection = EmptyDirection();
+		addDirectionNote = '';
+		addDirectionTab = 'details';
+		requestAnimationFrame(() => {
+			(document.querySelector('[data-add-direction-body]') as HTMLTextAreaElement | null)?.focus();
 		});
 	}
 
@@ -291,6 +313,21 @@
 		const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
 		const c = arr.find((x) => x.id === changeId);
 		if (c) c.note = text.length > 0 ? text : null;
+	}
+
+	/**
+	 * Set the note on the leaf change that owns a given row id, looking
+	 * up by either the change's `targetId` (edit/remove) or its body id
+	 * (add). Used by the row's edit-form Note tab.
+	 */
+	function setRowNote(rowId: string, kind: 'ingredient' | 'direction', note: string | null) {
+		const arr = kind === 'ingredient' ? leafIngredientChanges : leafDirectionChanges;
+		const c = arr.find(
+			(x) =>
+				(x.changeType === 'add' && x.body?.id === rowId) ||
+				((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
+		);
+		if (c) c.note = note;
 	}
 
 	function deleteRowNote() {
@@ -512,6 +549,8 @@
 							newIngredient = EmptyIngredient();
 							amountRaw = '';
 							amountError = null;
+							addIngredientNote = '';
+							addIngredientTab = 'details';
 						}
 						addingIngredient = !addingIngredient;
 						if (addingIngredient) {
@@ -519,7 +558,7 @@
 								(document.querySelector('[data-add-ingredient-name]') as HTMLInputElement | null)?.focus();
 							});
 						}
-						}}
+					}}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -550,6 +589,7 @@
 							note={ingredientNoteFor(ing.id)}
 							onNote={() => openRowNote(ing.id, 'ingredient')}
 							onUpdate={(next) => editIngredient(ing.id, next)}
+							onUpdateNote={(note) => setRowNote(ing.id, 'ingredient', note)}
 							onRemove={() => removeIngredient(ing.id)}
 							onMove={(dir) => moveIngredient(ing.id, dir)}
 						/>
@@ -564,29 +604,47 @@
 						doAddIngredient();
 					}
 				}}>
-					<input
-						class="border rounded px-3 py-2"
-						placeholder="Ingredient name"
-						aria-label="Ingredient name"
-						data-add-ingredient-name
-						bind:value={newIngredient.name}
+					<Tabs
+						tabs={[
+							{ id: 'details', label: 'Details' },
+							{ id: 'note', label: addIngredientNote.length > 0 ? 'Note ●' : 'Note' }
+						]}
+						selected={addIngredientTab}
+						onchange={(id) => (addIngredientTab = id)}
 					/>
-					<div class="flex gap-2">
+					{#if addIngredientTab === 'details'}
 						<input
-							class="border rounded px-3 py-2 w-24"
-							placeholder="Amount (e.g. 1/3, 1 1/2)"
-							type="text"
-							inputmode="numeric"
-							bind:value={amountRaw}
+							class="border rounded px-3 py-2"
+							placeholder="Ingredient name"
+							aria-label="Ingredient name"
+							data-add-ingredient-name
+							bind:value={newIngredient.name}
 						/>
-						<input
-							class="border rounded px-3 py-2 flex-1"
-							placeholder="Unit"
-							bind:value={newIngredient.unit}
-						/>
-					</div>
-					{#if amountError}
-						<p class="text-sm text-red-600">{amountError}</p>
+						<div class="flex gap-2">
+							<input
+								class="border rounded px-3 py-2 w-24"
+								placeholder="Amount (e.g. 1/3, 1 1/2)"
+								type="text"
+								inputmode="numeric"
+								bind:value={amountRaw}
+							/>
+							<input
+								class="border rounded px-3 py-2 flex-1"
+								placeholder="Unit"
+								bind:value={newIngredient.unit}
+							/>
+						</div>
+						{#if amountError}
+							<p class="text-sm text-red-600">{amountError}</p>
+						{/if}
+					{:else}
+						<textarea
+							class="border rounded px-3 py-2 text-sm w-full"
+							rows="3"
+							placeholder="Optional note for this ingredient…"
+							aria-label="Note"
+							bind:value={addIngredientNote}
+						></textarea>
 					{/if}
 					<div class="flex gap-2">
 						<button
@@ -611,7 +669,11 @@
 			<button
 				class="btn-amber secondary flex items-center gap-1.5 text-sm"
 				onclick={() => {
-						if (!addingDirection) newDirection = EmptyDirection();
+						if (!addingDirection) {
+							newDirection = EmptyDirection();
+							addDirectionNote = '';
+							addDirectionTab = 'details';
+						}
 						addingDirection = !addingDirection;
 						if (addingDirection) {
 							requestAnimationFrame(() => {
@@ -649,6 +711,7 @@
 							note={directionNoteFor(dir.id)}
 							onNote={() => openRowNote(dir.id, 'direction')}
 							onUpdate={(next) => editDirection(dir.id, next)}
+							onUpdateNote={(note) => setRowNote(dir.id, 'direction', note)}
 							onRemove={() => removeDirection(dir.id)}
 							onMove={(moveDir) => moveDirection(dir.id, moveDir)}
 						/>
@@ -660,30 +723,38 @@
 				<form class="mt-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3" onkeydown={(e) => {
 					if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
 						e.preventDefault();
-						addDirection(newDirection);
-						newDirection = EmptyDirection();
-						requestAnimationFrame(() => {
-							(document.querySelector('[data-add-direction-body]') as HTMLTextAreaElement | null)?.focus();
-						});
+						doAddDirection();
 					}
 				}}>
-					<textarea
-						class="border rounded px-3 py-2 w-full"
-						rows="3"
-						placeholder="Direction"
-						aria-label="Direction"
-						data-add-direction-body
-						bind:value={newDirection.body}></textarea>
+					<Tabs
+						tabs={[
+							{ id: 'details', label: 'Details' },
+							{ id: 'note', label: addDirectionNote.length > 0 ? 'Note ●' : 'Note' }
+						]}
+						selected={addDirectionTab}
+						onchange={(id) => (addDirectionTab = id)}
+					/>
+					{#if addDirectionTab === 'details'}
+						<textarea
+							class="border rounded px-3 py-2 w-full"
+							rows="3"
+							placeholder="Direction"
+							aria-label="Direction"
+							data-add-direction-body
+							bind:value={newDirection.body}></textarea>
+					{:else}
+						<textarea
+							class="border rounded px-3 py-2 text-sm w-full"
+							rows="3"
+							placeholder="Optional note for this direction…"
+							aria-label="Note"
+							bind:value={addDirectionNote}
+						></textarea>
+					{/if}
 					<div class="flex gap-2">
 						<button
 							class="btn-amber"
-							onclick={() => {
-								addDirection(newDirection);
-								newDirection = EmptyDirection();
-								requestAnimationFrame(() => {
-									(document.querySelector('[data-add-direction-body]') as HTMLTextAreaElement | null)?.focus();
-								});
-							}}>Add</button
+							onclick={doAddDirection}>Add</button
 						>
 						<button
 							type="button"

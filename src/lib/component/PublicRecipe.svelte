@@ -50,16 +50,17 @@
 					{#each recipe.ingredients as ing, i (ing.id)}
 						<li class="py-3 first:pt-0 last:pb-0">
 							<IngredientRow
-								ingredient={ing}
-								index={i}
-								total={recipe.ingredients.length}
-								note={null}
-								onNote={() => {}}
-								onUpdate={() => {}}
-								onRemove={() => {}}
-								onMove={() => {}}
-								readOnly={true}
-							/>
+									ingredient={ing}
+									index={i}
+									total={recipe.ingredients.length}
+									note={null}
+									onNote={() => {}}
+									onUpdate={() => {}}
+									onUpdateNote={() => {}}
+									onRemove={() => {}}
+									onMove={() => {}}
+									readOnly={true}
+								/>
 						</li>
 					{/each}
 				</ol>
@@ -78,16 +79,17 @@
 					{#each recipe.directions as dir, i (dir.id)}
 						<li class="py-3 first:pt-0 last:pb-0">
 							<DirectionRow
-								direction={dir}
-								index={i}
-								total={recipe.directions.length}
-								note={null}
-								onNote={() => {}}
-								onUpdate={() => {}}
-								onRemove={() => {}}
-								onMove={() => {}}
-								readOnly={true}
-							/>
+									direction={dir}
+									index={i}
+									total={recipe.directions.length}
+									note={null}
+									onNote={() => {}}
+									onUpdate={() => {}}
+									onUpdateNote={() => {}}
+									onRemove={() => {}}
+									onMove={() => {}}
+									readOnly={true}
+								/>
 						</li>
 					{/each}
 				</ol>

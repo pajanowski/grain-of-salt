@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Direction } from '$lib/obj/Recipe.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
+	import Tabs from './Tabs.svelte';
 
 	type Props = {
 		direction: Direction;
@@ -9,18 +10,34 @@
 		note: string | null;
 		onNote: () => void;
 		onUpdate: (next: Direction) => void;
+		onUpdateNote: (note: string | null) => void;
 		onRemove: () => void;
 		onMove: (direction: 'up' | 'down') => void;
 		readOnly?: boolean;
 	};
 
-	let { direction, index, total, note, onNote, onUpdate, onRemove, onMove, readOnly = false }: Props = $props();
+	let {
+		direction,
+		index,
+		total,
+		note,
+		onNote,
+		onUpdate,
+		onUpdateNote,
+		onRemove,
+		onMove,
+		readOnly = false
+	}: Props = $props();
 
 	let editing = $state(false);
 	let draft = $state<Direction>({ ...direction });
+	let editTab = $state<'details' | 'note'>('details');
+	let noteDraft = $state('');
 
 	function startEdit() {
 		draft = { ...direction };
+		noteDraft = note ?? '';
+		editTab = 'details';
 		editing = true;
 	}
 
@@ -30,6 +47,8 @@
 
 	function doEdit() {
 		onUpdate({ ...draft });
+		const trimmedNote = noteDraft.trim();
+		onUpdateNote(trimmedNote.length > 0 ? trimmedNote : null);
 		editing = false;
 	}
 
@@ -41,7 +60,7 @@
 
 	// Focus the textarea when editing starts — avoids bind:this hydration issues
 	$effect(() => {
-		if (editing) {
+		if (editing && editTab === 'details') {
 			requestAnimationFrame(() => {
 				(document.querySelector('[data-editing-direction]') as HTMLTextAreaElement)?.focus();
 			});
@@ -75,14 +94,32 @@
 				}
 			}}
 		>
-			<textarea
-				class="border rounded px-3 py-2 w-full"
-				rows="3"
-				placeholder="Direction"
-				aria-label="Direction"
-				data-editing-direction
-				bind:value={draft.body}
-			></textarea>
+			<Tabs
+				tabs={[
+					{ id: 'details', label: 'Details' },
+					{ id: 'note', label: noteDraft.length > 0 ? 'Note ●' : 'Note' }
+				]}
+				selected={editTab}
+				onchange={(id) => (editTab = id)}
+			/>
+			{#if editTab === 'details'}
+				<textarea
+					class="border rounded px-3 py-2 w-full"
+					rows="3"
+					placeholder="Direction"
+					aria-label="Direction"
+					data-editing-direction
+					bind:value={draft.body}
+				></textarea>
+			{:else}
+				<textarea
+					class="border rounded px-3 py-2 text-sm w-full"
+					rows="3"
+					placeholder="Optional note for this direction…"
+					aria-label="Note"
+					bind:value={noteDraft}
+				></textarea>
+			{/if}
 			<div class="flex gap-2">
 				<button type="button" class="btn-amber" onclick={doEdit}>Save</button>
 				<button type="button" class="btn-amber secondary" onclick={cancelEdit}>Cancel</button>
@@ -93,30 +130,20 @@
 			<span class="opacity-60 mr-2">{index + 1}.</span>
 			{direction.body}
 		</span>
-	{#if !readOnly}
-		<ContextMenu {items} label={`Actions for direction ${index + 1}`} />
-	{/if}
-	{#if note}
-		{#if readOnly}
-			<span
-				class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800"
-				title={note}
-				data-testid="direction-note-button"
-			>
-				📝
-			</span>
-		{:else}
+		{#if note}
 			<button
 				type="button"
-				class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200"
-				aria-label="Edit note"
+				class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200 self-center"
 				title={note}
+				aria-label="Edit note"
 				onclick={onNote}
 				data-testid="direction-note-button"
 			>
 				📝
 			</button>
 		{/if}
-	{/if}
+		{#if !readOnly}
+			<ContextMenu {items} label={`Actions for direction ${index + 1}`} />
+		{/if}
 	{/if}
 </li>

@@ -21,16 +21,27 @@ the full Case A / Case B rule.
 ## Add forms
 
 "Add new ingredient" / "Add new direction" toggle inline forms with
-name / amount / unit (ingredient) or body (direction) inputs. Submit
-appends an add change to the leaf's working set.
+name / amount / unit (ingredient) or body (direction) inputs. Each form
+is tabbed — **Details** holds the row fields, **Note** holds an
+optional free-text note attached to the new change. Submit appends an
+add change to the leaf's working set; if a note was typed it travels
+with the change. Forms stay open across submissions so several rows
+can be added back-to-back; Cancel closes the form and discards
+pending draft / note state.
 
 ## Notes
 
 Each change record can carry a free-text note (nullable). Rows with a
 note show a 📝 badge inline; the history section shows the same notes
-for ancestor-owned changes. Notes are edited via a shared
-`NoteSidebar` slide-out (Escape closes; Save / Delete / Cancel
-buttons).
+for ancestor-owned changes. Notes can be set three ways:
+
+- **In the add form**, via the Note tab (typed before submit).
+- **In the row edit form**, via the Note tab. The note textarea is
+  pre-populated with the current note; Save writes it back onto the
+  same change record.
+- **Via the sidebar** — the 📝 badge or `Edit note` action on a row
+  opens `NoteSidebar`, which provides Confirm / Delete / Cancel
+  controls (Escape closes).
 
 ## Save
 
@@ -45,6 +56,7 @@ columns in place — no new node is created.
 
 - `src/lib/component/Recipe.svelte` — editor + handlers
 - `src/lib/component/IngredientRow.svelte` / `DirectionRow.svelte`
+- `src/lib/component/Tabs.svelte` — tab control used by add/edit forms
 - `src/lib/component/NodeChanges.svelte` — leaf-change summary
-- `src/lib/component/NoteSidebar.svelte` — note editor
+- `src/lib/component/NoteSidebar.svelte` — sidebar note editor
 - `src/routes/api/recipe-node/[nodeId]/+server.ts` — save endpoint
