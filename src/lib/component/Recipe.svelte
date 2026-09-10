@@ -214,8 +214,54 @@
 	let addingDirection = $state(false);
 	let ingredientNameInput = $state<HTMLInputElement | null>(null);
 	let directionBodyInput = $state<HTMLTextAreaElement | null>(null);
+	let amountError = $state<string | null>(null);
+	let amountRaw = $state('');
 	let newIngredient = $state(EmptyIngredient());
 	let newDirection = $state(EmptyDirection());
+
+	// Accepts: decimals (3.25), integers (3), simple fractions (1/3), mixed numbers (1 1/2)
+	// Returns { value: number } or { error: string }, rounds to 3 decimal places
+	function parseAmount(raw: string): { value?: number; error?: string } {
+		if (!raw.trim()) return { value: 0 };
+		const trimmed = raw.trim();
+		// Try decimal / integer first
+		if (/^\d+(\.\d+)?$/.test(trimmed)) {
+			return { value: Math.round(parseFloat(trimmed) * 1000) / 1000 };
+		}
+		// Mixed number: e.g. "1 1/2"
+		const mixedMatch = trimmed.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+		if (mixedMatch) {
+			const whole = parseInt(mixedMatch[1], 10);
+			const num = parseInt(mixedMatch[2], 10);
+			const denom = parseInt(mixedMatch[3], 10);
+			if (denom === 0) return { error: 'Denominator cannot be zero' };
+			const v = whole + num / denom;
+			return { value: Math.round(v * 1000) / 1000 };
+		}
+		// Simple fraction: e.g. "2/3"
+		const fracMatch = trimmed.match(/^(\d+)\/(\d+)$/);
+		if (fracMatch) {
+			const num = parseInt(fracMatch[1], 10);
+			const denom = parseInt(fracMatch[2], 10);
+			if (denom === 0) return { error: 'Denominator cannot be zero' };
+			const v = num / denom;
+			return { value: Math.round(v * 1000) / 1000 };
+		}
+		return { error: 'Invalid amount' };
+	}
+
+	function doAddIngredient() {
+		const amtResult = parseAmount(amountRaw);
+		if (amtResult.error) {
+			amountError = amtResult.error;
+			return;
+		}
+		amountError = null;
+		addIngredient({ ...newIngredient, amount: amtResult.value! });
+		newIngredient = EmptyIngredient();
+		amountRaw = '';
+		requestAnimationFrame(() => ingredientNameInput?.focus());
+	}
 
 	function ingredientNoteFor(rowId: string): string | null {
 		const c = leafIngredientChanges.find(
@@ -493,9 +539,14 @@
 			<button
 				class="btn-amber secondary flex items-center gap-1.5 text-sm"
 				onclick={() => {
-					if (!addingIngredient) newIngredient = EmptyIngredient();
-					addingIngredient = !addingIngredient;
-				}}
+						if (!addingIngredient) {
+							newIngredient = EmptyIngredient();
+							amountRaw = '';
+							amountError = null;
+						}
+						addingIngredient = !addingIngredient;
+						requestAnimationFrame(() => ingredientNameInput?.focus());
+					}}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -537,9 +588,7 @@
 				<form class="mt-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3" onkeydown={(e) => {
 					if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
 						e.preventDefault();
-						addIngredient(newIngredient);
-						newIngredient = EmptyIngredient();
-						requestAnimationFrame(() => ingredientNameInput?.focus());
+						doAddIngredient();
 					}
 				}}>
 					<input
@@ -552,10 +601,10 @@
 					<div class="flex gap-2">
 						<input
 							class="border rounded px-3 py-2 w-24"
-							placeholder="Amount"
-							type="number"
-							step="any"
-							bind:value={newIngredient.amount}
+							placeholder="Amount (e.g. 1/3, 1 1/2)"
+							type="text"
+							inputmode="numeric"
+							bind:value={amountRaw}
 						/>
 						<input
 							class="border rounded px-3 py-2 flex-1"
@@ -563,14 +612,13 @@
 							bind:value={newIngredient.unit}
 						/>
 					</div>
+					{#if amountError}
+						<p class="text-sm text-red-600">{amountError}</p>
+					{/if}
 					<div class="flex gap-2">
 						<button
 							class="btn-amber"
-							onclick={() => {
-								addIngredient(newIngredient);
-								newIngredient = EmptyIngredient();
-								requestAnimationFrame(() => ingredientNameInput?.focus());
-							}}>Add</button
+							onclick={doAddIngredient}>Add</button
 						>
 						<button
 							type="button"
@@ -590,9 +638,10 @@
 			<button
 				class="btn-amber secondary flex items-center gap-1.5 text-sm"
 				onclick={() => {
-					if (!addingDirection) newDirection = EmptyDirection();
-					addingDirection = !addingDirection;
-				}}
+						if (!addingDirection) newDirection = EmptyDirection();
+						addingDirection = !addingDirection;
+						requestAnimationFrame(() => directionBodyInput?.focus());
+					}}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
