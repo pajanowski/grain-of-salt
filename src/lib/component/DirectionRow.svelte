@@ -28,7 +28,7 @@
 		editing = false;
 	}
 
-	function saveEdit() {
+	function doEdit() {
 		onUpdate({ ...draft });
 		editing = false;
 	}
@@ -38,6 +38,15 @@
 			onRemove();
 		}
 	}
+
+	// Focus the textarea when editing starts — avoids bind:this hydration issues
+	$effect(() => {
+		if (editing) {
+			requestAnimationFrame(() => {
+				(document.querySelector('[data-editing-direction]') as HTMLTextAreaElement)?.focus();
+			});
+		}
+	});
 
 	const items: MenuItem[] = $derived([
 		{ label: 'Edit', onSelect: startEdit },
@@ -58,27 +67,25 @@
 <li class="flex items-start gap-2" data-testid="direction-row" data-direction-index={index}>
 	{#if editing}
 		<form
-			class="flex flex-col gap-2 flex-1"
-			onsubmit={(e) => {
-				e.preventDefault();
-				saveEdit();
+			class="flex flex-col gap-2 flex-1 rounded border border-stone-200 bg-stone-50 p-3"
+			onkeydown={(e) => {
+				if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+					e.preventDefault();
+					doEdit();
+				}
 			}}
 		>
 			<textarea
-				class="border rounded px-2 py-1 w-full"
+				class="border rounded px-3 py-2 w-full"
 				rows="3"
+				placeholder="Direction"
+				aria-label="Direction"
+				data-editing-direction
 				bind:value={draft.body}
 			></textarea>
 			<div class="flex gap-2">
-				<button
-					type="submit"
-					class="px-2 py-1 text-sm rounded border hover:bg-gray-100">Save</button
-				>
-				<button
-					type="button"
-					class="px-2 py-1 text-sm rounded border hover:bg-gray-100"
-					onclick={cancelEdit}>Cancel</button
-				>
+				<button type="button" class="btn-amber" onclick={doEdit}>Save</button>
+				<button type="button" class="btn-amber secondary" onclick={cancelEdit}>Cancel</button>
 			</div>
 		</form>
 	{:else}

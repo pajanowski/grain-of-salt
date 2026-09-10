@@ -7,7 +7,7 @@
 	} from '$lib/obj/Recipe.svelte';
 	import type { IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
 	import { v4 as uuid } from 'uuid';
-	import { tick } from 'svelte';
+	import { parseAmount } from '$lib/parseAmount';
 	import IngredientRow from './IngredientRow.svelte';
 	import DirectionRow from './DirectionRow.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
@@ -212,43 +212,10 @@
 
 	let addingIngredient = $state(false);
 	let addingDirection = $state(false);
-	let ingredientNameInput = $state<HTMLInputElement | null>(null);
-	let directionBodyInput = $state<HTMLTextAreaElement | null>(null);
 	let amountError = $state<string | null>(null);
 	let amountRaw = $state('');
 	let newIngredient = $state(EmptyIngredient());
 	let newDirection = $state(EmptyDirection());
-
-	// Accepts: decimals (3.25), integers (3), simple fractions (1/3), mixed numbers (1 1/2)
-	// Returns { value: number } or { error: string }, rounds to 3 decimal places
-	function parseAmount(raw: string): { value?: number; error?: string } {
-		if (!raw.trim()) return { value: 0 };
-		const trimmed = raw.trim();
-		// Try decimal / integer first
-		if (/^\d+(\.\d+)?$/.test(trimmed)) {
-			return { value: Math.round(parseFloat(trimmed) * 1000) / 1000 };
-		}
-		// Mixed number: e.g. "1 1/2"
-		const mixedMatch = trimmed.match(/^(\d+)\s+(\d+)\/(\d+)$/);
-		if (mixedMatch) {
-			const whole = parseInt(mixedMatch[1], 10);
-			const num = parseInt(mixedMatch[2], 10);
-			const denom = parseInt(mixedMatch[3], 10);
-			if (denom === 0) return { error: 'Denominator cannot be zero' };
-			const v = whole + num / denom;
-			return { value: Math.round(v * 1000) / 1000 };
-		}
-		// Simple fraction: e.g. "2/3"
-		const fracMatch = trimmed.match(/^(\d+)\/(\d+)$/);
-		if (fracMatch) {
-			const num = parseInt(fracMatch[1], 10);
-			const denom = parseInt(fracMatch[2], 10);
-			if (denom === 0) return { error: 'Denominator cannot be zero' };
-			const v = num / denom;
-			return { value: Math.round(v * 1000) / 1000 };
-		}
-		return { error: 'Invalid amount' };
-	}
 
 	function doAddIngredient() {
 		const amtResult = parseAmount(amountRaw);
@@ -260,7 +227,9 @@
 		addIngredient({ ...newIngredient, amount: amtResult.value! });
 		newIngredient = EmptyIngredient();
 		amountRaw = '';
-		requestAnimationFrame(() => ingredientNameInput?.focus());
+		requestAnimationFrame(() => {
+			(document.querySelector('[data-add-ingredient-name]') as HTMLInputElement | null)?.focus();
+		});
 	}
 
 	function ingredientNoteFor(rowId: string): string | null {
@@ -545,8 +514,12 @@
 							amountError = null;
 						}
 						addingIngredient = !addingIngredient;
-						requestAnimationFrame(() => ingredientNameInput?.focus());
-					}}
+						if (addingIngredient) {
+							requestAnimationFrame(() => {
+								(document.querySelector('[data-add-ingredient-name]') as HTMLInputElement | null)?.focus();
+							});
+						}
+						}}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -595,7 +568,7 @@
 						class="border rounded px-3 py-2"
 						placeholder="Ingredient name"
 						aria-label="Ingredient name"
-						bind:this={ingredientNameInput}
+						data-add-ingredient-name
 						bind:value={newIngredient.name}
 					/>
 					<div class="flex gap-2">
@@ -640,7 +613,11 @@
 				onclick={() => {
 						if (!addingDirection) newDirection = EmptyDirection();
 						addingDirection = !addingDirection;
-						requestAnimationFrame(() => directionBodyInput?.focus());
+						if (addingDirection) {
+							requestAnimationFrame(() => {
+								(document.querySelector('[data-add-direction-body]') as HTMLTextAreaElement | null)?.focus();
+							});
+						}
 					}}
 			>
 				<svg
@@ -685,7 +662,9 @@
 						e.preventDefault();
 						addDirection(newDirection);
 						newDirection = EmptyDirection();
-						requestAnimationFrame(() => directionBodyInput?.focus());
+						requestAnimationFrame(() => {
+							(document.querySelector('[data-add-direction-body]') as HTMLTextAreaElement | null)?.focus();
+						});
 					}
 				}}>
 					<textarea
@@ -693,7 +672,7 @@
 						rows="3"
 						placeholder="Direction"
 						aria-label="Direction"
-						bind:this={directionBodyInput}
+						data-add-direction-body
 						bind:value={newDirection.body}></textarea>
 					<div class="flex gap-2">
 						<button
@@ -701,7 +680,9 @@
 							onclick={() => {
 								addDirection(newDirection);
 								newDirection = EmptyDirection();
-								requestAnimationFrame(() => directionBodyInput?.focus());
+								requestAnimationFrame(() => {
+									(document.querySelector('[data-add-direction-body]') as HTMLTextAreaElement | null)?.focus();
+								});
 							}}>Add</button
 						>
 						<button

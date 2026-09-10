@@ -291,13 +291,25 @@ function directionRow(page: Page, index: number) {
 function addIngredientForm(page: Page) {
   return page
     .locator('form')
-    .filter({ has: getAddButton(page) })
+    .filter({ has: page.getByRole('textbox', { name: 'Ingredient name' }) })
+    .first();
+}
+
+function addDirectionForm(page: Page) {
+  return page
+    .locator('form')
+    .filter({ has: page.getByRole('textbox', { name: 'Direction' }) })
     .first();
 }
 
 async function fillAddIngredient(page: Page, name: string, amount: string, unit: string) {
-  await getAddIngredientButton(page).click();
-  const form = addIngredientForm(page);
+  // The form stays open after a successful Add, so only click the
+  // section "+ Add" trigger if the form isn't already visible.
+  let form = addIngredientForm(page);
+  if ((await form.count()) === 0) {
+    await getAddIngredientButton(page).click();
+    form = addIngredientForm(page);
+  }
   await expect(getIngredientNameInput(page)).toBeVisible();
   await getIngredientNameInput(page).fill(name);
   await page.getByPlaceholder('Amount').fill(amount);
@@ -306,8 +318,11 @@ async function fillAddIngredient(page: Page, name: string, amount: string, unit:
 }
 
 async function fillAddDirection(page: Page, body: string) {
-  await getAddDirectionButton(page).click();
-  const form = addIngredientForm(page);
+  let form = addDirectionForm(page);
+  if ((await form.count()) === 0) {
+    await getAddDirectionButton(page).click();
+    form = addDirectionForm(page);
+  }
   await expect(getDirectionBodyInput(page)).toBeVisible();
   await getDirectionBodyInput(page).fill(body);
   await getAddButton(form).click();

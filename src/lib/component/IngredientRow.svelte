@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Ingredient } from '$lib/obj/Recipe.svelte';
 	import { formatAmount } from '$lib/formatAmount';
+	import { parseAmount } from '$lib/parseAmount';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 
 	type Props = {
@@ -19,9 +20,13 @@
 
 	let editing = $state(false);
 	let draft = $state<Ingredient>({ ...ingredient });
+	let amountDraft = $state('');
+	let amountError = $state<string | null>(null);
 
 	function startEdit() {
 		draft = { ...ingredient };
+		amountDraft = ingredient.amount ? String(ingredient.amount) : '';
+		amountError = null;
 		editing = true;
 	}
 
@@ -29,8 +34,14 @@
 		editing = false;
 	}
 
-	function saveEdit() {
-		onUpdate({ ...draft });
+	function doEdit() {
+		const amtResult = parseAmount(amountDraft);
+		if (amtResult.error) {
+			amountError = amtResult.error;
+			return;
+		}
+		amountError = null;
+		onUpdate({ ...draft, amount: amtResult.value! });
 		editing = false;
 	}
 
@@ -39,6 +50,15 @@
 			onRemove();
 		}
 	}
+
+	// Focus the name input when editing starts — avoids bind:this hydration issues
+	$effect(() => {
+		if (editing) {
+			requestAnimationFrame(() => {
+				(document.querySelector('[data-editing-ingredient]') as HTMLInputElement)?.focus();
+			});
+		}
+	});
 
 	const items: MenuItem[] = $derived([
 		{ label: 'Edit', onSelect: startEdit },
@@ -63,31 +83,42 @@
 >
 	{#if editing}
 		<form
-			class="flex flex-wrap items-center gap-2 flex-1"
-			onsubmit={(e) => {
-				e.preventDefault();
-				saveEdit();
+			class="flex flex-col gap-2 flex-1 rounded border border-stone-200 bg-stone-50 p-3"
+			onkeydown={(e) => {
+				if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+					e.preventDefault();
+					doEdit();
+				}
 			}}
 		>
 			<input
-				class="border rounded px-2 py-1 flex-1 min-w-32"
-				placeholder="Name"
+				class="border rounded px-3 py-2"
+				placeholder="Ingredient name"
+				aria-label="Ingredient name"
+				data-editing-ingredient
 				bind:value={draft.name}
 			/>
-			<input
-				class="border rounded px-2 py-1 w-20"
-				placeholder="Amount"
-				type="number"
-				step="any"
-				bind:value={draft.amount}
-			/>
-			<input class="border rounded px-2 py-1 w-20" placeholder="Unit" bind:value={draft.unit} />
-			<button type="submit" class="px-2 py-1 text-sm rounded border hover:bg-gray-100">Save</button>
-			<button
-				type="button"
-				class="px-2 py-1 text-sm rounded border hover:bg-gray-100"
-				onclick={cancelEdit}>Cancel</button
-			>
+			<div class="flex gap-2">
+				<input
+					class="border rounded px-3 py-2 w-24"
+					placeholder="Amount (e.g. 1/3, 1 1/2)"
+					type="text"
+					inputmode="numeric"
+					bind:value={amountDraft}
+				/>
+				<input
+					class="border rounded px-3 py-2 flex-1"
+					placeholder="Unit"
+					bind:value={draft.unit}
+				/>
+			</div>
+			{#if amountError}
+				<p class="text-sm text-red-600">{amountError}</p>
+			{/if}
+			<div class="flex gap-2">
+				<button type="button" class="btn-amber" onclick={doEdit}>Save</button>
+				<button type="button" class="btn-amber secondary" onclick={cancelEdit}>Cancel</button>
+			</div>
 		</form>
 	{:else}
 		<span class="flex-1">
