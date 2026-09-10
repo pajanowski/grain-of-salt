@@ -7,6 +7,7 @@
 	} from '$lib/obj/Recipe.svelte';
 	import type { IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
 	import { v4 as uuid } from 'uuid';
+	import { tick } from 'svelte';
 	import IngredientRow from './IngredientRow.svelte';
 	import DirectionRow from './DirectionRow.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
@@ -211,6 +212,8 @@
 
 	let addingIngredient = $state(false);
 	let addingDirection = $state(false);
+	let ingredientNameInput = $state<HTMLInputElement | null>(null);
+	let directionBodyInput = $state<HTMLTextAreaElement | null>(null);
 	let newIngredient = $state(EmptyIngredient());
 	let newDirection = $state(EmptyDirection());
 
@@ -513,12 +516,37 @@
 		</div>
 
 		<div class="p-4">
+			<ol class="flex flex-col divide-y divide-stone-100" data-testid="ingredient-list">
+				{#each displayedIngredients as ing, i (ing.id)}
+					<li class="py-3 first:pt-0 last:pb-0">
+						<IngredientRow
+							ingredient={ing}
+							index={i}
+							total={displayedIngredients.length}
+							note={ingredientNoteFor(ing.id)}
+							onNote={() => openRowNote(ing.id, 'ingredient')}
+							onUpdate={(next) => editIngredient(ing.id, next)}
+							onRemove={() => removeIngredient(ing.id)}
+							onMove={(dir) => moveIngredient(ing.id, dir)}
+						/>
+					</li>
+				{/each}
+			</ol>
+
 			{#if addingIngredient}
-				<form class="mb-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3">
+				<form class="mt-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3" onkeydown={(e) => {
+					if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+						e.preventDefault();
+						addIngredient(newIngredient);
+						newIngredient = EmptyIngredient();
+						requestAnimationFrame(() => ingredientNameInput?.focus());
+					}
+				}}>
 					<input
 						class="border rounded px-3 py-2"
 						placeholder="Ingredient name"
 						aria-label="Ingredient name"
+						bind:this={ingredientNameInput}
 						bind:value={newIngredient.name}
 					/>
 					<div class="flex gap-2">
@@ -540,8 +568,8 @@
 							class="btn-amber"
 							onclick={() => {
 								addIngredient(newIngredient);
-								addingIngredient = false;
 								newIngredient = EmptyIngredient();
+								requestAnimationFrame(() => ingredientNameInput?.focus());
 							}}>Add</button
 						>
 						<button
@@ -552,23 +580,6 @@
 					</div>
 				</form>
 			{/if}
-
-			<ol class="flex flex-col divide-y divide-stone-100" data-testid="ingredient-list">
-				{#each displayedIngredients as ing, i (ing.id)}
-					<li class="py-3 first:pt-0 last:pb-0">
-						<IngredientRow
-							ingredient={ing}
-							index={i}
-							total={displayedIngredients.length}
-							note={ingredientNoteFor(ing.id)}
-							onNote={() => openRowNote(ing.id, 'ingredient')}
-							onUpdate={(next) => editIngredient(ing.id, next)}
-							onRemove={() => removeIngredient(ing.id)}
-							onMove={(dir) => moveIngredient(ing.id, dir)}
-						/>
-					</li>
-				{/each}
-			</ol>
 		</div>
 	</section>
 
@@ -602,32 +613,6 @@
 		</div>
 
 		<div class="p-4">
-			{#if addingDirection}
-				<form class="mb-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3">
-					<textarea
-						class="border rounded px-3 py-2 w-full"
-						rows="3"
-						placeholder="Direction"
-						aria-label="Direction"
-						bind:value={newDirection.body}></textarea>
-					<div class="flex gap-2">
-						<button
-							class="btn-amber"
-							onclick={() => {
-								addDirection(newDirection);
-								addingDirection = false;
-								newDirection = EmptyDirection();
-							}}>Add</button
-						>
-						<button
-							type="button"
-							class="btn-amber secondary"
-							onclick={() => (addingDirection = false)}>Cancel</button
-						>
-					</div>
-				</form>
-			{/if}
-
 			<ol class="flex flex-col divide-y divide-stone-100" data-testid="direction-list">
 				{#each displayedDirections as dir, i (dir.id)}
 					<li class="py-3 first:pt-0 last:pb-0">
@@ -644,6 +629,40 @@
 					</li>
 				{/each}
 			</ol>
+
+			{#if addingDirection}
+				<form class="mt-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3" onkeydown={(e) => {
+					if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+						e.preventDefault();
+						addDirection(newDirection);
+						newDirection = EmptyDirection();
+						requestAnimationFrame(() => directionBodyInput?.focus());
+					}
+				}}>
+					<textarea
+						class="border rounded px-3 py-2 w-full"
+						rows="3"
+						placeholder="Direction"
+						aria-label="Direction"
+						bind:this={directionBodyInput}
+						bind:value={newDirection.body}></textarea>
+					<div class="flex gap-2">
+						<button
+							class="btn-amber"
+							onclick={() => {
+								addDirection(newDirection);
+								newDirection = EmptyDirection();
+								requestAnimationFrame(() => directionBodyInput?.focus());
+							}}>Add</button
+						>
+						<button
+							type="button"
+							class="btn-amber secondary"
+							onclick={() => (addingDirection = false)}>Cancel</button
+						>
+					</div>
+				</form>
+			{/if}
 		</div>
 	</section>
 
