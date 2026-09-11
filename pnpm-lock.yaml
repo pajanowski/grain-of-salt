@@ -48,6 +48,9 @@ importers:
       '@internationalized/date':
         specifier: ^3.12.2
         version: 3.12.2
+      '@lucide/svelte':
+        specifier: ^1.44.0
+        version: 1.44.0(svelte@5.56.4(@typescript-eslint/types@8.62.0))
       '@playwright/test':
         specifier: ^1.60.0
         version: 1.61.1
@@ -844,6 +847,11 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@lucide/svelte@1.44.0':
+    resolution: {integrity: sha512-67510ne/YowceSyN9BECQaWfp5Ed446X6xpUE5C0e4rRV0e1jRj1KzIlKJCXcGc21hgr/VBDkqQXY7v4VQDeBw==}
+    peerDependencies:
+      svelte: ^5
 
   '@mapbox/node-pre-gyp@1.0.5':
     resolution: {integrity: sha512-4srsKPXWlIxp5Vbqz5uLfBN+du2fJChBoYn/f2h991WLdk7jUvcSk/McVLSv/X+xQIPI8eGD5GjrnygdyHnhPA==}
@@ -3245,6 +3253,10 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.4.14
+
+  '@lucide/svelte@1.44.0(svelte@5.56.4(@typescript-eslint/types@8.62.0))':
+    dependencies:
+      svelte: 5.56.4(@typescript-eslint/types@8.62.0)
 
   '@mapbox/node-pre-gyp@1.0.5':
     dependencies:

@@ -5,6 +5,8 @@
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import Tabs from './Tabs.svelte';
 	import NoteIcon from './NoteIcon.svelte';
+	import UnitAutocomplete from './UnitAutocomplete.svelte';
+	import { normalizeUnit, displayUnit } from '$lib/unit';
 
 	type Props = {
 		ingredient: Ingredient;
@@ -59,7 +61,8 @@
 			return;
 		}
 		amountError = null;
-		onUpdate({ ...draft, amount: amtResult.value! });
+		const normalizedUnit = normalizeUnit(draft.unit);
+		onUpdate({ ...draft, amount: amtResult.value!, unit: normalizedUnit });
 		const trimmedNote = noteDraft.trim();
 		onUpdateNote(trimmedNote.length > 0 ? trimmedNote : null);
 		editing = false;
@@ -136,11 +139,8 @@
 						inputmode="numeric"
 						bind:value={amountDraft}
 					/>
-					<input
-						class="border rounded px-3 py-2 flex-1"
-						placeholder="Unit"
-						bind:value={draft.unit}
-					/>
+
+					<UnitAutocomplete value={draft.unit} onchange={(u) => (draft.unit = u)} />
 				</div>
 				{#if amountError}
 					<p class="text-sm text-red-600">{amountError}</p>
@@ -151,8 +151,7 @@
 					rows="3"
 					placeholder="Optional note for this ingredient…"
 					aria-label="Note"
-					bind:value={noteDraft}
-				></textarea>
+					bind:value={noteDraft}></textarea>
 			{/if}
 			<div class="flex gap-2">
 				<button type="button" class="btn-amber" onclick={doEdit}>Save</button>
@@ -167,7 +166,7 @@
 					<span class="opacity-60 mr-2">{index + 1}.</span>
 					<span>{ingredient.name}</span>
 					<span class="opacity-60 ml-1">{formatAmount(ingredient.amount)}</span>
-					<span class="opacity-60 ml-1">{ingredient.unit}</span>
+					<span class="opacity-60 ml-1">{displayUnit(ingredient.unit, ingredient.amount)}</span>
 				</span>
 				{#if note && !readOnly}
 					<button

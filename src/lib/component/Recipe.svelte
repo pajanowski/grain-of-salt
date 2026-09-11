@@ -15,6 +15,8 @@
 	import NodeChanges from './NodeChanges.svelte';
 	import Tabs from './Tabs.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
+	import UnitAutocomplete from './UnitAutocomplete.svelte';
+	import { normalizeUnit } from '$lib/unit';
 	import { invalidateAll, goto, invalidate } from '$app/navigation';
 	import { api, errorMessage } from '$lib/api';
 
@@ -230,8 +232,9 @@
 		}
 		amountError = null;
 		const trimmedNote = addIngredientNote.trim();
+		const normalizedUnit = normalizeUnit(newIngredient.unit);
 		addIngredient(
-			{ ...newIngredient, amount: amtResult.value! },
+			{ ...newIngredient, amount: amtResult.value!, unit: normalizedUnit },
 			trimmedNote.length > 0 ? trimmedNote : null
 		);
 		newIngredient = EmptyIngredient();
@@ -628,10 +631,9 @@
 								inputmode="numeric"
 								bind:value={amountRaw}
 							/>
-							<input
-								class="border rounded px-3 py-2 flex-1"
-								placeholder="Unit"
-								bind:value={newIngredient.unit}
+							<UnitAutocomplete
+								value={newIngredient.unit}
+								onchange={(u) => (newIngredient.unit = u)}
 							/>
 						</div>
 						{#if amountError}
