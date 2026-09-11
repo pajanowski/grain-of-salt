@@ -4,6 +4,7 @@
 	import { parseAmount } from '$lib/parseAmount';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import Tabs from './Tabs.svelte';
+	import NoteIcon from './NoteIcon.svelte';
 
 	type Props = {
 		ingredient: Ingredient;
@@ -96,7 +97,8 @@
 </script>
 
 <li
-	class="flex items-center gap-2"
+	class="flex items-start gap-2"
+	class:items-center={!note || !readOnly}
 	data-testid="ingredient-row"
 	data-ingredient-name={ingredient.name}
 >
@@ -158,24 +160,35 @@
 			</div>
 		</form>
 	{:else}
-		<span class="flex-1">
-			<span class="opacity-60 mr-2">{index + 1}.</span>
-			<span>{ingredient.name}</span>
-			<span class="opacity-60 ml-1">{formatAmount(ingredient.amount)}</span>
-			<span class="opacity-60 ml-1">{ingredient.unit}</span>
-		</span>
-		{#if note}
-			<button
-				type="button"
-				class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200"
-				title={note}
-				aria-label="Edit note"
-				onclick={onNote}
-				data-testid="ingredient-note-button"
-			>
-				📝
-			</button>
-		{/if}
+		<!-- read-only + editable ingredient row, optionally with note below -->
+		<div class="flex flex-col gap-1 flex-1 min-w-0">
+			<div class="flex items-center gap-2">
+				<span class="flex-1 flex items-center min-w-0">
+					<span class="opacity-60 mr-2">{index + 1}.</span>
+					<span>{ingredient.name}</span>
+					<span class="opacity-60 ml-1">{formatAmount(ingredient.amount)}</span>
+					<span class="opacity-60 ml-1">{ingredient.unit}</span>
+				</span>
+				{#if note && !readOnly}
+					<button
+						type="button"
+						class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200 shrink-0"
+						title={note}
+						aria-label="Edit note"
+						onclick={onNote}
+						data-testid="ingredient-note-button"
+					>
+						<NoteIcon />
+					</button>
+				{/if}
+			</div>
+			{#if note && readOnly}
+				<p class="flex items-center gap-1.5 text-sm text-stone-500 italic pl-5" title={note}>
+					<NoteIcon />
+					{note}
+				</p>
+			{/if}
+		</div>
 		{#if !readOnly}
 			<ContextMenu {items} label={`Actions for ${ingredient.name}`} />
 		{/if}

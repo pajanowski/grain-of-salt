@@ -162,24 +162,37 @@ export async function getRootRecipeNode(nodeId: string): Promise<RecipeNode | nu
 export function applyNodes(nodes: RecipeNode[]): RecipeState {
 	const ingredients = new Map<string, Ingredient>();
 	const directions = new Map<string, Direction>();
+	// Track the latest note per item from add/edit changes; deleted on remove.
+	const ingredientNotes = new Map<string, string | null>();
+	const directionNotes = new Map<string, string | null>();
 
 	for (const node of nodes) {
 		for (const change of node.ingredientChanges) {
-			applyIngredientChange(ingredients, change);
+			applyIngredientChange(ingredients, ingredientNotes, change);
 		}
 		for (const change of node.directionChanges) {
-			applyDirectionChange(directions, change);
+			applyDirectionChange(directions, directionNotes, change);
 		}
 	}
 
+	const ingredientList = Array.from(ingredients.values()).map((ing) => ({
+		...ing,
+		note: ingredientNotes.get(ing.id) ?? null
+	}));
+	const directionList = Array.from(directions.values()).map((dir) => ({
+		...dir,
+		note: directionNotes.get(dir.id) ?? null
+	}));
+
 	return {
-		ingredients: Array.from(ingredients.values()),
-		directions: Array.from(directions.values()),
+		ingredients: ingredientList,
+		directions: directionList
 	};
 }
 
 function applyIngredientChange(
 	state: Map<string, Ingredient>,
+	notes: Map<string, string | null>,
 	change: IngredientChange,
 ): void {
 	switch (change.changeType) {
@@ -187,17 +200,22 @@ function applyIngredientChange(
 			if (!change.body) return; // malformed: add requires a body
 			const id = change.body.id || change.id;
 			state.set(id, { ...change.body, id });
+			notes.set(id, change.note ?? null);
 			return;
 		}
 		case 'edit': {
 			if (!change.targetId || !change.body) return; // malformed
 			if (state.has(change.targetId)) {
 				state.set(change.targetId, { ...change.body, id: change.targetId });
+				notes.set(change.targetId, change.note ?? null);
 			}
 			return;
 		}
 		case 'remove': {
-			if (change.targetId) state.delete(change.targetId);
+			if (change.targetId) {
+				state.delete(change.targetId);
+				notes.delete(change.targetId);
+			}
 			return;
 		}
 	}
@@ -205,6 +223,7 @@ function applyIngredientChange(
 
 function applyDirectionChange(
 	state: Map<string, Direction>,
+	notes: Map<string, string | null>,
 	change: DirectionChange,
 ): void {
 	switch (change.changeType) {
@@ -212,17 +231,22 @@ function applyDirectionChange(
 			if (!change.body) return;
 			const id = change.body.id || change.id;
 			state.set(id, { ...change.body, id });
+			notes.set(id, change.note ?? null);
 			return;
 		}
 		case 'edit': {
 			if (!change.targetId || !change.body) return;
 			if (state.has(change.targetId)) {
 				state.set(change.targetId, { ...change.body, id: change.targetId });
+				notes.set(change.targetId, change.note ?? null);
 			}
 			return;
 		}
 		case 'remove': {
-			if (change.targetId) state.delete(change.targetId);
+			if (change.targetId) {
+				state.delete(change.targetId);
+				notes.delete(change.targetId);
+			}
 			return;
 		}
 	}

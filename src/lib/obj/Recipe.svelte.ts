@@ -5,7 +5,7 @@ export interface Ingredient {
   name: string;
   amount: number;
   unit: string;
-
+  note?: string | null;
 }
 
 export function NewIngredient(id: string | null, name: string, amount: number, unit: string) {
@@ -25,6 +25,7 @@ export function EmptyIngredient(): Ingredient {
 export interface Direction {
   id: string;
   body: string;
+  note?: string | null;
 }
 export function NewDirection(id: string | null, body: string) {
   return {

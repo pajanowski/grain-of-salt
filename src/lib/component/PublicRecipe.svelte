@@ -53,7 +53,7 @@
 									ingredient={ing}
 									index={i}
 									total={recipe.ingredients.length}
-									note={null}
+									note={ing.note ?? null}
 									onNote={() => {}}
 									onUpdate={() => {}}
 									onUpdateNote={() => {}}
@@ -82,7 +82,7 @@
 									direction={dir}
 									index={i}
 									total={recipe.directions.length}
-									note={null}
+									note={dir.note ?? null}
 									onNote={() => {}}
 									onUpdate={() => {}}
 									onUpdateNote={() => {}}
