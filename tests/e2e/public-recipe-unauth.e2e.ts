@@ -7,7 +7,19 @@
 import { expect, test } from '@playwright/test';
 import { v4 as uuidv4 } from 'uuid';
 import postgres from 'postgres';
-import { getRecipeHeading } from './helpers/page-utils';
+import {
+	getRecipeHeading,
+	getMiseSidebar,
+	getAddButton,
+	getUnsavedChangesBar,
+	getSignInToForkCTA,
+	openCreateForm,
+	getRecipeNameInput,
+	getCreateButton,
+	getRecipeLink,
+	getRecipeActionsButton,
+	getRecipeActionsMenuItem,
+} from './helpers/page-utils';
 
 const db = postgres('postgres://postgres:postgres@127.0.0.1:54322/postgres');
 
@@ -40,16 +52,16 @@ test.describe('public recipe — unauthenticated', () => {
 		await expect(getRecipeHeading(page, recipeName)).toBeVisible();
 
 		// Should NOT have the mise sidebar.
-		await expect(page.locator('aside')).not.toBeVisible();
+		await expect(getMiseSidebar(page)).not.toBeVisible();
 
 		// Should NOT have an Add button.
-		await expect(page.getByRole('button', { name: 'Add', exact: true })).not.toBeVisible();
+		await expect(getAddButton(page)).not.toBeVisible();
 
 		// Should NOT have the unsaved-changes bar.
-		await expect(page.getByText('Unsaved changes')).not.toBeVisible();
+		await expect(getUnsavedChangesBar(page)).not.toBeVisible();
 
 		// Should show the sign-in CTA for forks.
-		await expect(page.getByText('Sign in to fork')).toBeVisible();
+		await expect(getSignInToForkCTA(page)).toBeVisible();
 	});
 
 	test('private node returns 404 to unauthenticated viewer', async ({ page }) => {

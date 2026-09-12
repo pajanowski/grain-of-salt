@@ -95,7 +95,7 @@ test-e2e-run-headless *extra:
     PUBLIC_SUPABASE_URL='http://127.0.0.1:54321' \
     MAILPIT_URL='http://127.0.0.1:54324' \
     PLAYWRIGHT_BASE_URL='http://localhost:4173' \
-    pnpm exec playwright test {{extra}} 
+    pnpm exec playwright test {{extra}}
 
 # Run e2e in Docker (no host browser install needed)
 # Builds, starts vite preview on port 4173, runs tests, then stops the server.

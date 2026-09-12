@@ -214,3 +214,74 @@ export function getAuthUseDifferentEmailButton(page: Page) {
 export function getAuthEmailInput(page: Page) {
 	return page.getByLabel('Email');
 }
+
+// ---------------------------------------------------------------------------
+// Recipe actions menu (recipe detail page)
+// ---------------------------------------------------------------------------
+
+/** "Recipe actions" menu trigger button on the recipe detail page. */
+export function getRecipeActionsButton(page: Page) {
+	return page.getByRole('button', { name: 'Recipe actions' });
+}
+
+/** A menuitem inside the recipe actions menu. */
+export function getRecipeActionsMenuItem(page: Page, label: string) {
+	return page.getByRole('menuitem', { name: label });
+}
+
+// ---------------------------------------------------------------------------
+// Share / copy (public recipe page)
+// ---------------------------------------------------------------------------
+
+/** "Copy" button on the public recipe share bar. */
+export function getShareCopyButton(page: Page) {
+	return page.getByRole('button', { name: 'Copy' });
+}
+
+/** "Copied!" state of the share copy button. */
+export function getCopiedButton(page: Page) {
+	return page.getByRole('button', { name: 'Copied!' });
+}
+
+/** Share link for a public recipe (href=/recipe/{nodeId}). */
+export function getPublicRecipeShareLink(page: Page, nodeId: string) {
+	return page.locator(`a[href="/recipe/${nodeId}"]`);
+}
+
+// ---------------------------------------------------------------------------
+// Recipe graph page
+// ---------------------------------------------------------------------------
+
+/** The SvelteFlow canvas root element (.svelte-flow). */
+export function getSvelteFlowCanvas(page: Page) {
+	return page.locator('.svelte-flow');
+}
+
+/** All SvelteFlow nodes (.svelte-flow__node). */
+export function getSvelteFlowNodes(page: Page) {
+	return page.locator('.svelte-flow__node');
+}
+
+/** "← Back to recipe" link on the graph page. */
+export function getBackToRecipeLink(page: Page) {
+	return page.getByRole('link', { name: '← Back to recipe' });
+}
+
+// ---------------------------------------------------------------------------
+// Public recipe page (unauthenticated)
+// ---------------------------------------------------------------------------
+
+/** The mise sidebar aside element (absent on the public page). */
+export function getMiseSidebar(page: Page) {
+	return page.locator('aside');
+}
+
+/** Unsaved changes bar on the recipe detail page. */
+export function getUnsavedChangesBar(page: Page) {
+	return page.getByText('Unsaved changes');
+}
+
+/** "Sign in to fork" CTA on the public recipe page. */
+export function getSignInToForkCTA(page: Page) {
+	return page.getByText('Sign in to fork');
+}

@@ -4,76 +4,88 @@
  */
 import { expect, test } from '@playwright/test';
 import { v4 as uuidv4 } from 'uuid';
-import postgres from 'postgres';
-
-const db = postgres('postgres://postgres:postgres@127.0.0.1:54322/postgres');
-
-async function createRecipeNode(name: string, ownerId: string): Promise<{ nodeId: string }> {
-  const row = await db`
-		insert into recipe_nodes (id, name, owner_id, ingredient_changes, direction_changes)
-		values (gen_random_uuid(), ${name}, ${ownerId}::uuid, '[]'::jsonb, '[]'::jsonb)
-		returning id
-	`;
-  return { nodeId: row[0].id };
-}
+import {
+	getRecipeHeading,
+	getRecipeActionsButton,
+	getRecipeActionsMenuItem,
+	getShareCopyButton,
+	getCopiedButton,
+	getPublicRecipeShareLink,
+	openCreateForm,
+	getRecipeNameInput,
+	getCreateButton,
+	getRecipeLink,
+} from './helpers/page-utils';
 
 test.describe('public recipe — toggle and share link', () => {
-  test('toggle public shows share link and flips menu label', async ({ page }) => {
-    // Create a recipe under the test user.
-    const recipeName = uuidv4();
-    const { nodeId } = await createRecipeNode(recipeName, '11111111-1111-1111-1111-111111111111');
+	test('toggle public shows share link and flips menu label', async ({ page }) => {
+		// Create a recipe under the test user via the UI.
+		const recipeName = uuidv4();
+		await page.goto('/mise');
+		await openCreateForm(page);
+		await getRecipeNameInput(page).fill(recipeName);
+		await getCreateButton(page).click();
+		await expect(getRecipeLink(page, recipeName)).toBeVisible();
+		await getRecipeLink(page, recipeName).click();
+		await expect(getRecipeHeading(page, recipeName)).toBeVisible();
 
-    // Navigate to the recipe page.
-    await page.goto(`/mise/recipes/${nodeId}`);
+		// Resolve the nodeId from the URL.
+		const nodeId = page.url().split('/recipes/')[1];
 
-    // Should NOT yet show the share link (not public).
-    await expect(page.getByRole('link', { name: `/recipe/${nodeId}` })).not.toBeVisible();
+		// Should NOT yet show the share link (not public).
+		await expect(getPublicRecipeShareLink(page, nodeId)).not.toBeVisible();
 
-    // Open the recipe actions menu.
-    await page.getByRole('button', { name: 'Recipe actions' }).click();
+		// Open the recipe actions menu.
+		await getRecipeActionsButton(page).click();
 
-    // Menu should show "Make public" (not yet public).
-    await expect(page.getByRole('menuitem', { name: 'Make public' })).toBeVisible();
+		// Menu should show "Make public" (not yet public).
+		await expect(getRecipeActionsMenuItem(page, 'Make public')).toBeVisible();
 
-    // Click "Make public".
-    await page.getByRole('menuitem', { name: 'Make public' }).click();
+		// Click "Make public".
+		await getRecipeActionsMenuItem(page, 'Make public').click();
 
-    // Wait for the UI to update (invalidateAll resolves).
-    await page.getByRole('button', { name: 'Recipe actions' }).click();
-    await expect(page.getByRole('menuitem', { name: 'Make private' })).toBeVisible();
+		// Wait for the UI to update (invalidateAll resolves).
+		await getRecipeActionsButton(page).click();
+		await expect(getRecipeActionsMenuItem(page, 'Make private')).toBeVisible();
 
-    // Share link should now be visible in the header.
-    await expect(page.locator(`a[href="/recipe/${nodeId}"]`)).toBeVisible();
+		// Share link should now be visible in the header.
+		await expect(getPublicRecipeShareLink(page, nodeId)).toBeVisible();
 
-    // Toggle back to private.
-    await page.getByRole('button', { name: 'Recipe actions' }).click();
-    await page.getByRole('button', { name: 'Recipe actions' }).click();
-    await page.getByRole('menuitem', { name: 'Make private' }).click();
+		// Toggle back to private — click menu trigger twice to close then
+		// reopen, so the menu item is visible when we click it.
+		await getRecipeActionsButton(page).click();
+		await getRecipeActionsButton(page).click();
+		await getRecipeActionsMenuItem(page, 'Make private').click();
 
-    // Menu label should flip back.
-    await page.getByRole('button', { name: 'Recipe actions' }).click();
-    await expect(page.getByRole('menuitem', { name: 'Make public' })).toBeVisible();
+		// Menu label should flip back.
+		await getRecipeActionsButton(page).click();
+		await expect(getRecipeActionsMenuItem(page, 'Make public')).toBeVisible();
 
-    // Share link should be gone.
-    await expect(page.getByRole('link', { name: `/recipe/${nodeId}` })).not.toBeVisible();
-  });
+		// Share link should be gone.
+		await expect(getPublicRecipeShareLink(page, nodeId)).not.toBeVisible();
+	});
 
-  test('copy button transitions to "Copied!" state', async ({ page }) => {
-    const recipeName = uuidv4();
-    const { nodeId } = await createRecipeNode(recipeName, '11111111-1111-1111-1111-111111111111');
+	test('copy button transitions to "Copied!" state', async ({ page }) => {
+		// Create a recipe and make it public via the UI.
+		const recipeName = uuidv4();
+		await page.goto('/mise');
+		await openCreateForm(page);
+		await getRecipeNameInput(page).fill(recipeName);
+		await getCreateButton(page).click();
+		await expect(getRecipeLink(page, recipeName)).toBeVisible();
+		await getRecipeLink(page, recipeName).click();
+		await expect(getRecipeHeading(page, recipeName)).toBeVisible();
 
-    // Set it public directly in DB.
-    await db`update recipe_nodes set is_public = true where id = ${nodeId}::uuid`;
+		// Make it public.
+		await getRecipeActionsButton(page).click();
+		await getRecipeActionsMenuItem(page, 'Make public').click();
 
-    await page.goto(`/mise/recipes/${nodeId}`);
+		// Copy button should be visible and say "Copy".
+		await expect(getShareCopyButton(page)).toBeVisible();
 
-    // Copy button should be visible and say "Copy".
-    const copyBtn = page.getByRole('button', { name: 'Copy' });
-    await expect(copyBtn).toBeVisible();
+		await getShareCopyButton(page).click();
 
-    await copyBtn.click();
-
-    // Button should show "Copied!" for 2 seconds then revert.
-    await expect(page.getByRole('button', { name: 'Copied!' })).toBeVisible();
-  });
+		// Button should show "Copied!" for 2 seconds then revert.
+		await expect(getCopiedButton(page)).toBeVisible();
+	});
 });

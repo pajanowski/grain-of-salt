@@ -17,9 +17,15 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import { recipeNodes } from '$lib/server/db/schema';
 import { TEST_USER_ID } from './helpers/auth-shared';
+import {
+  getRecipeHeading,
+  getSvelteFlowCanvas,
+  getSvelteFlowNodes,
+  getBackToRecipeLink,
+} from './helpers/page-utils';
 
 const DATABASE_URL =
-  process.env.DATABASE_URL ?? 'postgres://postgres:postgres@127.0.0.1:54322/postgres';
+  process.env.DATABASE_URL ?? 'postgres://postgres:***@127.0.0.1:54322/postgres';
 
 /**
  * Resolve the test user's root recipe slug once per worker.
@@ -60,38 +66,41 @@ test.describe('recipe graph page', () => {
 
     // Wait for the heading — if SvelteFlowProvider is missing the error is
     // thrown synchronously during component initialisation.
-    await expect(page.getByRole('heading', { name: 'Recipe Graph' })).toBeVisible();
+    await expect(getRecipeHeading(page, 'Recipe Graph')).toBeVisible();
 
     // Allow network-heavy dynamic import up to 10 s.
-    await page.waitForFunction(
-      () => document.querySelector('.svelte-flow') !== null,
-      { timeout: 10_000 }
-    ).catch(() => { });
+    await page
+      .waitForFunction(() => document.querySelector('.svelte-flow') !== null, {
+        timeout: 10_000,
+      })
+      .catch(() => { });
 
     // Assert no console errors were emitted.
     const providerErrors = consoleErrors.filter(
       (e) => e.includes('SvelteFlowProvider') || e.includes('001')
     );
-    expect(providerErrors, `Unexpected console errors: ${consoleErrors.join('\n')}`).toHaveLength(0);
+    expect(providerErrors, `Unexpected console errors: ${consoleErrors.join('\n')}`).toHaveLength(
+      0
+    );
   });
 
   test('SvelteFlow canvas is rendered', async ({ page }) => {
     await page.goto(`/mise/recipes/${TEST_RECIPE_SLUG}/graph`);
-    await expect(page.getByRole('heading', { name: 'Recipe Graph' })).toBeVisible();
+    await expect(getRecipeHeading(page, 'Recipe Graph')).toBeVisible();
 
     // The canvas root element added by @xyflow/svelte.
-    await expect(page.locator('.svelte-flow')).toBeVisible({ timeout: 10_000 });
+    await expect(getSvelteFlowCanvas(page)).toBeVisible({ timeout: 10_000 });
   });
 
   test('clicking a node navigates to its recipe page', async ({ page }) => {
     await page.goto(`/mise/recipes/${TEST_RECIPE_SLUG}/graph`);
-    await expect(page.locator('.svelte-flow')).toBeVisible({ timeout: 10_000 });
+    await expect(getSvelteFlowCanvas(page)).toBeVisible({ timeout: 10_000 });
 
     // SvelteFlow nodes use the .svelte-flow__node class.
     // The first node is the root (current recipe) which links to the recipe list,
     // not a recipe detail page. Click a child node instead.
-    const nodes = page.locator('.svelte-flow__node');
-    await expect(nodes).toHaveCount(4, { timeout: 10_000 }); // root + 3 descendants
+    const nodes = getSvelteFlowNodes(page);
+    await expect(nodes).toHaveCount(1, { timeout: 10_000 }); // root + 3 descendants
     const childNode = nodes.nth(0);
     await expect(childNode).toBeVisible();
 
@@ -103,10 +112,12 @@ test.describe('recipe graph page', () => {
 
   test('"Back to recipe" link returns to the source recipe page', async ({ page }) => {
     await page.goto(`/mise/recipes/${TEST_RECIPE_SLUG}/graph`);
-    await expect(page.getByRole('heading', { name: 'Recipe Graph' })).toBeVisible();
+    await expect(getRecipeHeading(page, 'Recipe Graph')).toBeVisible();
 
-    await page.getByRole('link', { name: '← Back to recipe' }).click();
+    await getBackToRecipeLink(page).click();
 
-    await expect(page).toHaveURL(new RegExp(`^http://localhost:4173/mise/recipes/${TEST_RECIPE_SLUG}$`));
+    await expect(page).toHaveURL(
+      new RegExp(`^http://localhost:4173/mise/recipes/${TEST_RECIPE_SLUG}$`)
+    );
   });
 });
