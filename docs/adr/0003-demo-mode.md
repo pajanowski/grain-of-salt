@@ -355,4 +355,4 @@ set `VITE_DEMO_MODE`.
 
 For local dev: `VITE_DEMO_MODE=1 pnpm run dev` to activate demo mode on any
 hostname, or add `127.0.0.1 demo.local` to `/etc/hosts` and visit
-`http://demo.local:5173`.
+`http://demo.local:4173`.

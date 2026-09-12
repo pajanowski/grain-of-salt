@@ -157,16 +157,24 @@
 	function onFocus() {
 		open = true;
 	}
+
+	function onBlur() {
+		if (trimmedSearch.length > 0) {
+			onExactMatch?.(trimmedSearch, items);
+		}
+	}
 </script>
 
 <input
 	bind:this={inputEl}
 	{placeholder}
 	type="text"
+	aria-label="Unit"
 	bind:value={search}
 	oninput={onInput}
 	onkeydown={onInputKeydown}
 	onfocus={onFocus}
+	onblur={onBlur}
 />
 
 {#if open}

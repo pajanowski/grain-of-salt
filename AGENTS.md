@@ -10,6 +10,10 @@
 
 Playwright tests run from `tests/e2e/`; reference (disabled) tests live in `tests/archive/`. Tests must not require reseeding — if they need recipes, create new ones with a uuid name. Bare-metal runs need `DATABASE_URL`, `PUBLIC_SUPABASE_URL`, `MAILPIT_URL`; sign in via `tests/e2e/helpers/auth.ts`.
 
+### Troubleshooting
+
+When /auth is unaccessible when running an e2e test, it usually means that the preview server isn't running.
+
 ## Documentation
 
 Documentation lives in `docs/`. Project concepts are in [`docs/overview.md`](docs/overview.md); feature docs are in [`docs/features/`](docs/features/) (register new ones in `docs/features/README.md`); architectural decisions live in [`docs/adr/`](docs/adr/). Keep each feature doc tight: one-paragraph summary, behaviour bullets, Files footer. Update docs when features are added, changed, or removed.

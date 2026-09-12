@@ -10,18 +10,17 @@ import { expect, type Locator, type Page } from '@playwright/test';
 // Inline create-recipe form (home page)
 // ---------------------------------------------------------------------------
 
-/**
- * Open the inline create-recipe form on the home page and assert the
+/** Open the inline create-recipe form on the home page and assert the
  * name input is visible. Every create-recipe test starts with this step.
  */
 export async function openCreateForm(page: Page) {
   await page.getByRole('button', { name: 'Create Recipe' }).click();
-  await expect(page.getByRole('textbox', { name: 'Recipe name' })).toBeVisible();
+  await expect(page.getByPlaceholder('Recipe name')).toBeVisible();
 }
 
-/** The create-recipe form's name input (located by accessible name). */
+/** The create-recipe form's name input (located by placeholder). */
 export function getRecipeNameInput(page: Page) {
-  return page.getByRole('textbox', { name: 'Recipe name' });
+  return page.getByPlaceholder('Recipe name');
 }
 
 /** The submit button on the create-recipe form (exact "Create"). */
@@ -104,6 +103,66 @@ export function getAddDirectionButton(page: Page) {
  */
 export function getIngredientNameInput(page: Page) {
   return page.getByRole('textbox', { name: 'Ingredient name' });
+}
+
+/**
+ * The "Unit" text input inside the inline add-ingredient form.
+ * Located by placeholder (the Autocomplete component renders a plain input
+ * with placeholder="Unit" for the add form).
+ */
+export function getAddIngredientUnitInput(page: Page) {
+  return page.getByPlaceholder('Unit');
+}
+
+/**
+ * The currently-open add-ingredient form (has "Ingredient name" input).
+ */
+function openIngredientForm(page: Page) {
+  return page.locator('form').filter({ has: page.getByRole('textbox', { name: 'Ingredient name' }) }).first();
+}
+
+/**
+ * Fill the inline add-ingredient form and submit it. The form stays open
+ * after a successful Add so callers can chain multiple ingredients.
+ */
+export async function fillAddIngredient(
+  page: Page,
+  name: string,
+  amount: string,
+  unit: string
+) {
+  let form = openIngredientForm(page);
+  if ((await form.count()) === 0) {
+    await getAddIngredientButton(page).click();
+    form = openIngredientForm(page);
+  }
+  await expect(getIngredientNameInput(page)).toBeVisible();
+  await getIngredientNameInput(page).fill(name);
+  await page.getByPlaceholder('Amount').fill(amount);
+  await getAddIngredientUnitInput(page).fill(unit);
+  await getAddButton(form).click();
+}
+
+/**
+ * Create a recipe, navigate to it, and add one ingredient.
+ * Returns the recipe name used.
+ */
+export async function createRecipeWithIngredient(
+  page: Page,
+  name: string,
+  ingredientName: string,
+  amount: string,
+  unit: string
+): Promise<string> {
+  await page.goto('/mise');
+  await openCreateForm(page);
+  await getRecipeNameInput(page).fill(name);
+  await getCreateButton(page).click();
+  await expect(getRecipeLink(page, name)).toBeVisible();
+  await getRecipeLink(page, name).click();
+  await expect(page.getByRole('heading', { name })).toBeVisible();
+  await fillAddIngredient(page, ingredientName, amount, unit);
+  return name;
 }
 
 /**
