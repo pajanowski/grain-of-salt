@@ -13,6 +13,7 @@ and [ADR 0002](../adr/0002-fork-as-chain-extension.md).
 - [Recipe import](./recipe-import.md) — Import a recipe from a URL via JSON-LD parsing
 - [Recipe view](./recipe-view.md) — `/recipes/[slug]` with materialized state and parent breadcrumbs
 - [Recipe editing](./recipe-editing.md) — Add/edit/remove/reorder ingredients and directions, per-change notes, in-place save
+- [Direction ingredient refs](./direction-ingredient-refs.md) — `#ingredient-id` references inside directions, rendered as inline chips with amount/unit
 - [Recipe history](./recipe-history.md) — Chain of nodes with color-coded diffs
 - [Forking](./forking.md) — Append a new node to a recipe's chain (ADR 0002)
 - [Recipe management](./recipe-management.md) — Rename and delete a recipe

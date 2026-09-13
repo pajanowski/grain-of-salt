@@ -21,9 +21,21 @@
 
 <svelte:head>
 	<title>{recipe.name}{currentNode.author ? ` by ${currentNode.author}` : ''}</title>
-	<meta name="description" content="{recipe.ingredients.length} ingredient{recipe.ingredients.length === 1 ? '' : 's'}, {recipe.directions.length} step{recipe.directions.length === 1 ? '' : 's'}{currentNode.source ? ` · Source: ${currentNode.source}` : ''}" />
+	<meta
+		name="description"
+		content="{recipe.ingredients.length} ingredient{recipe.ingredients.length === 1
+			? ''
+			: 's'}, {recipe.directions.length} step{recipe.directions.length === 1
+			? ''
+			: 's'}{currentNode.source ? ` · Source: ${currentNode.source}` : ''}"
+	/>
 	<meta property="og:title" content={recipe.name} />
-	<meta property="og:description" content="{recipe.ingredients.length} ingredient{recipe.ingredients.length === 1 ? '' : 's'}, {recipe.directions.length} step{recipe.directions.length === 1 ? '' : 's'}" />
+	<meta
+		property="og:description"
+		content="{recipe.ingredients.length} ingredient{recipe.ingredients.length === 1
+			? ''
+			: 's'}, {recipe.directions.length} step{recipe.directions.length === 1 ? '' : 's'}"
+	/>
 	<meta property="og:type" content="article" />
 </svelte:head>
 
@@ -50,17 +62,17 @@
 					{#each recipe.ingredients as ing, i (ing.id)}
 						<li class="py-3 first:pt-0 last:pb-0">
 							<IngredientRow
-									ingredient={ing}
-									index={i}
-									total={recipe.ingredients.length}
-									note={ing.note ?? null}
-									onNote={() => {}}
-									onUpdate={() => {}}
-									onUpdateNote={() => {}}
-									onRemove={() => {}}
-									onMove={() => {}}
-									readOnly={true}
-								/>
+								ingredient={ing}
+								index={i}
+								total={recipe.ingredients.length}
+								note={ing.note ?? null}
+								onNote={() => {}}
+								onUpdate={() => {}}
+								onUpdateNote={() => {}}
+								onRemove={() => {}}
+								onMove={() => {}}
+								readOnly={true}
+							/>
 						</li>
 					{/each}
 				</ol>
@@ -79,17 +91,18 @@
 					{#each recipe.directions as dir, i (dir.id)}
 						<li class="py-3 first:pt-0 last:pb-0">
 							<DirectionRow
-									direction={dir}
-									index={i}
-									total={recipe.directions.length}
-									note={dir.note ?? null}
-									onNote={() => {}}
-									onUpdate={() => {}}
-									onUpdateNote={() => {}}
-									onRemove={() => {}}
-									onMove={() => {}}
-									readOnly={true}
-								/>
+								direction={dir}
+								index={i}
+								total={recipe.directions.length}
+								note={dir.note ?? null}
+								onNote={() => {}}
+								onUpdate={() => {}}
+								onUpdateNote={() => {}}
+								onRemove={() => {}}
+								onMove={() => {}}
+								readOnly={true}
+								ingredients={recipe.ingredients}
+							/>
 						</li>
 					{/each}
 				</ol>

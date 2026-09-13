@@ -283,5 +283,136 @@ export function getUnsavedChangesBar(page: Page) {
 
 /** "Sign in to fork" CTA on the public recipe page. */
 export function getSignInToForkCTA(page: Page) {
-	return page.getByText('Sign in to fork');
+  return page.getByText('Sign in to fork');
+}
+
+// ---------------------------------------------------------------------------
+// Direction ingredient picker (the "#name" autocomplete in direction textareas)
+// ---------------------------------------------------------------------------
+
+/**
+ * The ingredient picker listbox that appears when a `#token` is typed in a
+ * direction textarea. Rendered by IngredientPicker.svelte with
+ * `role="listbox"` and `data-testid="ingredient-picker-listbox"`.
+ */
+export function getIngredientPicker(page: Page) {
+  return page.getByTestId('ingredient-picker-listbox');
+}
+
+/**
+ * Wait for the ingredient picker to open, then click the option whose label
+ * starts with `name` (e.g. "Sugar (1 cup)"). The caller is responsible for
+ * typing the `#name` prefix into the direction textarea first — this helper
+ * only handles the picker interaction.
+ */
+export async function pickIngredientFromDirection(page: Page, name: string) {
+  const picker = getIngredientPicker(page);
+  await expect(picker).toBeVisible({ timeout: 3000 });
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await picker.getByRole('option', { name: new RegExp(`^${escaped}`) }).first().click();
+}
+
+// ---------------------------------------------------------------------------
+// Direction list (recipe detail page)
+// ---------------------------------------------------------------------------
+
+/**
+ * The `<ol data-testid="direction-list">` element on the recipe detail and
+ * public-recipe pages.
+ */
+export function getDirectionList(page: Page) {
+  return page.getByTestId('direction-list');
+}
+
+/**
+ * A single direction row by its zero-based index. Matches
+ * `li[data-direction-index="<index>"]` inside the direction list.
+ */
+export function getDirectionRow(page: Page, index: number) {
+  return getDirectionList(page).locator(`li[data-direction-index="${index}"]`);
+}
+
+// ---------------------------------------------------------------------------
+// Add-direction form (recipe detail page)
+// ---------------------------------------------------------------------------
+
+/**
+ * The currently-open add-direction form (has a "Direction" textarea).
+ * Mirrors `openIngredientForm` for the add-ingredient form.
+ */
+function openDirectionForm(page: Page) {
+  return page
+    .locator('form')
+    .filter({ has: page.getByRole('textbox', { name: 'Direction' }) })
+    .first();
+}
+
+/**
+ * Open the inline add-direction form and assert its body textarea is
+ * visible. Mirrors the open-form step `fillAddIngredient` performs for
+ * the add-ingredient form.
+ */
+export async function openAddDirectionForm(page: Page) {
+  let form = openDirectionForm(page);
+  if ((await form.count()) === 0) {
+    await getAddDirectionButton(page).click();
+    form = openDirectionForm(page);
+  }
+  await expect(getDirectionBodyInput(page)).toBeVisible();
+}
+
+/**
+ * Open the add-direction form and fill its body textarea.
+ */
+export async function fillAddDirection(page: Page, body: string) {
+  await openAddDirectionForm(page);
+  await getDirectionBodyInput(page).fill(body);
+}
+
+/**
+ * Click "Add" inside the currently-open add-direction form.
+ */
+export async function submitAddDirection(page: Page) {
+  await getAddButton(openDirectionForm(page)).click();
+}
+
+// ---------------------------------------------------------------------------
+// Edit-direction form (per row)
+// ---------------------------------------------------------------------------
+
+/**
+ * Click the Edit action on the given direction row and assert the editing
+ * textarea is visible.
+ */
+export async function openEditDirectionForm(page: Page, row: Locator) {
+  await clickRowAction(page, row, 'Edit');
+  await expect(page.locator('textarea[data-editing-direction]')).toBeVisible();
+}
+
+/**
+ * Click the Save button on the currently-open edit-direction form.
+ */
+export async function submitEditDirection(page: Page) {
+  await page
+    .locator('textarea[data-editing-direction]')
+    .locator('..')
+    .getByRole('button', { name: 'Save', exact: true })
+    .click();
+}
+
+// ---------------------------------------------------------------------------
+// Page-level Save (unsaved changes bar on the recipe detail page)
+// ---------------------------------------------------------------------------
+
+/**
+ * Click the page-level Save button in the unsaved-changes bar and wait
+ * for the bar (and button) to disappear. Only valid when the bar is
+ * visible — i.e. there are pending changes. Pairs with
+ * `getUnsavedChangesBar`.
+ */
+export async function clickPageSave(page: Page) {
+  const save = page.getByRole('button', { name: 'Save', exact: true });
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(save).toHaveCount(0);
 }

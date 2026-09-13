@@ -22,7 +22,7 @@ Direct writes to the database should be avoided where manual changes through the
 
 ### Troubleshooting
 
-When /auth is unaccessible when running an e2e test, it usually means that the preview server isn't running.
+When errors occur in `auth.ts` or `global-setup.ts`, stop and wait for further instruction. Don't attempt to fix the issue. This requires manual intervention.
 
 ## Documentation
 

@@ -8,9 +8,11 @@
 	import type { IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
 	import { v4 as uuid } from 'uuid';
 	import { parseAmount } from '$lib/parseAmount';
+	import { compileDirection } from '$lib/obj/directionCompile';
 	import IngredientRow from './IngredientRow.svelte';
 	import DirectionRow from './DirectionRow.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
+	import IngredientPicker from './IngredientPicker.svelte';
 	import Modal from './Modal.svelte';
 	import NodeChanges from './NodeChanges.svelte';
 	import Tabs from './Tabs.svelte';
@@ -223,6 +225,14 @@
 	let addDirectionTab = $state<'details' | 'note'>('details');
 	let addIngredientNote = $state('');
 	let addDirectionNote = $state('');
+	let addDirectionTextareaRef = $state<HTMLTextAreaElement | null>(null);
+	let addDirectionOverlayRef = $state<HTMLDivElement | null>(null);
+	let addDirectionPickerOpen = $state(false);
+	let addDirectionFocused = $state(false);
+	let addDirectionPickerFilterText = $state('');
+
+	// Derived compiled tokens for add-direction overlay
+	const addDirectionCompiled = $derived(compileDirection(newDirection.body, displayedIngredients));
 
 	function doAddIngredient() {
 		const amtResult = parseAmount(amountRaw);
@@ -252,9 +262,66 @@
 		newDirection = EmptyDirection();
 		addDirectionNote = '';
 		addDirectionTab = 'details';
+		addDirectionPickerOpen = false;
 		requestAnimationFrame(() => {
 			(document.querySelector('[data-add-direction-body]') as HTMLTextAreaElement | null)?.focus();
 		});
+	}
+
+	function handleAddDirectionTextareaInput(e: Event) {
+		const ta = e.target as HTMLTextAreaElement;
+		const match = ta.value.match(/#(?:[^\s]*)$/);
+		if (match) {
+			addDirectionPickerOpen = true;
+			const pos = ta.selectionStart;
+			const beforeCaret = ta.value.substring(0, pos);
+			const hashIdx = beforeCaret.lastIndexOf('#');
+			addDirectionPickerFilterText = hashIdx >= 0 ? beforeCaret.substring(hashIdx + 1) : '';
+		} else {
+			addDirectionPickerOpen = false;
+			addDirectionPickerFilterText = '';
+		}
+	}
+
+	function handleAddDirectionKeydown(e: KeyboardEvent) {
+		const ta = e.target as HTMLTextAreaElement;
+		if (e.key === 'Backspace') {
+			const pos = ta.selectionStart;
+			const textBefore = ta.value.substring(0, pos);
+			const uuidMatch = textBefore.match(
+				/#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+			);
+			if (uuidMatch) {
+				e.preventDefault();
+				const start = pos - uuidMatch[0].length;
+				ta.value = ta.value.substring(0, start) + ta.value.substring(pos);
+				newDirection.body = ta.value;
+				ta.selectionStart = ta.selectionEnd = start;
+				return;
+			}
+		}
+		if (e.key === 'Escape' && addDirectionPickerOpen) {
+			addDirectionPickerOpen = false;
+			e.preventDefault();
+		}
+	}
+
+	function handleAddDirectionPickerPick(id: string) {
+		if (!addDirectionTextareaRef) return;
+		const ta = addDirectionTextareaRef;
+		const pos = ta.selectionStart;
+		const value = ta.value;
+		const beforeCaret = value.substring(0, pos);
+		const hashIdx = beforeCaret.lastIndexOf('#');
+		if (hashIdx >= 0) {
+			// Replace the # + any filter text with #<uuid>
+			const insert = '#' + id;
+			ta.value = value.substring(0, hashIdx) + insert + value.substring(pos);
+			newDirection.body = ta.value;
+			const newPos = hashIdx + insert.length;
+			ta.selectionStart = ta.selectionEnd = newPos;
+		}
+		addDirectionPickerOpen = false;
 	}
 
 	function ingredientNoteFor(rowId: string): string | null {
@@ -507,8 +574,8 @@
 					<line x1="8" y1="4.5" x2="3" y2="11.5" />
 					<line x1="8" y1="4.5" x2="13" y2="11.5" />
 				</svg>
-			Graph
-		</a>
+				Graph
+			</a>
 		</div>
 		<div>
 			<h1 class="text-2xl font-bold">{recipe.name}</h1>
@@ -548,20 +615,22 @@
 			<button
 				class="btn-amber secondary flex items-center gap-1.5 text-sm"
 				onclick={() => {
-						if (!addingIngredient) {
-							newIngredient = EmptyIngredient();
-							amountRaw = '';
-							amountError = null;
-							addIngredientNote = '';
-							addIngredientTab = 'details';
-						}
-						addingIngredient = !addingIngredient;
-						if (addingIngredient) {
-							requestAnimationFrame(() => {
-								(document.querySelector('[data-add-ingredient-name]') as HTMLInputElement | null)?.focus();
-							});
-						}
-					}}
+					if (!addingIngredient) {
+						newIngredient = EmptyIngredient();
+						amountRaw = '';
+						amountError = null;
+						addIngredientNote = '';
+						addIngredientTab = 'details';
+					}
+					addingIngredient = !addingIngredient;
+					if (addingIngredient) {
+						requestAnimationFrame(() => {
+							(
+								document.querySelector('[data-add-ingredient-name]') as HTMLInputElement | null
+							)?.focus();
+						});
+					}
+				}}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -601,12 +670,15 @@
 			</ol>
 
 			{#if addingIngredient}
-				<form class="mt-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3" onkeydown={(e) => {
-					if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-						e.preventDefault();
-						doAddIngredient();
-					}
-				}}>
+				<form
+					class="mt-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3"
+					onkeydown={(e) => {
+						if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+							e.preventDefault();
+							doAddIngredient();
+						}
+					}}
+				>
 					<Tabs
 						tabs={[
 							{ id: 'details', label: 'Details' },
@@ -645,14 +717,10 @@
 							rows="3"
 							placeholder="Optional note for this ingredient…"
 							aria-label="Note"
-							bind:value={addIngredientNote}
-						></textarea>
+							bind:value={addIngredientNote}></textarea>
 					{/if}
 					<div class="flex gap-2">
-						<button
-							class="btn-amber"
-							onclick={doAddIngredient}>Add</button
-						>
+						<button class="btn-amber" onclick={doAddIngredient}>Add</button>
 						<button
 							type="button"
 							class="btn-amber secondary"
@@ -671,18 +739,20 @@
 			<button
 				class="btn-amber secondary flex items-center gap-1.5 text-sm"
 				onclick={() => {
-						if (!addingDirection) {
-							newDirection = EmptyDirection();
-							addDirectionNote = '';
-							addDirectionTab = 'details';
-						}
-						addingDirection = !addingDirection;
-						if (addingDirection) {
-							requestAnimationFrame(() => {
-								(document.querySelector('[data-add-direction-body]') as HTMLTextAreaElement | null)?.focus();
-							});
-						}
-					}}
+					if (!addingDirection) {
+						newDirection = EmptyDirection();
+						addDirectionNote = '';
+						addDirectionTab = 'details';
+					}
+					addingDirection = !addingDirection;
+					if (addingDirection) {
+						requestAnimationFrame(() => {
+							(
+								document.querySelector('[data-add-direction-body]') as HTMLTextAreaElement | null
+							)?.focus();
+						});
+					}
+				}}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -716,18 +786,22 @@
 							onUpdateNote={(note) => setRowNote(dir.id, 'direction', note)}
 							onRemove={() => removeDirection(dir.id)}
 							onMove={(moveDir) => moveDirection(dir.id, moveDir)}
+							ingredients={displayedIngredients}
 						/>
 					</li>
 				{/each}
 			</ol>
 
 			{#if addingDirection}
-				<form class="mt-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3" onkeydown={(e) => {
-					if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-						e.preventDefault();
-						doAddDirection();
-					}
-				}}>
+				<form
+					class="mt-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3"
+					onkeydown={(e) => {
+						if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+							e.preventDefault();
+							doAddDirection();
+						}
+					}}
+				>
 					<Tabs
 						tabs={[
 							{ id: 'details', label: 'Details' },
@@ -737,27 +811,64 @@
 						onchange={(id) => (addDirectionTab = id)}
 					/>
 					{#if addDirectionTab === 'details'}
-						<textarea
-							class="border rounded px-3 py-2 w-full"
-							rows="3"
-							placeholder="Direction"
-							aria-label="Direction"
-							data-add-direction-body
-							bind:value={newDirection.body}></textarea>
+						<div class="relative">
+							<textarea
+								class="border rounded px-3 py-2 w-full"
+								rows="3"
+								placeholder="Direction"
+								aria-label="Direction"
+								data-add-direction-body
+								bind:value={newDirection.body}
+								bind:this={addDirectionTextareaRef}
+								oninput={handleAddDirectionTextareaInput}
+								onkeydown={handleAddDirectionKeydown}
+								onfocus={() => (addDirectionFocused = true)}
+								onblur={() => (addDirectionFocused = false)}
+								style="background:transparent; position:relative; z-index:1; color:{addDirectionFocused ? 'inherit' : 'transparent'}; caret-color:{addDirectionFocused ? 'black' : 'transparent'};"
+							></textarea>
+							<!-- Chip overlay -->
+							<div
+								bind:this={addDirectionOverlayRef}
+								class="absolute top-0 left-0 right-0 bottom-0 overflow-hidden pointer-events-none px-3 py-2 border rounded whitespace-pre-wrap break-word"
+								style="font-family: inherit; font-size: inherit; line-height: inherit; pointer-events:none; display: {addDirectionFocused
+									? 'none'
+									: 'block'};"
+								aria-hidden="true"
+							>
+								{#each addDirectionCompiled.compiled as seg}
+									{#if seg.type === 'chip'}
+										<span
+											class="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 rounded px-1 py-0.5"
+											style="pointer-events:auto;"
+										>
+											<span>{seg.displayText}</span>
+										</span>
+									{:else}
+										<span>{seg.value}</span>
+									{/if}
+								{/each}
+							</div>
+						</div>
+						{#if addDirectionPickerOpen}
+							<IngredientPicker
+								ingredients={displayedIngredients}
+								onPick={handleAddDirectionPickerPick}
+								onClose={() => (addDirectionPickerOpen = false)}
+								open={addDirectionPickerOpen}
+								filterText={addDirectionPickerFilterText}
+								textareaRef={addDirectionTextareaRef}
+							/>
+						{/if}
 					{:else}
 						<textarea
 							class="border rounded px-3 py-2 text-sm w-full"
 							rows="3"
 							placeholder="Optional note for this direction…"
 							aria-label="Note"
-							bind:value={addDirectionNote}
-						></textarea>
+							bind:value={addDirectionNote}></textarea>
 					{/if}
 					<div class="flex gap-2">
-						<button
-							class="btn-amber"
-							onclick={doAddDirection}>Add</button
-						>
+						<button class="btn-amber" onclick={doAddDirection}>Add</button>
 						<button
 							type="button"
 							class="btn-amber secondary"

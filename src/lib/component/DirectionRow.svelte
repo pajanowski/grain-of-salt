@@ -1,8 +1,11 @@
 <script lang="ts">
-	import type { Direction } from '$lib/obj/Recipe.svelte';
+	import type { Direction, Ingredient } from '$lib/obj/Recipe.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import Tabs from './Tabs.svelte';
 	import NoteIcon from './NoteIcon.svelte';
+	import { compileDirection } from '$lib/obj/directionCompile';
+	import DirectionBody from './DirectionBody.svelte';
+	import IngredientPicker from './IngredientPicker.svelte';
 
 	type Props = {
 		direction: Direction;
@@ -15,6 +18,7 @@
 		onRemove: () => void;
 		onMove: (direction: 'up' | 'down') => void;
 		readOnly?: boolean;
+		ingredients?: Ingredient[];
 	};
 
 	let {
@@ -27,13 +31,22 @@
 		onUpdateNote,
 		onRemove,
 		onMove,
-		readOnly = false
+		readOnly = false,
+		ingredients = []
 	}: Props = $props();
 
 	let editing = $state(false);
 	let draft = $state<Direction>({ ...direction });
 	let editTab = $state<'details' | 'note'>('details');
 	let noteDraft = $state('');
+	let textareaRef = $state<HTMLTextAreaElement | null>(null);
+	let overlayRef = $state<HTMLDivElement | null>(null);
+	let pickerOpen = $state(false);
+	let textareaFocused = $state(false);
+	let pickerFilterText = $state('');
+
+	// Derived compiled tokens for the overlay
+	const compiled = $derived(compileDirection(draft.body, ingredients));
 
 	function startEdit() {
 		draft = { ...direction };
@@ -44,6 +57,7 @@
 
 	function cancelEdit() {
 		editing = false;
+		pickerOpen = false;
 	}
 
 	function doEdit() {
@@ -51,12 +65,82 @@
 		const trimmedNote = noteDraft.trim();
 		onUpdateNote(trimmedNote.length > 0 ? trimmedNote : null);
 		editing = false;
+		pickerOpen = false;
 	}
 
 	function confirmRemove() {
 		if (window.confirm(`Remove this direction?`)) {
 			onRemove();
 		}
+	}
+
+	function handleTextareaInput(e: Event) {
+		const ta = e.target as HTMLTextAreaElement;
+		const match = ta.value.match(/#(?:[^\s]*)$/);
+		if (match) {
+			pickerOpen = true;
+			// Extract filter text after the last #
+			const pos = ta.selectionStart;
+			const beforeCaret = ta.value.substring(0, pos);
+			const hashIdx = beforeCaret.lastIndexOf('#');
+			pickerFilterText = hashIdx >= 0 ? beforeCaret.substring(hashIdx + 1) : '';
+		} else {
+			pickerOpen = false;
+			pickerFilterText = '';
+		}
+	}
+
+	function handleTextareaKeydown(e: KeyboardEvent) {
+		const ta = e.target as HTMLTextAreaElement;
+		if (e.key === 'Backspace') {
+			// Check if caret is right after a #uuid token
+			const pos = ta.selectionStart;
+			const textBefore = ta.value.substring(0, pos);
+			const uuidMatch = textBefore.match(
+				/#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+			);
+			if (uuidMatch) {
+				e.preventDefault();
+				const start = pos - uuidMatch[0].length;
+				ta.value = ta.value.substring(0, start) + ta.value.substring(pos);
+				draft.body = ta.value;
+				ta.selectionStart = ta.selectionEnd = start;
+				return;
+			}
+		}
+		if (e.key === 'Escape' && pickerOpen) {
+			pickerOpen = false;
+			e.preventDefault();
+		}
+	}
+
+	function handlePickerPick(id: string) {
+		if (!textareaRef) return;
+		const ta = textareaRef;
+		const pos = ta.selectionStart;
+		const value = ta.value;
+		// Find the # that started this filter sequence
+		const beforeCaret = value.substring(0, pos);
+		const hashIdx = beforeCaret.lastIndexOf('#');
+		if (hashIdx >= 0) {
+			// Replace the # + any filter text with #<uuid>
+			const insert = '#' + id;
+			ta.value = value.substring(0, hashIdx) + insert + value.substring(pos);
+			draft.body = ta.value;
+			const newPos = hashIdx + insert.length;
+			ta.selectionStart = ta.selectionEnd = newPos;
+		}
+		pickerOpen = false;
+	}
+
+	function handleChipChange(id: string) {
+		pickerOpen = true;
+	}
+
+	function handleChipRemove(id: string) {
+		// Replace #<id> (and one trailing space) with empty string
+		const regex = new RegExp(`#${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s?`, 'g');
+		draft.body = draft.body.replace(regex, '').trim();
 	}
 
 	// Focus the textarea when editing starts — avoids bind:this hydration issues
@@ -73,14 +157,14 @@
 		{
 			label: 'Move up',
 			disabled: index === 0,
-			onSelect: () => onMove('up'),
+			onSelect: () => onMove('up')
 		},
 		{
 			label: 'Move down',
 			disabled: index === total - 1,
-			onSelect: () => onMove('down'),
+			onSelect: () => onMove('down')
 		},
-		{ label: 'Remove', onSelect: confirmRemove, danger: true },
+		{ label: 'Remove', onSelect: confirmRemove, danger: true }
 	]);
 </script>
 
@@ -104,22 +188,71 @@
 				onchange={(id) => (editTab = id)}
 			/>
 			{#if editTab === 'details'}
-				<textarea
-					class="border rounded px-3 py-2 w-full"
-					rows="3"
-					placeholder="Direction"
-					aria-label="Direction"
-					data-editing-direction
-					bind:value={draft.body}
-				></textarea>
+				<div class="relative">
+					<textarea
+						class="border rounded px-3 py-2 w-full"
+						rows="3"
+						placeholder="Direction"
+						aria-label="Direction"
+						data-editing-direction
+						bind:value={draft.body}
+						bind:this={textareaRef}
+						oninput={handleTextareaInput}
+						onkeydown={handleTextareaKeydown}
+						onfocus={() => (textareaFocused = true)}
+						onblur={() => (textareaFocused = false)}
+						style="background:transparent; position:relative; z-index:1; color:{textareaFocused ? 'inherit' : 'transparent'}; caret-color:{textareaFocused ? 'black' : 'transparent'};"
+					></textarea>
+					<!-- Chip overlay -->
+					<div
+						bind:this={overlayRef}
+						class="absolute top-0 left-0 right-0 bottom-0 overflow-hidden pointer-events-none px-3 py-2 border rounded whitespace-pre-wrap break-word"
+						style="font-family: inherit; font-size: inherit; line-height: inherit; pointer-events:none; display: {textareaFocused
+							? 'none'
+							: 'block'};"
+						aria-hidden="true"
+					>
+						{#each compiled.compiled as seg}
+							{#if seg.type === 'chip'}
+								<span
+									class="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 rounded px-1 py-0.5"
+									style="pointer-events:auto;"
+								>
+									<span>{seg.displayText}</span>
+									<button
+										type="button"
+										class="text-xs underline hover:text-amber-900"
+										onclick={() => handleChipChange(seg.id)}>Change</button
+									>
+									<button
+										type="button"
+										class="text-xs underline hover:text-amber-900"
+										onclick={() => handleChipRemove(seg.id)}>Remove</button
+									>
+								</span>
+							{:else}
+								<span>{seg.value}</span>
+							{/if}
+						{/each}
+					</div>
+				</div>
+				{#if pickerOpen}
+					<IngredientPicker
+						{ingredients}
+						onPick={handlePickerPick}
+						onClose={() => (pickerOpen = false)}
+						open={pickerOpen}
+						filterText={pickerFilterText}
+						{textareaRef}
+					/>
+				{/if}
 			{:else}
 				<textarea
 					class="border rounded px-3 py-2 text-sm w-full"
 					rows="3"
 					placeholder="Optional note for this direction…"
 					aria-label="Note"
-					bind:value={noteDraft}
-				></textarea>
+					bind:value={noteDraft}></textarea>
 			{/if}
 			<div class="flex gap-2">
 				<button type="button" class="btn-amber" onclick={doEdit}>Save</button>
@@ -131,7 +264,7 @@
 			<div class="flex items-start gap-2">
 				<span class="flex-1 flex items-start min-w-0">
 					<span class="opacity-60 mr-2">{index + 1}.</span>
-					<span>{direction.body}</span>
+					<DirectionBody body={direction.body} {ingredients} />
 				</span>
 				{#if note && !readOnly}
 					<button
