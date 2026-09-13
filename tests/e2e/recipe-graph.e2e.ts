@@ -22,6 +22,7 @@ import {
   getSvelteFlowCanvas,
   getSvelteFlowNodes,
   getBackToRecipeLink,
+  getRecipeLink,
 } from './helpers/page-utils';
 
 const DATABASE_URL =
@@ -93,21 +94,26 @@ test.describe('recipe graph page', () => {
   });
 
   test('clicking a node navigates to its recipe page', async ({ page }) => {
-    await page.goto(`/mise/recipes/${TEST_RECIPE_SLUG}/graph`);
-    await expect(getSvelteFlowCanvas(page)).toBeVisible({ timeout: 10_000 });
+    await page.goto('/mise');
+    const omletteRootLink = getRecipeLink(page, "Simple Omelette")
+    await omletteRootLink.click();
+    await expect(page).toHaveURL(/\/mise\/recipes\/[0-9a-f-]+/);
+    const url = page.url()
+    console.log(url)
+    page.getByRole('link', { name: 'Graph' }).click();
 
     // SvelteFlow nodes use the .svelte-flow__node class.
     // The first node is the root (current recipe) which links to the recipe list,
     // not a recipe detail page. Click a child node instead.
     const nodes = getSvelteFlowNodes(page);
-    await expect(nodes).toHaveCount(1, { timeout: 10_000 }); // root + 3 descendants
+    await expect(nodes).toHaveCount(4, { timeout: 10_000 }); // root + 3 descendants
     const childNode = nodes.nth(0);
     await expect(childNode).toBeVisible();
 
     await childNode.click();
 
     // The URL should now point at a recipe detail page.
-    await expect(page).toHaveURL(/\/mise\/recipes\/[a-f0-9-]+$/);
+    await expect(page).toHaveURL(url);
   });
 
   test('"Back to recipe" link returns to the source recipe page', async ({ page }) => {

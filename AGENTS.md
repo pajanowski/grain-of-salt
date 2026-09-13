@@ -2,7 +2,7 @@
 
 ## Common commands and tools
 
-`make start-all` to start all services and serve web page in production preview mode
+`just setup-dev` to bootstrap all services (install + supabase + db push/seed) then `just dev` to develop.
 `pnpm exec playwright test` to run playwright tests locally. Avoid using docker container on this machine unless debugging a discrepancy between docker run and bare metal run.
 `gh` Github cli to access information about PRs, CI runs, etc
 
@@ -10,9 +10,7 @@
 
 Playwright tests run from `tests/e2e/`; reference (disabled) tests live in `tests/archive/`. Tests must not require reseeding — if they need recipes, create new ones with a uuid name. Bare-metal runs need `DATABASE_URL`, `PUBLIC_SUPABASE_URL`, `MAILPIT_URL`; sign in via `tests/e2e/helpers/auth.ts`.
 
-Tests dependencies can be started with `just test-db-deps` and the frontend preview server can be started with `just preview`. The preview server watches and rebuilds whenever changes are made to the UI so restarting the preview server should not be necessary.
-
-Tests should be run using `just test-e2e-run-headless` specifying a test file whenever possible.
+Agents should use `just agent-e2e <test-file>` for fully isolated test runs (builds, starts its own preview, runs tests, tears down). Use `just agent-e2e` with no args to run all tests.
 
 ### Test writing guidelines
 
