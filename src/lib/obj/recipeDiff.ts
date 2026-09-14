@@ -1,6 +1,6 @@
 import type { Ingredient, Direction } from './Recipe.svelte';
 import type { RecipeNode, IngredientChange, DirectionChange } from './RecipeNode.svelte';
-import { compileDirection } from './directionCompile';
+import { compileMaskedDirection as compileDirection } from './directionMask';
 
 /**
  * Pure helpers for turning a RecipeNode / Change into human-readable

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Ingredient } from '$lib/obj/Recipe.svelte.js';
-	import { compileDirection } from '$lib/obj/directionCompile.js';
+	import { compileMaskedDirection } from '$lib/obj/directionMask.js';
 
 	let {
 		body,
@@ -12,7 +12,7 @@
 		onChipClick?: (id: string) => void;
 	} = $props();
 
-	const compiled = $derived(compileDirection(body, ingredients));
+	const compiled = $derived(compileMaskedDirection(body, ingredients));
 </script>
 
 <span class="direction-body">

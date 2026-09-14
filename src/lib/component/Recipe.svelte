@@ -8,7 +8,6 @@
 	import type { IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
 	import { v4 as uuid } from 'uuid';
 	import { parseAmount } from '$lib/parseAmount';
-	import { compileDirection } from '$lib/obj/directionCompile';
 	import IngredientRow from './IngredientRow.svelte';
 	import DirectionRow from './DirectionRow.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
@@ -18,6 +17,12 @@
 	import Tabs from './Tabs.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
 	import UnitAutocomplete from './UnitAutocomplete.svelte';
+	import {
+		tokenizeMaskedBody,
+		displayToRaw,
+		rawToDisplay,
+		type MaskedBody
+	} from '$lib/obj/directionMask';
 	import { normalizeUnit } from '$lib/unit';
 	import { invalidateAll, goto, invalidate } from '$app/navigation';
 	import { api, errorMessage } from '$lib/api';
@@ -226,13 +231,15 @@
 	let addIngredientNote = $state('');
 	let addDirectionNote = $state('');
 	let addDirectionTextareaRef = $state<HTMLTextAreaElement | null>(null);
-	let addDirectionOverlayRef = $state<HTMLDivElement | null>(null);
 	let addDirectionPickerOpen = $state(false);
-	let addDirectionFocused = $state(false);
 	let addDirectionPickerFilterText = $state('');
 
-	// Derived compiled tokens for add-direction overlay
-	const addDirectionCompiled = $derived(compileDirection(newDirection.body, displayedIngredients));
+	// Masked view of the add-direction body. Always shown in the
+	// textarea; raw `#<uuid>` edits are routed through the input
+	// handler so chips act atomically.
+	const addDirectionMasked = $derived<MaskedBody>(
+		tokenizeMaskedBody(newDirection.body ?? '', displayedIngredients ?? [])
+	);
 
 	function doAddIngredient() {
 		const amtResult = parseAmount(amountRaw);
@@ -268,44 +275,140 @@
 		});
 	}
 
+	/**
+	 * Canonical typing-`#`-and-pickup-popup handler for the add
+	 * direction form. Mirrors the logic in `DirectionRow.svelte` so
+	 * the editing and add-direction flows behave identically.
+	 */
 	function handleAddDirectionTextareaInput(e: Event) {
 		const ta = e.target as HTMLTextAreaElement;
-		// const match = ta.value.match(/#(?:[^\s]*)$/);
+		detectAddDirectionPicker(ta);
+		applyAddDirectionDisplayedEdit(ta);
+	}
+
+	function detectAddDirectionPicker(ta: HTMLTextAreaElement) {
 		const pos = ta.selectionStart;
-		const startToCursor = ta.value.slice(0, pos);
-
-		const matches = [...startToCursor.matchAll(/[\s]/g)];
-		const lastIndexOfSpaceBeforeCursor =
-			matches.length > 0 ? matches[matches.length - 1].index : -1;
-
-		const spaceToCursor = startToCursor.slice(lastIndexOfSpaceBeforeCursor + 1);
-		let match = spaceToCursor.startsWith('#');
-		if (match) {
+		const beforeCaret = ta.value.slice(0, pos);
+		const matches = [...beforeCaret.matchAll(/\s/g)];
+		const lastSpace = matches.length > 0 ? matches[matches.length - 1].index : -1;
+		const tokenAfterSpace = beforeCaret.slice(lastSpace + 1);
+		if (tokenAfterSpace.startsWith('#')) {
 			addDirectionPickerOpen = true;
-			const pos = ta.selectionStart;
-			const beforeCaret = ta.value.substring(0, pos);
-			const hashIdx = beforeCaret.lastIndexOf('#');
-			addDirectionPickerFilterText = hashIdx >= 0 ? beforeCaret.substring(hashIdx + 1) : '';
+			addDirectionPickerFilterText = tokenAfterSpace.slice(1);
 		} else {
 			addDirectionPickerOpen = false;
 			addDirectionPickerFilterText = '';
 		}
 	}
 
+	function applyAddDirectionDisplayedEdit(ta: HTMLTextAreaElement) {
+		const prevDisplay = addDirectionMasked.display;
+		const nextDisplay = ta.value;
+		if (prevDisplay === nextDisplay) return;
+
+		const diff = computeEditDiff(prevDisplay, nextDisplay);
+		if (!diff) {
+			ta.value = addDirectionMasked.display;
+			return;
+		}
+
+		const rawStart = displayToRaw(diff.start, addDirectionMasked);
+		const rawEnd = displayToRaw(diff.end, addDirectionMasked);
+		const head = newDirection.body.slice(0, rawStart);
+		const tail = newDirection.body.slice(rawEnd);
+		const insertedRaw = translateDisplayedInsertionToRaw(diff.inserted, displayedIngredients);
+		newDirection.body = head + insertedRaw + tail;
+
+		const newMasked = tokenizeMaskedBody(newDirection.body, displayedIngredients);
+		ta.value = newMasked.display;
+		const caretRaw = rawStart + insertedRaw.length;
+		const caretDisplay = rawToDisplay(caretRaw, newMasked);
+		ta.selectionStart = ta.selectionEnd = caretDisplay;
+	}
+
+	function translateDisplayedInsertionToRaw(text: string, ings: Ingredient[]): string {
+		if (text === '') return '';
+		const nameMap = new Map<string, Ingredient>();
+		for (const ing of ings) nameMap.set(`#${ing.name}`, ing);
+		return text.replace(/#[^\s]+/g, (tok) => {
+			const ing = nameMap.get(tok);
+			return ing ? `#${ing.id}` : tok;
+		});
+	}
+
+	interface EditDiff {
+		start: number;
+		end: number;
+		inserted: string;
+	}
+
+	function computeEditDiff(prev: string, next: string): EditDiff | null {
+		if (prev === next) return null;
+		let start = 0;
+		const minLen = Math.min(prev.length, next.length);
+		while (start < minLen && prev[start] === next[start]) start++;
+		let endPrev = prev.length;
+		let endNext = next.length;
+		while (endPrev > start && endNext > start && prev[endPrev - 1] === next[endNext - 1]) {
+			endPrev--;
+			endNext--;
+		}
+		return {
+			start,
+			end: endPrev,
+			inserted: next.slice(start, endNext)
+		};
+	}
+
+	function findAddDirectionChipAtDisplay(
+		m: MaskedBody,
+		displayPos: number
+	): MaskedBody['segments'][number] | null {
+		for (const seg of m.segments) {
+			if (seg.type !== 'chip') continue;
+			if (displayPos >= seg.displayStart && displayPos < seg.displayEnd) return seg;
+		}
+		return null;
+	}
+
+	function findAddDirectionChipOverlapping(
+		m: MaskedBody,
+		start: number,
+		end: number
+	): MaskedBody['segments'][number] | null {
+		for (const seg of m.segments) {
+			if (seg.type !== 'chip') continue;
+			if (start <= seg.displayEnd && end >= seg.displayStart) return seg;
+		}
+		return null;
+	}
+
+	/**
+	 * Atomic deletion: any Backspace/Delete that touches a masked chip
+	 * removes the entire underlying `#<uuid>` from `newDirection.body`.
+	 */
 	function handleAddDirectionKeydown(e: KeyboardEvent) {
 		const ta = e.target as HTMLTextAreaElement;
-		if (e.key === 'Backspace') {
-			const pos = ta.selectionStart;
-			const textBefore = ta.value.substring(0, pos);
-			const uuidMatch = textBefore.match(
-				/#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
-			);
-			if (uuidMatch) {
+		const start = ta.selectionStart ?? 0;
+		const end = ta.selectionEnd ?? start;
+
+		if (e.key === 'Backspace' || e.key === 'Delete') {
+			const range =
+				start !== end
+					? { start, end }
+					: e.key === 'Backspace'
+						? { start: Math.max(0, start - 1), end }
+						: { start, end: Math.min(ta.value.length, end + 1) };
+
+			const chip = findAddDirectionChipOverlapping(addDirectionMasked, range.start, range.end);
+			if (chip && chip.type === 'chip') {
 				e.preventDefault();
-				const start = pos - uuidMatch[0].length;
-				ta.value = ta.value.substring(0, start) + ta.value.substring(pos);
-				newDirection.body = ta.value;
-				ta.selectionStart = ta.selectionEnd = start;
+				newDirection.body =
+					newDirection.body.slice(0, chip.rawStart) + newDirection.body.slice(chip.rawEnd);
+				const newMasked = tokenizeMaskedBody(newDirection.body, displayedIngredients);
+				ta.value = newMasked.display;
+				const caretDisplay = rawToDisplay(chip.rawStart, newMasked);
+				ta.selectionStart = ta.selectionEnd = caretDisplay;
 				return;
 			}
 		}
@@ -319,18 +422,29 @@
 		if (!addDirectionTextareaRef) return;
 		const ta = addDirectionTextareaRef;
 		const pos = ta.selectionStart;
-		const value = ta.value;
-		const beforeCaret = value.substring(0, pos);
+		const beforeCaret = ta.value.substring(0, pos);
 		const hashIdx = beforeCaret.lastIndexOf('#');
-		if (hashIdx >= 0) {
-			// Replace the # + any filter text with #<uuid>
-			const insert = '#' + id;
-			ta.value = value.substring(0, hashIdx) + insert + value.substring(pos);
-			newDirection.body = ta.value;
-			const newPos = hashIdx + insert.length;
-			ta.selectionStart = ta.selectionEnd = newPos;
+		if (hashIdx < 0) return;
+
+		const existing = findAddDirectionChipAtDisplay(addDirectionMasked, hashIdx);
+		const insert = '#' + id;
+		if (existing) {
+			newDirection.body =
+				newDirection.body.slice(0, existing.rawStart) +
+				insert +
+				newDirection.body.slice(existing.rawEnd);
+		} else {
+			const rawPos = displayToRaw(hashIdx, addDirectionMasked);
+			newDirection.body =
+				newDirection.body.slice(0, rawPos) + insert + newDirection.body.slice(rawPos);
 		}
+		const newMasked = tokenizeMaskedBody(newDirection.body, displayedIngredients);
+		ta.value = newMasked.display;
 		addDirectionPickerOpen = false;
+		const insertedRawEnd =
+			(existing?.rawStart ?? displayToRaw(hashIdx, addDirectionMasked)) + insert.length;
+		const caretDisplay = rawToDisplay(insertedRawEnd, newMasked);
+		ta.selectionStart = ta.selectionEnd = caretDisplay;
 	}
 
 	function ingredientNoteFor(rowId: string): string | null {
@@ -820,46 +934,16 @@
 						onchange={(id) => (addDirectionTab = id)}
 					/>
 					{#if addDirectionTab === 'details'}
-						<div class="relative">
-							<textarea
-								class="border rounded px-3 py-2 w-full"
-								rows="3"
-								placeholder="Direction"
-								aria-label="Direction"
-								data-add-direction-body
-								bind:value={newDirection.body}
-								bind:this={addDirectionTextareaRef}
-								oninput={handleAddDirectionTextareaInput}
-								onkeydown={handleAddDirectionKeydown}
-								onfocus={() => (addDirectionFocused = true)}
-								onblur={() => (addDirectionFocused = false)}
-								style="background:transparent; position:relative; z-index:1; color:{addDirectionFocused
-									? 'inherit'
-									: 'transparent'}; caret-color:{addDirectionFocused ? 'black' : 'transparent'};"
-							></textarea>
-							<!-- Chip overlay -->
-							<div
-								bind:this={addDirectionOverlayRef}
-								class="absolute top-0 left-0 right-0 bottom-0 overflow-hidden pointer-events-none px-3 py-2 border rounded whitespace-pre-wrap break-word"
-								style="font-family: inherit; font-size: inherit; line-height: inherit; pointer-events:none; display: {addDirectionFocused
-									? 'none'
-									: 'block'};"
-								aria-hidden="true"
-							>
-								{#each addDirectionCompiled.compiled as seg}
-									{#if seg.type === 'chip'}
-										<span
-											class="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 rounded px-1 py-0.5"
-											style="pointer-events:auto;"
-										>
-											<span>{seg.displayText}</span>
-										</span>
-									{:else}
-										<span>{seg.value}</span>
-									{/if}
-								{/each}
-							</div>
-						</div>
+						<textarea
+							class="border rounded px-3 py-2 w-full"
+							rows="3"
+							placeholder="Direction"
+							aria-label="Direction"
+							data-add-direction-body
+							bind:this={addDirectionTextareaRef}
+							value={addDirectionMasked.display}
+							oninput={handleAddDirectionTextareaInput}
+							onkeydown={handleAddDirectionKeydown}></textarea>
 						{#if addDirectionPickerOpen}
 							<IngredientPicker
 								ingredients={displayedIngredients}

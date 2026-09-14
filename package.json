@@ -37,6 +37,7 @@
     "axios": "^1.20.0",
     "bits-ui": "^2.18.1",
     "dagre": "^0.8.5",
+    "imask": "^7.6.1",
     "tailwindcss": "^4.3.1",
     "typescript-svelte-plugin": "^0.3.52",
     "uuid": "^14.0.1"

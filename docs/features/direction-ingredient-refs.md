@@ -63,23 +63,38 @@ Three surfaces render compiled output instead of raw bodies:
    `src/lib/obj/recipeDiff.ts` compiles against the recipe's known
    ingredients so the diff view shows chips consistently.
 
+## Display mask
+
+The body is rendered through the IMask-based `DirectionMask` library
+(`src/lib/obj/directionMask.ts`). Three entry points:
+
+1. `formatDirectionBody(body, ingredients)` — pure transform that
+   swaps `#<uuid>` tokens for `#<name>`. Use this anywhere a direction
+   body needs to be displayed read-only.
+2. `compileMaskedDirection(body, ingredients)` — structured compile
+   into chip/text segments, used by renderers that want rich chip
+   styling.
+3. `DirectionMasked` / `createDirectionMask(opts)` — `IMask.Masked`
+   subclass; binds via IMask's view layer when this kind of integration
+   is needed (e.g. `use:directionMask` action).
+
+In the editing form, the textarea itself is masked: when blurred it
+shows `#Sugar`-formatted text, when focused it shows the raw `#<uuid>`
+text the picker regex matches.
+
 ## Authoring UI
 
-Editing uses an **overlay rendering** approach. The `<textarea>` stays
-the source of truth for the body; a non-editable `<div>` is layered on
-top with identical typography, where `#uuid` tokens render as inert
-visual chips. When the textarea is focused the overlay hides so the
-author sees raw `#uuid` text.
+The `<textarea>` is the source of truth for the raw body. We layer on:
 
-Keeping the overlay in sync:
-
-- Mirror `font-family`, `font-size`, `line-height`, `padding`,
-  `white-space: pre-wrap`, and `word-break: break-word` exactly.
-- The overlay is `pointer-events: none`.
-- Mirror scroll: `overlay.scrollTop = textarea.scrollTop`.
-- A transparent click layer over each chip focuses the textarea and
-  places the caret at the chip's start offset using
-  `textarea.setSelectionRange`.
+- A `bind:this` ref so the focus/blur handlers can swap the displayed
+  value between `#<name>` (blurred) and `#<uuid>` (focused).
+- A masked value expression: `value={textareaFocused ? draft.body :
+  formatDirectionBody(draft.body, ingredients)}`. Svelte writes this
+  to the DOM only when it changes (no flicker on each keystroke).
+- A backspace handler that deletes a complete `#<uuid>` token when
+  the caret sits at its end (existing behavior, preserved).
+- The existing `<IngredientPicker>` driven by the `#`-trailing-text
+  regex; the picker inserts raw `#<id>` into the textarea.
 
 A fully `contenteditable` approach was rejected: it drags in IME
 composition bugs, paste sanitization, and copy/paste edge cases that
@@ -114,21 +129,18 @@ The dropdown uses the self-managed pattern documented in
 `svelte-ui-patterns` — no `bits-ui` Popover — to avoid the
 interaction conflicts the unit-autocomplete work had.
 
-## Chip behavior in the overlay
+## Editing references
 
-When the textarea is **not focused**, each chip in the overlay exposes
-two affordances:
+With the textarea itself masked, the editing flow no longer has a
+chip overlay. Two paths to edit a reference:
 
-- **Change…** reopens the picker with the chip's id shown as the
-  current link. Picking a different ingredient rewrites `#oldId` →
-  `#newId` in the body. Picking the same ingredient is a no-op.
-- **Remove** rewrites `#<id>` to empty string and trims one trailing
-  space, e.g. `Add #uuid to the bowl.` → `Add to the bowl.`.
-
-Mobile uses long-press on a chip to surface the same Change/Remove
-menu. Desktop shows them on hover; keyboard users get the menu via
-focus + Enter on a chip's hidden button (defer to a follow-up if
-keyboard ergonomics prove rough).
+- **Replace**: place the caret right after the `#<uuid>` token (no
+  whitespace between), type `#`, and pick a different ingredient from
+  the picker. The picker's `replace #`+filter logic rewrites the
+  token in place.
+- **Delete**: keep the caret right after the `#<uuid>` token (no
+  whitespace) and press Backspace once. The keyboard handler strips
+  the token, including the leading `#`, in a single keystroke.
 
 Backspace handling: if the caret sits immediately after `#uuid` (no
 whitespace between) and the user presses Backspace once, the whole
@@ -180,26 +192,44 @@ picker; new directions are saved through the existing
 
 ## Files
 
-- `src/lib/obj/directionCompile.ts` — new: `compileDirection` +
-  helpers.
-- `src/lib/obj/directionCompile.test.ts` — new: unit tests.
-- `src/lib/component/DirectionBody.svelte` — new: non-interactive
-  renderer for read-only sites.
-- `src/lib/component/IngredientPicker.svelte` — new: self-managed `#`
-  dropdown.
-- `src/lib/component/DirectionRow.svelte` — adds overlay + picker when
-  editing; renders via `<DirectionBody>` when not. Takes a new
-  `ingredients` prop.
-- `src/lib/component/Recipe.svelte` — passes compiled ingredients into
-  `DirectionRow`; adds picker to the add-direction form.
-- `src/lib/component/PublicRecipe.svelte` — replaces raw
-  `{direction.body}` with `<DirectionBody>`.
-- `src/lib/obj/recipeDiff.ts` — `formatDirectionChangeFull` compiles
-  against the recipe's known ingredients so history shows chips too.
+- `src/lib/obj/directionMask.ts` — IMask-based mask library:
+  `formatDirectionBody`, `compileMaskedDirection`, `DirectionMasked`,
+  `createDirectionMask`. Plus unit tests in `directionMask.test.ts`
+  (server-side) and `directionMask.svelte.test.ts` (DOM/browser).
+- `src/lib/obj/directionCompile.ts` — thin re-export of
+  `compileMaskedDirection` for backwards compatibility with the
+  original compile layer. New callers should import from
+  `directionMask` directly.
+- `src/lib/obj/directionCompile.test.ts` — covers the legacy
+  compile output (kept for backwards compat); runs through the
+  re-export, no test changes needed.
+- `src/lib/action/directionMask.ts` — `use:directionMask` Svelte
+  action that wires IMask directly to a `<textarea>`. Includes
+  browser-side tests in `directionMask.svelte.test.ts`.
+- `src/lib/component/DirectionBody.svelte` — read-only renderer.
+  Uses `compileMaskedDirection` for rich chips; the textarea
+  swap mechanism is in the editing form, not here.
+- `src/lib/component/DirectionRow.svelte` — editing textarea now
+  swaps its own DOM value via focus/blur handlers that call
+  `formatDirectionBody` from the mask library. Drop-in replacement
+  for the chip-overlay approach.
+- `src/lib/component/Recipe.svelte` — same swap in the inline
+  add-direction form. Uses `formatDirectionBody` from the mask
+  library; no overlay div.
+- `src/lib/component/PublicRecipe.svelte` — unchanged: already
+  rendered via `<DirectionBody>`.
+- `src/lib/obj/recipeDiff.ts` — `formatDirectionChangeFull`
+  imports `compileMaskedDirection` from `directionMask` (the
+  compile API is identical to the legacy `compileDirection`,
+  so the call sites are unchanged).
 - `tests/e2e/helpers/page-utils.ts` — adds `getIngredientPicker`,
   `pickIngredientFromDirection` helpers.
-- `tests/e2e/direction-ingredient-ref.e2e.ts` — new: end-to-end covering
-  type `#`, pick Sugar, save, reload public page, see "Sugar (1 cup)".
+- `tests/e2e/direction-ingredient-ref.e2e.ts` — the chip-overlay
+  Remove/Change affordances are gone, so the e2e tests that
+  click them need to use keyboard flows (Backspace to delete,
+  pick a new ingredient to replace). The "save and reload, see
+  the formatted reference" tests stay green because they assert
+  on the read-only view, which still uses `<DirectionBody>`.
 - `tests/e2e/recipe-edit-changes.e2e.ts` — existing direction tests
   stay green; fixtures that asserted on raw bodies get updated where
   bodies now contain `#uuid` tokens.
