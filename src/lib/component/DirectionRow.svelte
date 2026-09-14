@@ -134,13 +134,33 @@
 	}
 
 	function handleChipChange(id: string) {
+		// Position the caret right after the #uuid token so the picker, when
+		// it inserts, replaces only that token and leaves the rest of the
+		// direction body intact.
+		if (textareaRef) {
+			const idx = textareaRef.value.indexOf('#' + id);
+			if (idx >= 0) {
+				const caret = idx + ('#' + id).length;
+				textareaRef.focus();
+				textareaRef.selectionStart = textareaRef.selectionEnd = caret;
+			}
+		}
 		pickerOpen = true;
 	}
 
 	function handleChipRemove(id: string) {
-		// Replace #<id> (and one trailing space) with empty string
-		const regex = new RegExp(`#${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s?`, 'g');
+		// Replace #<id> (and one trailing whitespace) with empty string.
+		// Escape any regex-special chars in id, then add an optional
+		// whitespace after the literal token.
+		const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		const regex = new RegExp(`#${escaped}\\s?`, 'g');
 		draft.body = draft.body.replace(regex, '').trim();
+		// Mirror the change into the textarea DOM so bind:value re-syncs
+		// (the chip overlay reads from draft.body but the textarea also
+		// caches its value internally).
+		if (textareaRef) {
+			textareaRef.value = draft.body;
+		}
 	}
 
 	// Focus the textarea when editing starts — avoids bind:this hydration issues
@@ -201,7 +221,7 @@
 						onkeydown={handleTextareaKeydown}
 						onfocus={() => (textareaFocused = true)}
 						onblur={() => (textareaFocused = false)}
-						style="background:transparent; position:relative; z-index:1; color:{textareaFocused ? 'inherit' : 'transparent'}; caret-color:{textareaFocused ? 'black' : 'transparent'};"
+						style="background:transparent; position:relative; z-index:1; color:{textareaFocused ? 'inherit' : 'transparent'}; caret-color:{textareaFocused ? 'black' : 'transparent'}; pointer-events:{textareaFocused ? 'auto' : 'none'};"
 					></textarea>
 					<!-- Chip overlay -->
 					<div

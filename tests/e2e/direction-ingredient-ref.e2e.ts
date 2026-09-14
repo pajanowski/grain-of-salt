@@ -20,7 +20,9 @@ import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { TEST_USER_ID } from './helpers/auth-shared';
 import { v4 as uuidv4 } from 'uuid';
 import {
+	getChipInTextBox,
 	getDirectionBodyInput,
+	getDirectionList,
 	getDirectionRow,
 	pickIngredientFromDirection,
 	getRecipeLink,
@@ -28,6 +30,7 @@ import {
 	getIngredientNameInput,
 	getAddButton,
 	fillAddDirection,
+	fillAddDirectionWithIngredient,
 	submitAddDirection,
 	clickPageSave,
 	openEditDirectionForm,
@@ -55,6 +58,8 @@ const SUGAR_UNIT = 'cup';
 const SALT_NAME = 'Salt';
 const SALT_AMOUNT = '1';
 const SALT_UNIT = 'tsp';
+// Salt is added via UnitAutocomplete which normalizes "tsp" -> "teaspoon".
+const SALT_DISPLAY_UNIT = 'teaspoon';
 
 async function setupFixture(db: PostgresJsDatabase, ownerId: string) {
 	// Idempotent teardown.
@@ -137,9 +142,16 @@ test.describe('direction ingredient references', () => {
 		await openFixtureRecipe(page);
 
 		// Add a direction: type #, pick Sugar, complete body.
-		await fillAddDirection(page, `#${SUGAR_NAME} to the bowl.`);
-		// After typing # the picker should appear; pick Sugar.
-		await pickIngredientFromDirection(page, SUGAR_NAME);
+		// We type the `#name` prefix char-by-char so the picker can detect
+		// the `#`-token via its oninput handler; a single .fill() of the full
+		// string breaks that detection because the trailing whitespace
+		// invalidates the `#xxx$` regex match.
+		await fillAddDirectionWithIngredient(
+			page,
+			`#${SUGAR_NAME}`,
+			SUGAR_NAME,
+			' to the bowl.'
+		);
 		// The textarea should now contain #<uuid> for Sugar.
 		const textarea = getDirectionBodyInput(page);
 		await expect(textarea).toHaveValue(/#[0-9a-f-]{36}.*to the bowl\./i);
@@ -163,9 +175,25 @@ test.describe('direction ingredient references', () => {
 	test('edit direction: change ingredient reference', async ({ page }) => {
 		await openFixtureRecipe(page);
 
+		// Ensure a Sugar direction exists for this test to edit (test 1 may
+		// or may not have run before us in this invocation).
+		const existingSugar = await getDirectionList(page)
+			.getByText(new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i'))
+			.count();
+		if (existingSugar === 0) {
+			await fillAddDirectionWithIngredient(
+				page,
+				`#${SUGAR_NAME}`,
+				SUGAR_NAME,
+				' to the bowl.'
+			);
+			await submitAddDirection(page);
+			await clickPageSave(page);
+			await page.reload();
+			await expect(getRecipeHeading(page, RECIPE_NAME)).toBeVisible();
+		}
+
 		// Add a second ingredient (Salt) so we have something to change to.
-		// The Sugar direction already exists from the previous test, but we
-		// can add Salt fresh here (previous test already saved).
 		await page
 			.getByText('Ingredients')
 			.locator('..')
@@ -182,16 +210,29 @@ test.describe('direction ingredient references', () => {
 				.first()
 		).click();
 
-		// Edit the existing direction (index 0) — click its row's Change action.
-		await openEditDirectionForm(page, getDirectionRow(page, 0));
+		// Edit the existing Sugar direction — click its row's Change action.
+		const sugarRow = getDirectionList(page)
+			.locator('li')
+			.filter({ hasText: new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i') })
+			.first();
+		await openEditDirectionForm(page, sugarRow);
 
 		// The editing textarea shows the raw #sugar-uuid.
 		const textarea = page.locator('textarea[data-editing-direction]');
 
-		// The chip overlay shows "Change" and "Remove" buttons.
-		// Click "Change" on the Sugar chip.
-		const chipRow = getDirectionRow(page, 0);
-		await chipRow.getByRole('button', { name: 'Change' }).click();
+		// Blur the textarea so the chip overlay becomes visible (overlay is
+		// hidden while the textarea is focused so caret positioning works).
+		await textarea.blur();
+
+		// The chip overlay shows "Change" and "Remove" buttons. The overlay
+		// has aria-hidden="true", so getByRole filters the buttons out — use
+		// a text locator inside the chip span instead.
+		await page
+			.locator('textarea[data-editing-direction]')
+			.locator('..')
+			.getByText('Change', { exact: true })
+			.first()
+			.click();
 
 		// Picker opens — select Salt.
 		await pickIngredientFromDirection(page, SALT_NAME);
@@ -207,7 +248,7 @@ test.describe('direction ingredient references', () => {
 
 		// Salt chip should be visible, not Sugar.
 		await expect(getDirectionRow(page, 0)).toContainText(
-			new RegExp(`${SALT_NAME}\\s*\\(${SALT_AMOUNT}\\s+${SALT_UNIT}\\)`, 'i')
+			new RegExp(`${SALT_NAME}\\s*\\(${SALT_AMOUNT}\\s+${SALT_DISPLAY_UNIT}\\)`, 'i')
 		);
 		await expect(getDirectionRow(page, 0)).not.toContainText(
 			new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i')
@@ -217,14 +258,56 @@ test.describe('direction ingredient references', () => {
 	test('edit direction: remove ingredient reference', async ({ page }) => {
 		await openFixtureRecipe(page);
 
-		// Edit direction 0 and click Remove on its chip.
-		await openEditDirectionForm(page, getDirectionRow(page, 0));
+		// Ensure a Sugar direction exists for this test to edit. Test 2
+		// may have changed an existing Sugar direction to Salt, so we add
+		// a fresh one if needed.
+		const existingSugar = await getDirectionList(page)
+			.getByText(new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i'))
+			.count();
+		if (existingSugar === 0) {
+			await fillAddDirectionWithIngredient(
+				page,
+				`#${SUGAR_NAME}`,
+				SUGAR_NAME,
+				' to the bowl.'
+			);
+			await submitAddDirection(page);
+			await clickPageSave(page);
+			await page.reload();
+			await expect(getRecipeHeading(page, RECIPE_NAME)).toBeVisible();
+		}
 
-		const chipRow = getDirectionRow(page, 0);
-		await chipRow.getByRole('button', { name: 'Remove' }).click();
+		// Find the direction row that contains the Sugar chip and edit it.
+		const sugarRow = getDirectionList(page)
+			.locator('li')
+			.filter({ hasText: new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i') })
+			.first();
+		await openEditDirectionForm(page, sugarRow);
 
-		// After Remove, the textarea body should no longer contain #uuid.
+		// Blur the textarea so the chip overlay becomes visible (overlay is
+		// hidden while the textarea is focused).
 		const textarea = page.locator('textarea[data-editing-direction]');
+		await textarea.blur();
+
+		// The chip overlay should currently show Sugar (1 cup).
+		await expect(
+			getChipInTextBox(page, new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i'))
+		).toBeVisible();
+
+		// The overlay is aria-hidden so getByRole skips the button; use a
+		// text locator inside the editing form instead.
+		await page
+			.locator('textarea[data-editing-direction]')
+			.locator('..')
+			.getByText('Remove', { exact: true })
+			.first()
+			.click();
+
+		// After Remove, the chip should be gone from the overlay and the
+		// textarea body should no longer contain #uuid.
+		await expect(
+			getChipInTextBox(page, new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i'))
+		).toHaveCount(0);
 		await expect(textarea).not.toContainText(/#[0-9a-f-]{36}/i);
 
 		await submitEditDirection(page);
@@ -239,16 +322,22 @@ test.describe('direction ingredient references', () => {
 
 	test('public page shows compiled chips', async ({ page }) => {
 		// The fixture recipe should already be public or we make it public.
-		// First, ensure the direction with Sugar ref exists (add it if needed).
+		// Ensure a fresh Sugar direction exists (prior tests may have left
+		// the first row pointing at a different ingredient, e.g. Salt).
 		await openFixtureRecipe(page);
 
-		// Add direction with Sugar reference if not already present from prior tests.
-		const existingDirectionWithRef = await getDirectionRow(page, 0)
-			.getByRole('button', { name: 'Change' })
+		// Count existing Sugar-direction rows.
+		const sugarCount = await getDirectionList(page)
+			.locator('li')
+			.filter({ hasText: new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i') })
 			.count();
-		if (existingDirectionWithRef === 0) {
-			await fillAddDirection(page, `#${SUGAR_NAME} to the bowl.`);
-			await pickIngredientFromDirection(page, SUGAR_NAME);
+		if (sugarCount === 0) {
+			await fillAddDirectionWithIngredient(
+				page,
+				`#${SUGAR_NAME}`,
+				SUGAR_NAME,
+				' to the bowl.'
+			);
 			await submitAddDirection(page);
 			await clickPageSave(page);
 		}
@@ -266,20 +355,26 @@ test.describe('direction ingredient references', () => {
 		await page.goto(`/recipe/${fixtureNodeId}`);
 		await expect(page.getByRole('heading', { name: RECIPE_NAME })).toBeVisible();
 
-		// The public page should render compiled chips, not raw #uuid tokens.
-		await expect(page.getByTestId('direction-list').locator('li').first()).toContainText(
-			new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i')
-		);
-		await expect(page.getByTestId('direction-list').locator('li').first()).not.toContainText(
-			/#[0-9a-f-]{36}/i
-		);
+		// The public page should render compiled chips for the Sugar row,
+		// not raw #uuid tokens. We locate the row that contains the Sugar
+		// chip rather than assuming it's at index 0.
+		const sugarLi = page
+			.getByTestId('direction-list')
+			.locator('li')
+			.filter({ hasText: new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i') })
+			.first();
+		await expect(sugarLi).toBeVisible();
+		await expect(sugarLi).not.toContainText(/#[0-9a-f-]{36}/i);
 	});
 
 	test('unknown uuid renders as raw text', async ({ page }) => {
 		await openFixtureRecipe(page);
 
-		// Manually type a fake #uuid (not matching any ingredient) into the direction.
-		await fillAddDirection(page, 'Add #fake-uuid-0000-0000-0000-000000000001 to the bowl.');
+		// Manually type a fake #uuid (not matching any ingredient) into the
+		// direction. fill() bypasses the picker (the matcher still runs but
+		// no real ingredient matches "fake-uuid-...", so the picker stays
+		// empty and the text is submitted as plain body text).
+		await fillAddDirection(page, '#fake-uuid-0000-0000-0000-000000000001 to the bowl.');
 		// Do NOT pick from the picker — just type the #uuid literally.
 		await submitAddDirection(page);
 		await clickPageSave(page);
@@ -287,7 +382,11 @@ test.describe('direction ingredient references', () => {
 		await page.reload();
 		await expect(getRecipeHeading(page, RECIPE_NAME)).toBeVisible();
 
-		// The raw #fake-uuid should be visible as plain text, not a chip.
-		await expect(getDirectionRow(page, 0)).toContainText('#fake-uuid-0000-0000-0000-000000000001');
+		// The raw #fake-uuid should be visible as plain text somewhere in the
+		// direction list, not as a chip. Other tests may have added directions
+		// before this one ran, so we don't assume a particular index.
+		await expect(getDirectionList(page)).toContainText(
+			'#fake-uuid-0000-0000-0000-000000000001'
+		);
 	});
 });

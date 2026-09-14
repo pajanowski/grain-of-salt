@@ -353,10 +353,8 @@ function openDirectionForm(page: Page) {
  * the add-ingredient form.
  */
 export async function openAddDirectionForm(page: Page) {
-  let form = openDirectionForm(page);
-  if ((await form.count()) === 0) {
+  if ((await openDirectionForm(page).count()) === 0) {
     await getAddDirectionButton(page).click();
-    form = openDirectionForm(page);
   }
   await expect(getDirectionBodyInput(page)).toBeVisible();
 }
@@ -370,10 +368,55 @@ export async function fillAddDirection(page: Page, body: string) {
 }
 
 /**
+ * Open the add-direction form, type `prefix` char-by-char so the ingredient
+ * picker can detect the trailing `#name` token, pick the ingredient whose
+ * label starts with `ingredientName`, then continue typing `suffix` (if any).
+ *
+ * The picker closes as soon as a whitespace character is typed after the
+ * `#name`, so the text must be split around the picker interaction — that's
+ * what this helper enforces. We restore the textarea caret to the end of the
+ * inserted `#uuid` after the picker click, since the picker option steals
+ * focus and Playwright's `pressSequentially` would otherwise start typing
+ * from caret position 0.
+ */
+export async function fillAddDirectionWithIngredient(
+  page: Page,
+  prefix: string,
+  ingredientName: string,
+  suffix = ''
+) {
+  await openAddDirectionForm(page);
+  const ta = getDirectionBodyInput(page);
+  await ta.click();
+  await ta.pressSequentially(prefix, { delay: 10 });
+  await pickIngredientFromDirection(page, ingredientName);
+  if (suffix.length > 0) {
+    // Focus the textarea (the picker click moved focus to the option button)
+    // and place the caret at the end so the suffix appends after `#uuid`.
+    await ta.focus();
+    await ta.evaluate((el) => {
+      const t = el as HTMLTextAreaElement;
+      t.selectionStart = t.selectionEnd = t.value.length;
+    });
+    await ta.pressSequentially(suffix, { delay: 10 });
+  }
+}
+
+/**
  * Click "Add" inside the currently-open add-direction form.
  */
 export async function submitAddDirection(page: Page) {
   await getAddButton(openDirectionForm(page)).click();
+}
+
+/**
+ * Find a chip inside the direction textarea's overlay. The overlay sits
+ * as a sibling of the textarea inside the same parent, so this walks up
+ * from the "Direction" textbox and locates the given text. Useful for
+ * asserting chip visibility while the editing form is focused/blurred.
+ */
+export function getChipInTextBox(page: Page, text: string | RegExp) {
+  return getDirectionBodyInput(page).locator('..').getByText(text);
 }
 
 // ---------------------------------------------------------------------------
@@ -393,10 +436,13 @@ export async function openEditDirectionForm(page: Page, row: Locator) {
  * Click the Save button on the currently-open edit-direction form.
  */
 export async function submitEditDirection(page: Page) {
+  // The editing form is the closest <form> containing the editing-direction
+  // textarea; locate the Save button inside that form (the direct parent of
+  // the textarea is a layout div that doesn't include Save/Cancel).
   await page
-    .locator('textarea[data-editing-direction]')
-    .locator('..')
+    .locator('form', { has: page.locator('textarea[data-editing-direction]') })
     .getByRole('button', { name: 'Save', exact: true })
+    .first()
     .click();
 }
 
