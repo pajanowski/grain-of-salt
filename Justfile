@@ -25,7 +25,7 @@ dev:
 
 # Build + preview production build (one-shot or `vite build --watch`).
 preview:
-    pnpm start
+    pnpm preview 
 
 build:
     pnpm build

@@ -270,7 +270,16 @@
 
 	function handleAddDirectionTextareaInput(e: Event) {
 		const ta = e.target as HTMLTextAreaElement;
-		const match = ta.value.match(/#(?:[^\s]*)$/);
+		// const match = ta.value.match(/#(?:[^\s]*)$/);
+		const pos = ta.selectionStart;
+		const startToCursor = ta.value.slice(0, pos);
+
+		const matches = [...startToCursor.matchAll(/[\s]/g)];
+		const lastIndexOfSpaceBeforeCursor =
+			matches.length > 0 ? matches[matches.length - 1].index : -1;
+
+		const spaceToCursor = startToCursor.slice(lastIndexOfSpaceBeforeCursor + 1);
+		let match = spaceToCursor.startsWith('#');
 		if (match) {
 			addDirectionPickerOpen = true;
 			const pos = ta.selectionStart;
@@ -824,7 +833,9 @@
 								onkeydown={handleAddDirectionKeydown}
 								onfocus={() => (addDirectionFocused = true)}
 								onblur={() => (addDirectionFocused = false)}
-								style="background:transparent; position:relative; z-index:1; color:{addDirectionFocused ? 'inherit' : 'transparent'}; caret-color:{addDirectionFocused ? 'black' : 'transparent'};"
+								style="background:transparent; position:relative; z-index:1; color:{addDirectionFocused
+									? 'inherit'
+									: 'transparent'}; caret-color:{addDirectionFocused ? 'black' : 'transparent'};"
 							></textarea>
 							<!-- Chip overlay -->
 							<div
