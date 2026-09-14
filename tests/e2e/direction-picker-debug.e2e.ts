@@ -150,6 +150,111 @@ test('T6: saving with #Eggs reference shows compiled chip after save', async ({ 
   await expect(chip).toBeVisible({ timeout: 3000 });
 });
 
+// T8: pressing Tab highlights the next option AND selects it (single-select listbox)
+test('T8: pressing Tab on the ingredient picker selects the next option', async ({ page }) => {
+	await openOmelette(page);
+	await openAddDirection(page);
+
+	// Type just # — picker shows all 3 ingredients (Eggs, Butter, Salt).
+	await getDirectionBodyInput(page).fill('#');
+	await page.waitForTimeout(200);
+
+	const picker = getIngredientPicker(page);
+	await expect(picker).toBeVisible({ timeout: 3000 });
+
+	// Tab once from the textarea — the dropdown's global keydown handler
+	// catches it, advances the highlight from -1 to 0 (first option), and
+	// selects that option. The textarea then contains the corresponding
+	// #uuid.
+	const before = await getDirectionBodyInput(page).inputValue();
+	await page.keyboard.press('Tab');
+	await page.waitForTimeout(200);
+
+	const after = await getDirectionBodyInput(page).inputValue();
+	console.log(`[T8] before="${before}" after="${after}"`);
+	expect(after, 'Tab should have inserted a #uuid').toMatch(/#[0-9a-f-]{36}/i);
+
+	// Picker should close after the selection.
+	await expect(picker).not.toBeVisible({ timeout: 2000 });
+});
+
+// T9: pressing Shift+Tab highlights the previous option without selecting
+test('T9: pressing Shift+Tab on the ingredient picker moves highlight without selecting', async ({ page }) => {
+	await openOmelette(page);
+	await openAddDirection(page);
+
+	await getDirectionBodyInput(page).fill('#');
+	await page.waitForTimeout(200);
+
+	const picker = getIngredientPicker(page);
+	await expect(picker).toBeVisible({ timeout: 3000 });
+
+	// Shift+Tab from -1 wraps to the last option (Salt) but does NOT
+	// select it — only Tab (without Shift) selects.
+	await page.keyboard.press('Shift+Tab');
+	await page.waitForTimeout(200);
+
+	// Textarea should still have just "#" — no uuid inserted.
+	const after = await getDirectionBodyInput(page).inputValue();
+	expect(after, 'Shift+Tab should NOT have inserted a #uuid').toBe('#');
+
+	// Picker should still be open.
+	await expect(picker).toBeVisible({ timeout: 2000 });
+
+	// The last option should be the highlighted one (Salt, the third
+	// ingredient — the picker sorts by insertion order).
+	const lastOption = picker.locator('[role="option"]').last();
+	await expect(lastOption).toHaveAttribute('aria-selected', 'true');
+});
+
+// T10: ArrowDown then Enter selects the highlighted option
+test('T10: ArrowDown then Enter selects the highlighted option', async ({ page }) => {
+	await openOmelette(page);
+	await openAddDirection(page);
+
+	await getDirectionBodyInput(page).fill('#');
+	await page.waitForTimeout(200);
+
+	const picker = getIngredientPicker(page);
+	await expect(picker).toBeVisible({ timeout: 3000 });
+
+	// ArrowDown from -1 highlights the first option (Eggs).
+	await page.keyboard.press('ArrowDown');
+	await page.waitForTimeout(100);
+
+	const firstOption = picker.locator('[role="option"]').first();
+	await expect(firstOption).toHaveAttribute('aria-selected', 'true');
+
+	// Enter activates it.
+	await page.keyboard.press('Enter');
+	await page.waitForTimeout(200);
+
+	const after = await getDirectionBodyInput(page).inputValue();
+	console.log(`[T10] after="${after}"`);
+	expect(after).toMatch(/#[0-9a-f-]{36}/i);
+	await expect(picker).not.toBeVisible({ timeout: 2000 });
+});
+
+// T11: Escape closes the picker without selecting
+test('T11: Escape closes the ingredient picker without selecting', async ({ page }) => {
+	await openOmelette(page);
+	await openAddDirection(page);
+
+	await getDirectionBodyInput(page).fill('#');
+	await page.waitForTimeout(200);
+
+	const picker = getIngredientPicker(page);
+	await expect(picker).toBeVisible({ timeout: 3000 });
+
+	await page.keyboard.press('Escape');
+	await page.waitForTimeout(200);
+
+	await expect(picker).not.toBeVisible({ timeout: 2000 });
+
+	const after = await getDirectionBodyInput(page).inputValue();
+	expect(after, 'Escape should not have inserted a #uuid').toBe('#');
+});
+
 // T7: saved chip survives reload
 test('T7: saved chip survives reload', async ({ page }) => {
   await openOmelette(page);
