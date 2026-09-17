@@ -1,9 +1,6 @@
 import type { Ingredient, Direction } from '$lib/obj/Recipe.svelte';
 import { NewDirection } from '$lib/obj/Recipe.svelte';
-import {
-	extractRecipeFromJsonLd,
-	parseIngredientString
-} from './adapters/jsonld';
+import { extractRecipeFromJsonLd, parseIngredientString } from './adapters/jsonld';
 
 export interface ParsedRecipe {
 	name: string;
@@ -44,9 +41,7 @@ export function parseRecipeFromHtml(html: string, url: string): ParsedRecipe {
 	}
 
 	const ingredients = rawRecipe.ingredients.map(parseIngredientString);
-	const directions = rawRecipe.instructions.map((text: string) =>
-		NewDirection(null, text)
-	);
+	const directions = rawRecipe.instructions.map((text: string) => NewDirection(null, text));
 
 	return {
 		name: rawRecipe.name,
@@ -70,7 +65,9 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe> {
 	try {
 		const res = await fetch(url, {
 			signal: AbortSignal.timeout(10_000),
-			headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' }
+			headers: {
+				'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+			}
 		});
 		if (!res.ok) {
 			throw new ImportError(`Could not fetch URL: ${res.status} ${res.statusText}`, 422);
@@ -109,7 +106,8 @@ function extractJsonLdRecipe(
 		const raw = match[1];
 		try {
 			const parsed = JSON.parse(raw);
-			const found = findRecipeInValue(parsed);
+			const decoded = decodeHtmlEntities(parsed);
+			const found = findRecipeInValue(decoded);
 			if (found) return found;
 		} catch {
 			// malformed JSON — skip
@@ -142,4 +140,97 @@ function findRecipeInValue(
 	}
 
 	return extractRecipeFromJsonLd(obj);
+}
+
+/**
+ * Decode HTML entities (named, decimal `&#NN;`, hex `&#xNN;`) inside every
+ * string value of a parsed JSON-LD tree. Some sites HTML-encode characters
+ * inside `<script type="application/ld+json">` blocks (notably apostrophes
+ * as `&#x27;`) to avoid breaking out of the script element; `JSON.parse`
+ * leaves those entities as literal text.
+ *
+ * Only string values are touched — JSON keys and non-strings pass through.
+ */
+function decodeHtmlEntities(value: unknown): unknown {
+	if (typeof value === 'string') return decodeString(value);
+	if (Array.isArray(value)) return value.map(decodeHtmlEntities);
+	if (value && typeof value === 'object') {
+		const obj = value as Record<string, unknown>;
+		const out: Record<string, unknown> = {};
+		for (const k of Object.keys(obj)) {
+			out[k] = decodeHtmlEntities(obj[k]);
+		}
+		return out;
+	}
+	return value;
+}
+
+const NAMED_ENTITIES: Record<string, string> = {
+	amp: '&',
+	lt: '<',
+	gt: '>',
+	quot: '"',
+	apos: "'",
+	nbsp: '\u00a0',
+	copy: '©',
+	reg: '®',
+	trade: '™',
+	mdash: '—',
+	ndash: '–',
+	hellip: '…',
+	laquo: '«',
+	raquo: '»',
+	ldquo: '“',
+	rdquo: '”',
+	lsquo: '‘',
+	rsquo: '’',
+	middl: '—',
+	iexcl: '¡',
+	iquest: '¿',
+	eacute: 'é',
+	Eacute: 'É',
+	egrave: 'è',
+	Egrave: 'È',
+	ecirc: 'ê',
+	Ecirc: 'Ê',
+	agrave: 'à',
+	Agrave: 'À',
+	aacute: 'á',
+	Aacute: 'Á',
+	acirc: 'â',
+	Acirc: 'Â',
+	iuml: 'ï',
+	Iuml: 'Ï',
+	ouml: 'ö',
+	Ouml: 'Ö',
+	auml: 'ä',
+	Auml: 'Ä',
+	uuml: 'ü',
+	Uuml: 'Ü',
+	ouml_: 'ö',
+	Ouml_: 'Ö',
+	ccedil: 'ç',
+	Ccedil: 'Ç',
+	ntilde: 'ñ',
+	Ntilde: 'Ñ'
+};
+
+function decodeString(s: string): string {
+	if (s.indexOf('&') === -1) return s;
+	return s.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g, (match, body: string) => {
+		if (body[0] === '#') {
+			const codePoint =
+				body[1] === 'x' || body[1] === 'X'
+					? parseInt(body.slice(2), 16)
+					: parseInt(body.slice(1), 10);
+			if (!Number.isFinite(codePoint)) return match;
+			try {
+				return String.fromCodePoint(codePoint);
+			} catch {
+				return match;
+			}
+		}
+		const named = NAMED_ENTITIES[body];
+		return named !== undefined ? named : match;
+	});
 }
