@@ -94,10 +94,12 @@ test('T4: pressing Enter selects the highlighted ingredient', async ({ page }) =
   // Picker should be closed
   await expect(picker).not.toBeVisible({ timeout: 2000 });
 
-  // Textarea should have #uuid inserted
+  // Textarea should show the masked chip (e.g. `#Eggs`), not the raw uuid.
+  // Masked display: picker splices #<uuid> in raw body, but the textarea
+  // surface renders #<name>.
   const val = await getDirectionBodyInput(page).inputValue();
   console.log(`[T4] After Enter: textarea value="${val}"`);
-  expect(val, `Expected #uuid in textarea, got "${val}"`).toMatch(/#[0-9a-f-]{36}/i);
+  expect(val, `Expected masked chip "#Eggs" in textarea, got "${val}"`).toMatch(/^#Eggs(\s|$)/);
 });
 
 // T5: selected ingredient shows as compiled chip in textarea overlay
@@ -113,14 +115,15 @@ test('T5: selected ingredient shows as compiled chip in textarea overlay', async
   await picker.locator('[role="option"]').first().press('Enter');
   await page.waitForTimeout(200);
 
-  // Blur textarea so overlay becomes visible
+  // Blur textarea so we can inspect its value
   await getDirectionBodyInput(page).blur();
   await page.waitForTimeout(300);
 
-  // The compiled chip should appear in the overlay
-  // The overlay shows "Eggs (3)" for the Eggs ingredient
-  const chip = await getChipInTextBox(page, /Eggs.*3/)
-  await expect(chip).toBeVisible({ timeout: 3000 });
+  // Masked display: add-mode renders the chip as `#<name>` directly in
+  // the textarea (the add-direction form has no overlay layer like
+  // DirectionRow does). Verify the masked chip text is present.
+  const val = await getDirectionBodyInput(page).inputValue();
+  await expect(val, `Expected masked chip "#Eggs" in textarea, got "${val}"`).toMatch(/^#Eggs(\s|$)/);
 });
 
 // T6: saving with #Eggs reference shows compiled chip after save
@@ -136,9 +139,11 @@ test('T6: saving with #Eggs reference shows compiled chip after save', async ({ 
   await picker.locator('[role="option"]').first().press('Enter');
   await page.waitForTimeout(200);
 
-  // Verify textarea has #uuid
+  // Verify textarea shows the masked chip
+  // Masked display: picker splices #<uuid> in raw body, but the textarea
+  // surface renders #<name>.
   const val = await getDirectionBodyInput(page).inputValue();
-  expect(val).toMatch(/#[0-9a-f-]{36}/i);
+  expect(val).toMatch(/^#Eggs(\s|$)/);
 
   // Submit (add direction)
   await submitAddDirection(page);
@@ -146,33 +151,46 @@ test('T6: saving with #Eggs reference shows compiled chip after save', async ({ 
   await page.waitForTimeout(500);
 
   // The direction should appear in the list with compiled chip "Eggs (3)"
+  // (DirectionRow uses buildIngredientDisplayName for the overlay chip).
   const chip = page.getByText('5. Eggs (3)');
   await expect(chip).toBeVisible({ timeout: 3000 });
 });
 
-// T8: pressing Tab highlights the next option AND selects it (single-select listbox)
-test('T8: pressing Tab on the ingredient picker selects the next option', async ({ page }) => {
+// T8: pressing Tab highlights the next option WITHOUT selecting (Enter selects)
+// T1 made Tab navigation-only — Enter is the only activation key.
+test('T8: pressing Tab on the ingredient picker moves highlight without selecting', async ({ page }) => {
 	await openOmelette(page);
 	await openAddDirection(page);
 
-	// Type just # — picker shows all 3 ingredients (Eggs, Butter, Salt).
-	await getDirectionBodyInput(page).fill('#');
+	// Type `#Eggs` — picker shows Eggs as the highlighted option (T2).
+	await getDirectionBodyInput(page).fill('#Eggs');
 	await page.waitForTimeout(200);
 
 	const picker = getIngredientPicker(page);
 	await expect(picker).toBeVisible({ timeout: 3000 });
 
 	// Tab once from the textarea — the dropdown's global keydown handler
-	// catches it, advances the highlight from -1 to 0 (first option), and
-	// selects that option. The textarea then contains the corresponding
-	// #uuid.
+	// catches it and advances the highlight. Tab no longer selects.
+	// Masked display: insertion doesn't happen on Tab.
 	const before = await getDirectionBodyInput(page).inputValue();
 	await page.keyboard.press('Tab');
 	await page.waitForTimeout(200);
 
+	const afterTab = await getDirectionBodyInput(page).inputValue();
+	console.log(`[T8] before="${before}" afterTab="${afterTab}"`);
+	expect(afterTab, 'Tab should NOT have inserted a chip; textarea still holds "#Eggs"').toBe('#Eggs');
+
+	// Picker should still be open (no selection happened).
+	await expect(picker).toBeVisible({ timeout: 2000 });
+
+	// Enter activates the highlighted option and inserts the masked chip.
+	await page.keyboard.press('Enter');
+	await page.waitForTimeout(200);
+
 	const after = await getDirectionBodyInput(page).inputValue();
-	console.log(`[T8] before="${before}" after="${after}"`);
-	expect(after, 'Tab should have inserted a #uuid').toMatch(/#[0-9a-f-]{36}/i);
+	console.log(`[T8] after="${after}"`);
+	// Masked display: raw body becomes #<uuid> which renders as #Eggs.
+	expect(after, 'Enter should have inserted the masked chip "#Eggs"').toMatch(/^#Eggs(\s|$)/);
 
 	// Picker should close after the selection.
 	await expect(picker).not.toBeVisible({ timeout: 2000 });
@@ -218,20 +236,27 @@ test('T10: ArrowDown then Enter selects the highlighted option', async ({ page }
 	const picker = getIngredientPicker(page);
 	await expect(picker).toBeVisible({ timeout: 3000 });
 
-	// ArrowDown from -1 highlights the first option (Eggs).
+	// T2 made the dropdown open with index 0 already highlighted, so a
+	// single ArrowDown moves the highlight to index 1, not 0.
 	await page.keyboard.press('ArrowDown');
 	await page.waitForTimeout(100);
 
+	// The first option should no longer be highlighted.
 	const firstOption = picker.locator('[role="option"]').first();
-	await expect(firstOption).toHaveAttribute('aria-selected', 'true');
+	await expect(firstOption).toHaveAttribute('aria-selected', 'false');
+	// The second option should now be the highlighted one.
+	const secondOption = picker.locator('[role="option"]').nth(1);
+	await expect(secondOption).toHaveAttribute('aria-selected', 'true');
 
 	// Enter activates it.
 	await page.keyboard.press('Enter');
 	await page.waitForTimeout(200);
 
+	// Masked display: raw body becomes #<uuid> which renders as the
+	// highlighted ingredient's name.
 	const after = await getDirectionBodyInput(page).inputValue();
 	console.log(`[T10] after="${after}"`);
-	expect(after).toMatch(/#[0-9a-f-]{36}/i);
+	expect(after, `Expected masked chip in textarea, got "${after}"`).toMatch(/^#\w+(\s|$)/);
 	await expect(picker).not.toBeVisible({ timeout: 2000 });
 });
 
@@ -268,9 +293,11 @@ test('T7: saved chip survives reload', async ({ page }) => {
   await picker.locator('[role="option"]').first().press('Enter');
   await page.waitForTimeout(200);
 
-  // Verify #uuid is in the textarea
+  // Verify masked chip is in the textarea
+  // Masked display: picker splices #<uuid> in raw body, but the textarea
+  // surface renders #<name>.
   const afterPick = await getDirectionBodyInput(page).inputValue();
-  expect(afterPick, `Expected #uuid, got "${afterPick}"`).toMatch(/#[0-9a-f-]{36}/i);
+  expect(afterPick, `Expected masked chip "#Eggs", got "${afterPick}"`).toMatch(/^#Eggs(\s|$)/);
 
   // Submit and save
   await submitAddDirection(page);

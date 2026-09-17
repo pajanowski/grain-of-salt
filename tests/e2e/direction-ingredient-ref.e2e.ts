@@ -153,9 +153,10 @@ test.describe('direction ingredient references', () => {
       SUGAR_NAME,
       ' to the bowl.'
     );
-    // The textarea should now contain #<uuid> for Sugar.
+    // The textarea should now contain the masked chip #Sugar (T1–T8: the
+    // textarea surface renders #<name>, not the raw #<uuid>).
     const textarea = getDirectionBodyInput(page);
-    await expect(textarea).toHaveValue(/#[0-9a-f-]{36}.*to the bowl\./i);
+    await expect(textarea).toHaveValue(/^#Sugar.*to the bowl\.\s*$/);
 
     await submitAddDirection(page);
     await clickPageSave(page);
@@ -211,35 +212,46 @@ test.describe('direction ingredient references', () => {
         .first()
     ).click();
 
-    // Edit the existing Sugar direction — click its row's Change action.
+    // Edit the existing Sugar direction. The edit form is a plain textarea
+    // bound to a masked display: it shows `#Sugar to the bowl.`. To
+    // change the chip we clear the body and re-pick via the `#`-picker.
     const sugarRow = getDirectionList(page)
       .locator('li')
       .filter({ hasText: new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i') })
       .first();
     await openEditDirectionForm(page, sugarRow);
 
-    // The editing textarea shows the raw #sugar-uuid.
+    // Editing textarea (masked display).
     const textarea = page.locator('textarea[data-editing-direction]');
 
-    // Blur the textarea so the chip overlay becomes visible (overlay is
-    // hidden while the textarea is focused so caret positioning works).
-    await textarea.blur();
+    // Change: clear the textarea and re-pick Salt via the `#`-trigger
+    // picker. Backspace over the masked chip first (atomic chip
+    // deletion handles the `#Sugar` token), then select-all + delete
+    // the remaining ` to the bowl.` plain text.
+    await textarea.focus();
+    await textarea.evaluate((el) => {
+      const t = el as HTMLTextAreaElement;
+      t.selectionStart = t.selectionEnd = 2;
+    });
+    await textarea.press('Backspace');
+    // Now textarea holds ` to the bowl.`. Select all + delete the rest.
+    await textarea.evaluate((el) => {
+      const t = el as HTMLTextAreaElement;
+      t.setSelectionRange(0, t.value.length);
+    });
+    await textarea.press('Delete');
+    await expect(textarea).toHaveValue('');
 
-    // The chip overlay shows "Change" and "Remove" buttons. The overlay
-    // has aria-hidden="true", so getByRole filters the buttons out — use
-    // a text locator inside the chip span instead.
-    await page
-      .locator('textarea[data-editing-direction]')
-      .locator('..')
-      .getByText('Change', { exact: true })
-      .first()
-      .click();
-
-    // Picker opens — select Salt.
+    // Now type `#Salt` to open the picker; pick Salt; then type the suffix.
+    await textarea.pressSequentially(`#${SALT_NAME}`, { delay: 10 });
     await pickIngredientFromDirection(page, SALT_NAME);
 
-    // The textarea should now have the Salt uuid.
-    await expect(textarea).toHaveValue(/#[0-9a-f-]{36}.*to the bowl\./i);
+    // T1–T8: textarea shows the masked #<name>, not the raw #<uuid>.
+    await expect(textarea).toHaveValue('#Salt');
+
+    // Now type the suffix (` to the bowl.`) with the picker closed.
+    await textarea.pressSequentially(' to the bowl.', { delay: 10 });
+    await expect(textarea).toHaveValue(/^#Salt.*to the bowl\.\s*$/);
 
     await submitEditDirection(page);
     await clickPageSave(page);
@@ -285,31 +297,25 @@ test.describe('direction ingredient references', () => {
       .first();
     await openEditDirectionForm(page, sugarRow);
 
-    // Blur the textarea so the chip overlay becomes visible (overlay is
-    // hidden while the textarea is focused).
+    // Editing textarea — masked display shows `#Sugar to the bowl.`.
     const textarea = page.locator('textarea[data-editing-direction]');
-    await textarea.blur();
 
-    // The chip overlay should currently show Sugar (1 cup).
-    await expect(
-      getChipInTextBox(page, new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i'))
-    ).toBeVisible();
+    // To remove the chip, place the caret inside the masked `#Sugar`
+    // span and press Backspace. DirectionRow's keydown handler
+    // recognises the caret as inside a chip and atomically deletes
+    // the whole `#<uuid>` token (per directionMask atomic-chip rule).
+    await textarea.focus();
+    await textarea.evaluate((el) => {
+      const t = el as HTMLTextAreaElement;
+      // Caret after the `#S` (i.e. at display position 2, inside the chip).
+      t.setSelectionRange(2, 2);
+    });
+    await textarea.press('Backspace');
 
-    // The overlay is aria-hidden so getByRole skips the button; use a
-    // text locator inside the editing form instead.
-    await page
-      .locator('textarea[data-editing-direction]')
-      .locator('..')
-      .getByText('Remove', { exact: true })
-      .first()
-      .click();
-
-    // After Remove, the chip should be gone from the overlay and the
-    // textarea body should no longer contain #uuid.
-    await expect(
-      getChipInTextBox(page, new RegExp(`${SUGAR_NAME}\\s*\\(${SUGAR_AMOUNT}\\s+${SUGAR_UNIT}\\)`, 'i'))
-    ).toHaveCount(0);
-    await expect(textarea).not.toContainText(/#[0-9a-f-]{36}/i);
+    // T1–T8: textarea surfaces the masked #<name>; use toHaveValue to
+    // inspect value (toContainText always passes for <textarea>). After
+    // chip removal, only ` to the bowl.` remains.
+    await expect(textarea).toHaveValue(' to the bowl.');
 
     await submitEditDirection(page);
     await clickPageSave(page);
@@ -391,7 +397,7 @@ test.describe('direction ingredient references', () => {
     );
   });
 
-  test.only('hitting enter on ingredient ref should only insert 1 ingredient ref', async ({ page }) => {
+  test('hitting enter on ingredient ref should only insert 1 ingredient ref', async ({ page }) => {
     await openFixtureRecipe(page);
 
     await openAddDirectionForm(page);
@@ -400,7 +406,11 @@ test.describe('direction ingredient references', () => {
     await directionBodyInput.fill("#Sug");
     await directionBodyInput.press("Tab");
     await directionBodyInput.press("Enter");
-    expect(directionBodyInput).toContainText("#Sugar")
+    // toContainText reads .textContent which is empty for <textarea>;
+    // use toHaveValue (T1–T8: textarea shows masked #<name>. When the
+    // suffix is empty the picker's trailing-space guard is a no-op, so
+    // the value is exactly "#Sugar").
+    await expect(directionBodyInput).toHaveValue("#Sugar");
 
   })
 });

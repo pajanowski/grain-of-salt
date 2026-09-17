@@ -11,10 +11,11 @@ While `open` is true, keydown events are captured at the document level
 so navigation still works while focus is in an arbitrary input
 (textareas, custom inputs, etc).
 
-The listbox itself is also keyboard-friendly: Tab focuses the next
-option, Shift+Tab focuses the previous, Enter activates the focused
-option. This is the behaviour the ingredient-ref picker wanted, and it
-also makes the standalone Autocomplete unit more accessible.
+The listbox itself is also keyboard-friendly: Tab and Shift+Tab move
+the highlight only (navigation, no selection); Enter activates the
+highlighted option; Escape closes. This is the behaviour the
+ingredient-ref picker wanted, and it also makes the standalone
+Autocomplete unit more accessible.
 -->
 <script lang="ts">
 	import { browser } from '$app/environment';
@@ -66,20 +67,14 @@ also makes the standalone Autocomplete unit more accessible.
 
 	function onListboxKeydown(e: KeyboardEvent) {
 		// Tab inside the listbox moves between options like a native
-		// listbox: Tab -> next, Shift+Tab -> previous, and selects on
-		// activation. We also support the legacy ArrowDown/Up/Enter so
-		// existing call sites keep working.
+		// listbox: Tab -> next, Shift+Tab -> previous (navigation only;
+		// Enter is the only activation key in this branch).
 		if (e.key === 'Tab') {
 			e.preventDefault();
 			const next = e.shiftKey
 				? clamp(highlightedIndex - 1)
 				: clamp(highlightedIndex + 1);
 			highlightedIndex = next;
-			if (e.key === 'Tab' && !e.shiftKey && highlightedIndex >= 0) {
-				// Tab on a listbox selects the focused option, matching
-				// ARIA listbox keyboard pattern (single-select listbox).
-				selectIndex(highlightedIndex);
-			}
 			return;
 		}
 		if (e.key === 'ArrowDown') {
@@ -121,10 +116,6 @@ also makes the standalone Autocomplete unit more accessible.
 					? clamp(highlightedIndex - 1)
 					: clamp(highlightedIndex + 1);
 				highlightedIndex = next;
-				if (!e.shiftKey) {
-					// Single-select listbox: Tab activates.
-					selectIndex(next);
-				}
 				return;
 			}
 			if (e.key === 'ArrowDown') {
@@ -160,6 +151,9 @@ also makes the standalone Autocomplete unit more accessible.
 	$effect(() => {
 		if (!open) {
 			highlightedIndex = -1;
+		} else if (highlightedIndex < 0 && items.length > 0) {
+			// Open focused on the first option, like a native listbox.
+			highlightedIndex = 0;
 		} else if (highlightedIndex >= items.length) {
 			highlightedIndex = items.length > 0 ? 0 : -1;
 		}

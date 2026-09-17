@@ -116,8 +116,9 @@ Behavior:
   `sug` matches "Sugar". Empty filter shows all ingredients.
 - Each item renders as `Ingredient (amount unit)` so the author knows
   what they're picking.
-- Keyboard: ↓/↑ move, Enter selects, Tab inserts and adds a trailing
-  space if not already present.
+- Keyboard: ↓/↑ move, Tab/Shift+Tab move highlight; Enter selects and
+  inserts the reference (a trailing space is appended if the next
+  character isn't whitespace).
 - On select, insert `#<id>` at the caret with a trailing space if the
   next character isn't whitespace.
 

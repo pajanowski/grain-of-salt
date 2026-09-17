@@ -434,9 +434,21 @@
 				insert +
 				newDirection.body.slice(existing.rawEnd);
 		} else {
-			const rawPos = displayToRaw(hashIdx, addDirectionMasked);
-			newDirection.body =
-				newDirection.body.slice(0, rawPos) + insert + newDirection.body.slice(rawPos);
+			const rawStart = displayToRaw(hashIdx, addDirectionMasked);
+			// The token at the caret is `#<filter>`, extending from `hashIdx`
+			// to the next whitespace in the displayed textarea (or end of
+			// value if there is none). Map that end boundary back into the
+			// raw body so the splice removes the typed filter text too.
+			const trailingText = ta.value.substring(hashIdx);
+			const wsIdx = trailingText.search(/\s/);
+			const tokenEnd = wsIdx < 0 ? ta.value.length : hashIdx + wsIdx;
+			const rawEnd = displayToRaw(tokenEnd, addDirectionMasked);
+			const head = newDirection.body.slice(0, rawStart);
+			const tail = newDirection.body.slice(rawEnd);
+			newDirection.body = head + insert + tail;
+			if (tail.length > 0 && !/\s/.test(tail[0])) {
+				newDirection.body += ' ';
+			}
 		}
 		const newMasked = tokenizeMaskedBody(newDirection.body, displayedIngredients);
 		ta.value = newMasked.display;

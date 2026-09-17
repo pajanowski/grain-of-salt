@@ -128,6 +128,31 @@ In `Recipe.svelte::handleAddDirectionPickerPick` (around lines 421–448):
   (highlights Sugar), press Enter (textarea reads `Add #Sugar ` with a
   trailing space), press Backspace once (chip deletes atomically).
 
+### [x] T8. Fix stale tests in `tests/e2e/direction-picker-debug.e2e.ts`
+
+- T4, T5, T6, T7 (saved-chip variants): change `inputValue()` assertions
+  from `/#[0-9a-f-]{36}/i` (raw uuid) to `/^#Eggs(\s|$)/` (masked
+  display `#<name>`).
+- T5: also drop the overlay-chip locator (`getChipInTextBox`) since the
+  add-direction form has no overlay — verify the masked chip in the
+  textarea instead.
+- T8: rewrite so it types `#Eggs`, presses Tab (no insertion, picker stays
+  open), then Enter (selects). Asserts masked `#Eggs` in the textarea.
+- T10: ArrowDown from `highlightedIndex=0` (T2) moves to index 1, not
+  0 — assert first option is not highlighted and second option is
+  highlighted; assert masked chip after Enter-select.
+
+**T8 outcome:** all 11 tests in `direction-picker-debug.e2e.ts` pass
+(24.8s).
+
+### [x] T9. Fix stale tests in `tests/e2e/direction-ingredient-ref.e2e.ts`
+
+Four tests had stale `#<uuid>` regex assertions against textarea
+`inputValue()` and a `toContainText` against a `<textarea>` (always
+empty). Updated all four to the masked `#<name>` regex (mirroring the
+`direction-picker-debug.e2e.ts` pattern) and replaced `toContainText`
+with `toHaveValue`.
+
 ## Risks
 
 - The `AutocompleteDropdown` global keydown capture uses `preventDefault` +

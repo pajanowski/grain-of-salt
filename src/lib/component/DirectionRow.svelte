@@ -316,9 +316,22 @@
 			draft.body =
 				draft.body.slice(0, existing.rawStart) + insert + draft.body.slice(existing.rawEnd);
 		} else {
-			// Plain text prefix — splice a new `#<uuid>` token in.
-			const rawPos = displayToRaw(hashIdx, masked);
-			draft.body = draft.body.slice(0, rawPos) + insert + draft.body.slice(rawPos);
+			// Plain text prefix — splice a new `#<uuid>` token in. The
+			// token at the caret is `#<filter>`, extending from `hashIdx`
+			// to the next whitespace in the displayed textarea (or end of
+			// value if there is none). Map both boundaries back into the
+			// raw body so the splice removes the typed filter text too.
+			const rawStart = displayToRaw(hashIdx, masked);
+			const trailingText = value.substring(hashIdx);
+			const wsIdx = trailingText.search(/\s/);
+			const tokenEnd = wsIdx < 0 ? value.length : hashIdx + wsIdx;
+			const rawEnd = displayToRaw(tokenEnd, masked);
+			const head = draft.body.slice(0, rawStart);
+			const tail = draft.body.slice(rawEnd);
+			draft.body = head + insert + tail;
+			if (tail.length > 0 && !/\s/.test(tail[0])) {
+				draft.body += ' ';
+			}
 		}
 		const newMasked = tokenizeMaskedBody(draft.body, ingredients);
 		ta.value = newMasked.display;
