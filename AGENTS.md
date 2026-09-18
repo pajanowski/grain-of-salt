@@ -24,6 +24,8 @@ Direct writes to the database should be avoided where manual changes through the
 
 When errors occur in `auth.ts` or `global-setup.ts`, stop and wait for further instruction. Don't attempt to fix the issue. This requires manual intervention.
 
+If global-setup's OTP lookup hangs (`getByLabel(/8-digit code/i)` never appears), the preview server is almost certainly not running on 4173 — `auth.ts` sends the code request through the SvelteKit auth page which only exists when preview is up. Check with `ss -tnlp | grep 4173`; restart with `just preview` if missing.
+
 ## Documentation
 
 Documentation lives in `docs/`. Project concepts are in [`docs/overview.md`](docs/overview.md); feature docs are in [`docs/features/`](docs/features/) (register new ones in `docs/features/README.md`); architectural decisions live in [`docs/adr/`](docs/adr/). Keep each feature doc tight: one-paragraph summary, behaviour bullets, Files footer. Update docs when features are added, changed, or removed.

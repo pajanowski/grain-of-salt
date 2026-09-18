@@ -997,13 +997,49 @@ describe('updateRecipeNode payload validation', () => {
   });
 
   describe('ingredient change validation', () => {
-    it('rejects add with non-null targetId', () => {
+    it('accepts add with a string targetId (reorder-only claim)', () => {
+      // 'add' with a non-null targetId is now a valid reorder-only claim:
+      // the leaf is repositioning an ancestor-originated row without
+      // overriding its body. See Change<T> docs.
       const p = basePayload();
       p.ingredientChanges = [
         {
           id: 'c-1',
           changeType: 'add',
-          targetId: 'someone-elses-add',
+          targetId: 'ancestor-row-id',
+          note: null,
+          body: validIngredient()
+        }
+      ];
+      // Passes validation; fails downstream at the DB call.
+      void expect(updateRecipeNode(p, 'owner-1')).rejects.not.toBeInstanceOf(
+        InvalidChangeError
+      );
+    });
+
+    it('rejects add with non-string targetId', () => {
+      // targetId must be null OR a non-empty string.
+      const p = basePayload();
+      p.ingredientChanges = [
+        {
+          id: 'c-1',
+          changeType: 'add',
+          // @ts-expect-error -- intentionally wrong type for validation
+          targetId: 123,
+          note: null,
+          body: validIngredient()
+        }
+      ];
+      expectInvalid(p);
+    });
+
+    it('rejects add with empty-string targetId', () => {
+      const p = basePayload();
+      p.ingredientChanges = [
+        {
+          id: 'c-1',
+          changeType: 'add',
+          targetId: '',
           note: null,
           body: validIngredient()
         }
@@ -1076,13 +1112,44 @@ describe('updateRecipeNode payload validation', () => {
   });
 
   describe('direction change validation', () => {
-    it('rejects add with non-null targetId', () => {
+    it('accepts add with a string targetId (reorder-only claim)', () => {
       const p = basePayload();
       p.directionChanges = [
         {
           id: 'c-1',
           changeType: 'add',
-          targetId: 'someone-elses-add',
+          targetId: 'ancestor-row-id',
+          note: null,
+          body: validDirection()
+        }
+      ];
+      void expect(updateRecipeNode(p, 'owner-1')).rejects.not.toBeInstanceOf(
+        InvalidChangeError
+      );
+    });
+
+    it('rejects add with non-string targetId', () => {
+      const p = basePayload();
+      p.directionChanges = [
+        {
+          id: 'c-1',
+          changeType: 'add',
+          // @ts-expect-error -- intentionally wrong type
+          targetId: 0,
+          note: null,
+          body: validDirection()
+        }
+      ];
+      expectInvalid(p);
+    });
+
+    it('rejects add with empty-string targetId', () => {
+      const p = basePayload();
+      p.directionChanges = [
+        {
+          id: 'c-1',
+          changeType: 'add',
+          targetId: '',
           note: null,
           body: validDirection()
         }

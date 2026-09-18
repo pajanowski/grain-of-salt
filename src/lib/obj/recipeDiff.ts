@@ -195,9 +195,17 @@ export function formatDirectionChange(
 export function formatNode(node: RecipeNode, priorState: RecipeStateMaps): FormattedChange[] {
 	const out: FormattedChange[] = [];
 	for (const c of node.ingredientChanges) {
+		// 'substitute' has no display form yet; silently skip it.
+		if (c.changeType === 'substitute') continue;
+		// Reorder-only `add`s (targetId !== null) are position claims on
+		// ancestor-originated rows; they don't change the row's body or
+		// introduce a new row, so they have no diff-able effect to surface.
+		if (c.changeType === 'add' && c.targetId !== null) continue;
 		out.push(formatIngredientChangeFull(c, priorState.ingredients));
 	}
 	for (const c of node.directionChanges) {
+		if (c.changeType === 'substitute') continue;
+		if (c.changeType === 'add' && c.targetId !== null) continue;
 		out.push(formatDirectionChangeFull(c, priorState));
 	}
 	return out;
@@ -260,6 +268,23 @@ function applyIngredientChange(state: Map<string, Ingredient>, change: Ingredien
 		case 'add': {
 			if (!change.body) return;
 			const id = change.body.id || change.id;
+			if (change.targetId !== null) {
+				// Reorder-only claim: see matching branch in
+				// src/lib/server/bo/recipenodesbo.ts. Move the existing row
+				// to the end of insertion order without clobbering its body.
+				if (state.has(id)) {
+					const existing = state.get(id)!;
+					state.delete(id);
+					state.set(id, { ...existing, id });
+				}
+				return;
+			}
+			// Leaf owns the body. Delete-then-set to honor a later node
+			// re-emitting the same row at a different array position (see
+			// the matching fix in src/lib/server/bo/recipenodesbo.ts).
+			// Without this, Map insertion order pins the row at its original
+			// ancestor position.
+			if (state.has(id)) state.delete(id);
 			state.set(id, { ...change.body, id });
 			return;
 		}
@@ -272,6 +297,10 @@ function applyIngredientChange(state: Map<string, Ingredient>, change: Ingredien
 		}
 		case 'remove': {
 			if (change.targetId) state.delete(change.targetId);
+			return;
+		}
+		case 'substitute': {
+			// Reserved for future use; no apply behavior yet. Silently skipped.
 			return;
 		}
 	}
@@ -282,6 +311,16 @@ function applyDirectionChange(state: Map<string, Direction>, change: DirectionCh
 		case 'add': {
 			if (!change.body) return;
 			const id = change.body.id || change.id;
+			if (change.targetId !== null) {
+				// See applyIngredientChange above.
+				if (state.has(id)) {
+					const existing = state.get(id)!;
+					state.delete(id);
+					state.set(id, { ...existing, id });
+				}
+				return;
+			}
+			if (state.has(id)) state.delete(id);
 			state.set(id, { ...change.body, id });
 			return;
 		}
@@ -294,6 +333,10 @@ function applyDirectionChange(state: Map<string, Direction>, change: DirectionCh
 		}
 		case 'remove': {
 			if (change.targetId) state.delete(change.targetId);
+			return;
+		}
+		case 'substitute': {
+			// Reserved for future use; no apply behavior yet. Silently skipped.
 			return;
 		}
 	}

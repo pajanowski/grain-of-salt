@@ -1,8 +1,5 @@
 <script lang="ts">
-	import type {
-		IngredientChange,
-		DirectionChange
-	} from '$lib/obj/RecipeNode.svelte';
+	import type { IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
 	import type { Ingredient } from '$lib/obj/Recipe.svelte';
@@ -37,11 +34,7 @@
 		savedDirectionChanges: DirectionChange[];
 		onRemoveIngredient: (changeId: string) => void;
 		onRemoveDirection: (changeId: string) => void;
-		onSetNote: (
-			kind: 'ingredient' | 'direction',
-			changeId: string,
-			note: string | null
-		) => void;
+		onSetNote: (kind: 'ingredient' | 'direction', changeId: string, note: string | null) => void;
 	};
 
 	let {
@@ -83,10 +76,20 @@
 
 	let annotated = $derived.by<AnnotatedChange<IngredientChange | DirectionChange>[]>(() => {
 		const items: AnnotatedChange<IngredientChange | DirectionChange>[] = [];
+		// Filter out reorder-only `add` claims (`changeType === 'add'` with a
+		// non-null `targetId`). These are positional assertions the leaf makes
+		// about ancestor-originated rows; the ancestor owns the body, so the
+		// claim carries no user-visible diff and doesn't belong in the
+		// sidebar. Genuine `add`s (`targetId === null`), `edit`s, and
+		// `remove`s are surfaced — they reflect what the leaf changed.
+		const isReorderOnlyAdd = (c: IngredientChange | DirectionChange) =>
+			c.changeType === 'add' && c.targetId !== null;
 		for (const c of leafIngredientChanges) {
+			if (isReorderOnlyAdd(c)) continue;
 			items.push({ change: c, kind: 'ingredient', status: diffStatus(c, savedIngById) });
 		}
 		for (const c of leafDirectionChanges) {
+			if (isReorderOnlyAdd(c)) continue;
 			items.push({ change: c, kind: 'direction', status: diffStatus(c, savedDirById) });
 		}
 		// Unsaved first; saved keep insertion order. Stable for unchanged inputs.
@@ -152,9 +155,7 @@
 		onSetNote(openEditor.kind, openEditor.changeId, null);
 	}
 
-	function menuItems(
-		item: AnnotatedChange<IngredientChange | DirectionChange>
-	): MenuItem[] {
+	function menuItems(item: AnnotatedChange<IngredientChange | DirectionChange>): MenuItem[] {
 		const hasNote = !!item.change.note;
 		return [
 			{
@@ -173,14 +174,12 @@
 	}
 </script>
 
-<section
-	class="mt-4 border-t pt-3"
-	aria-label="Changes on this node"
-	data-testid="node-changes"
->
+<section class="mt-4 border-t pt-3" aria-label="Changes on this node" data-testid="node-changes">
 	<header class="flex items-baseline justify-between mb-2">
 		<h2 class="text-base font-semibold">Changes on this node</h2>
-		<span class="text-xs opacity-60">{annotated.length} change{annotated.length === 1 ? '' : 's'}</span>
+		<span class="text-xs opacity-60"
+			>{annotated.length} change{annotated.length === 1 ? '' : 's'}</span
+		>
 	</header>
 
 	{#if annotated.length === 0}
@@ -191,48 +190,41 @@
 			data-testid="node-changes-list"
 		>
 			{#each annotated as item (item.change.id)}
-			{@const text = changeText(item)}
-			{@const spaceIdx = text.indexOf(' ')}
-			{@const badge = spaceIdx >= 0 ? text.slice(0, spaceIdx) : text}
-			{@const content = spaceIdx >= 0 ? text.slice(spaceIdx + 1) : ''}
-			<li
-				class="flex items-center gap-2 px-2 py-1"
-				class:bg-green-100={item.change.changeType === 'add'}
-				class:bg-red-100={item.change.changeType === 'remove'}
-				class:bg-amber-100={item.change.changeType === 'edit'}
-				data-change-id={item.change.id}
-				data-status={item.status}
-			>
-				<span class="mr-1 font-mono text-[9px] font-bold uppercase">{badge}</span>
-				<span class="text-xs flex-1 text-stone-700 break-words">{content}</span>
+				{@const text = changeText(item)}
+				{@const spaceIdx = text.indexOf(' ')}
+				{@const badge = spaceIdx >= 0 ? text.slice(0, spaceIdx) : text}
+				{@const content = spaceIdx >= 0 ? text.slice(spaceIdx + 1) : ''}
+				<li
+					class="flex items-center gap-2 px-2 py-1"
+					class:bg-green-100={item.change.changeType === 'add'}
+					class:bg-red-100={item.change.changeType === 'remove'}
+					class:bg-amber-100={item.change.changeType === 'edit'}
+					data-change-id={item.change.id}
+					data-status={item.status}
+				>
+					<span class="mr-1 font-mono text-[9px] font-bold uppercase">{badge}</span>
+					<span class="text-xs flex-1 text-stone-700 break-words">{content}</span>
 
-				{#if item.change.note}
-					<span
-						class="text-xs opacity-70 italic max-w-[18rem] truncate"
-						title={item.change.note}
-					>
-						📝 {item.change.note}
-					</span>
-				{/if}
+					{#if item.change.note}
+						<span class="text-xs opacity-70 italic max-w-[18rem] truncate" title={item.change.note}>
+							📝 {item.change.note}
+						</span>
+					{/if}
 
-				{#if item.status === 'unsaved'}
-					<span
-						class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200 text-amber-800"
-						data-status="unsaved"
-					>
-						unsaved
-					</span>
-				{/if}
+					{#if item.status === 'unsaved'}
+						<span
+							class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200 text-amber-800"
+							data-status="unsaved"
+						>
+							unsaved
+						</span>
+					{/if}
 
-				<ContextMenu
-					items={menuItems(item)}
-					label={`Actions for change ${item.change.id}`}
-				/>
-			</li>
+					<ContextMenu items={menuItems(item)} label={`Actions for change ${item.change.id}`} />
+				</li>
 			{/each}
 		</ol>
 	{/if}
-
 </section>
 
 <NoteSidebar

@@ -49,9 +49,27 @@
 		const map = new Map<string, Ingredient>();
 		for (const ing of recipe.ingredients) map.set(ing.id, ing);
 		for (const c of leafIngredientChanges) {
-			if (c.changeType === 'add' && c.body) map.set(c.body.id, c.body);
-			else if (c.changeType === 'edit' && c.body && c.targetId) map.set(c.targetId, c.body);
-			else if (c.changeType === 'remove' && c.targetId) map.delete(c.targetId);
+			if (c.changeType === 'add' && c.body) {
+				if (c.targetId !== null) {
+					// Reorder-only claim on an ancestor-originated row. Move
+					// the row to the end of Map insertion order without
+					// clobbering the body (the ancestor's value is already
+					// in `map` from `recipe.ingredients`).
+					if (map.has(c.body.id)) {
+						const existing = map.get(c.body.id)!;
+						map.delete(c.body.id);
+						map.set(c.body.id, existing);
+					}
+				} else {
+					// Fresh add / reclaim: leaf owns the body.
+					if (map.has(c.body.id)) map.delete(c.body.id);
+					map.set(c.body.id, c.body);
+				}
+			} else if (c.changeType === 'edit' && c.body && c.targetId) {
+				map.set(c.targetId, c.body);
+			} else if (c.changeType === 'remove' && c.targetId) {
+				map.delete(c.targetId);
+			}
 		}
 		return Array.from(map.values());
 	});
@@ -59,9 +77,23 @@
 		const map = new Map<string, Direction>();
 		for (const dir of recipe.directions) map.set(dir.id, dir);
 		for (const c of leafDirectionChanges) {
-			if (c.changeType === 'add' && c.body) map.set(c.body.id, c.body);
-			else if (c.changeType === 'edit' && c.body && c.targetId) map.set(c.targetId, c.body);
-			else if (c.changeType === 'remove' && c.targetId) map.delete(c.targetId);
+			if (c.changeType === 'add' && c.body) {
+				if (c.targetId !== null) {
+					// See displayedIngredients above.
+					if (map.has(c.body.id)) {
+						const existing = map.get(c.body.id)!;
+						map.delete(c.body.id);
+						map.set(c.body.id, existing);
+					}
+				} else {
+					if (map.has(c.body.id)) map.delete(c.body.id);
+					map.set(c.body.id, c.body);
+				}
+			} else if (c.changeType === 'edit' && c.body && c.targetId) {
+				map.set(c.targetId, c.body);
+			} else if (c.changeType === 'remove' && c.targetId) {
+				map.delete(c.targetId);
+			}
 		}
 		return Array.from(map.values());
 	});
@@ -83,8 +115,21 @@
 
 	function editIngredient(rowId: string, next: Ingredient) {
 		const record = leafRecordForIngredient(rowId);
-		if (record && record.body) {
+		if (record && record.body && record.changeType === 'add' && record.targetId === null) {
+			// Reclaim: this row's leaf `add` owns the body (it was freshly
+			// added or a previous edit rebuilt it). Update in place.
 			record.body = { ...next };
+		} else if (record && record.body && record.changeType === 'add') {
+			// Reorder-only `add` (targetId !== null): the body belongs to the
+			// ancestor. Don't mutate it — append a fresh `edit` that overrides
+			// the ancestor's value for this leaf.
+			leafIngredientChanges.push({
+				id: uuid(),
+				changeType: 'edit',
+				targetId: rowId,
+				note: null,
+				body: { ...next }
+			});
 		} else {
 			leafIngredientChanges.push({
 				id: uuid(),
@@ -119,29 +164,46 @@
 		const targetIdx = direction === 'up' ? currentIdx - 1 : currentIdx + 1;
 		if (targetIdx < 0 || targetIdx >= displayedIngredients.length) return;
 
-		// Build the reordered visible list by swapping current and target
+		// Build the reordered visible list by swapping current and target.
 		const reordered = [...displayedIngredients];
 		[reordered[currentIdx], reordered[targetIdx]] = [reordered[targetIdx], reordered[currentIdx]];
 
-		// Rebuild leafIngredientChanges so the server applies them in the new order.
-		// For ingredients that already have an 'add' in this node, reuse the record
-		// (with a fresh UUID so the server accepts it as a new entry).
-		// For ingredients that originated in an ancestor, emit a fresh 'add'.
-		leafIngredientChanges = reordered.map((ing) => {
-			const existing = currentNode.ingredientChanges.find(
-				(c) => c.changeType === 'add' && c.body?.id === ing.id
-			);
-			if (existing) {
-				return { ...existing, id: uuid() };
-			}
+		// Reorder `leafIngredientChanges` so the leaf's array order matches
+		// the desired display order. Server applies `add`s in array order,
+		// and apply's delete-then-set means a leaf-emitted `add` moves its
+		// row to the end of the Map. So:
+		//   - Rows the leaf has already touched keep their existing `add`
+		//     record (UUID and body), preserving history.
+		//   - Ancestor-originated rows get a fresh `add` placed at the
+		//     desired position; on subsequent moves that record is reused.
+		//   - Any non-`add` changes on the leaf (edit, remove) are preserved
+		//     as-is at the end of the array — their row's display position
+		//     is governed by the corresponding `add` record.
+		const existingAddsByRowId = new Map<string, IngredientChange>();
+		for (const c of leafIngredientChanges) {
+			if (c.changeType === 'add' && c.body) existingAddsByRowId.set(c.body.id, c);
+		}
+		const nonAddChanges = leafIngredientChanges.filter((c) => c.changeType !== 'add');
+
+		const reorderedAdds: IngredientChange[] = reordered.map((ing) => {
+			const existing = existingAddsByRowId.get(ing.id);
+			if (existing) return existing;
+			// First time the leaf claims this row's position. Emit an
+			// `add` with `targetId = rowId` so the server treats it as a
+			// reorder-only claim: the row's body stays whatever the ancestor
+			// supplied, only its position in the Map changes. A plain `add`
+			// (targetId === null) would set the body to `ing` and clobber
+			// later parent edits.
 			return {
 				id: uuid(),
-				changeType: 'add' as const,
-				targetId: null,
+				changeType: 'add',
+				targetId: ing.id,
 				note: null,
 				body: { ...ing }
 			};
 		});
+
+		leafIngredientChanges = [...reorderedAdds, ...nonAddChanges];
 	}
 	function addIngredient(input: Ingredient, note: string | null = null) {
 		leafIngredientChanges.push({
@@ -155,8 +217,18 @@
 
 	function editDirection(rowId: string, next: Direction) {
 		const record = leafRecordForDirection(rowId);
-		if (record && record.body) {
+		if (record && record.body && record.changeType === 'add' && record.targetId === null) {
+			// See editIngredient: reclaim path.
 			record.body = { ...next };
+		} else if (record && record.body && record.changeType === 'add') {
+			// Reorder-only `add`: ancestor owns the body, don't mutate.
+			leafDirectionChanges.push({
+				id: uuid(),
+				changeType: 'edit',
+				targetId: rowId,
+				note: null,
+				body: { ...next }
+			});
 		} else {
 			leafDirectionChanges.push({
 				id: uuid(),
@@ -194,21 +266,31 @@
 		const reordered = [...displayedDirections];
 		[reordered[currentIdx], reordered[targetIdx]] = [reordered[targetIdx], reordered[currentIdx]];
 
-		leafDirectionChanges = reordered.map((dir) => {
-			const existing = currentNode.directionChanges.find(
-				(c) => c.changeType === 'add' && c.body?.id === dir.id
-			);
-			if (existing) {
-				return { ...existing, id: uuid() };
-			}
+		// See moveIngredient above for the rationale: reorder leaf-emitted
+		// `add` records in place, preserve their UUIDs, and only emit a
+		// fresh `add` for ancestor-originated rows that have not yet been
+		// touched by the leaf.
+		const existingAddsByRowId = new Map<string, DirectionChange>();
+		for (const c of leafDirectionChanges) {
+			if (c.changeType === 'add' && c.body) existingAddsByRowId.set(c.body.id, c);
+		}
+		const nonAddChanges = leafDirectionChanges.filter((c) => c.changeType !== 'add');
+
+		const reorderedAdds: DirectionChange[] = reordered.map((dir) => {
+			const existing = existingAddsByRowId.get(dir.id);
+			if (existing) return existing;
+			// See moveIngredient: emit a reorder-only `add` (targetId = rowId)
+			// so the ancestor's body is not clobbered.
 			return {
 				id: uuid(),
-				changeType: 'add' as const,
-				targetId: null,
+				changeType: 'add',
+				targetId: dir.id,
 				note: null,
 				body: { ...dir }
 			};
 		});
+
+		leafDirectionChanges = [...reorderedAdds, ...nonAddChanges];
 	}
 	function addDirection(input: Direction, note: string | null = null) {
 		leafDirectionChanges.push({
@@ -543,7 +625,7 @@
 		if (c) c.note = null;
 	}
 
-	function formatIngredient(body: unknown, op: 'add' | 'edit' | 'remove'): string {
+	function formatIngredient(body: unknown, op: 'add' | 'edit' | 'remove' | 'substitute'): string {
 		if (op === 'remove') return 'ingredient';
 		if (!body || typeof body !== 'object') return 'ingredient';
 		const ing = body as { name?: string; amount?: number; unit?: string };
@@ -553,7 +635,7 @@
 		return parts.filter(Boolean).join(' ').trim() || 'ingredient';
 	}
 
-	function formatDirection(body: unknown, op: 'add' | 'edit' | 'remove'): string {
+	function formatDirection(body: unknown, op: 'add' | 'edit' | 'remove' | 'substitute'): string {
 		if (op === 'remove') return 'direction';
 		if (!body || typeof body !== 'object') return 'direction';
 		const dir = body as { body?: string };

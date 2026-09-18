@@ -16,7 +16,7 @@
 	export type SidebarChange = {
 		id: string;
 		kind: 'ingredient' | 'direction';
-		changeType: 'add' | 'edit' | 'remove';
+		changeType: 'add' | 'edit' | 'remove' | 'substitute';
 		text: string;
 	};
 

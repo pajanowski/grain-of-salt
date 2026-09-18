@@ -20,7 +20,7 @@ export async function createRootRecipeNode(
 	author?: string | null,
 	source?: string | null,
 	ingredientChanges: IngredientChange[] = [],
-	directionChanges: DirectionChange[] = [],
+	directionChanges: DirectionChange[] = []
 ): Promise<RecipeNode> {
 	const row: InsertRecipeNode = {
 		parentId: null,
@@ -29,12 +29,11 @@ export async function createRootRecipeNode(
 		ingredientChanges,
 		directionChanges,
 		author: author ?? null,
-		source: source ?? null,
+		source: source ?? null
 	};
 	const [inserted] = await db.insert(recipeNodes).values(row).returning();
 	return toUiRecipeNode(inserted);
 }
-
 
 /**
  * Append a child node to an existing parent. parentId is required — to create
@@ -49,7 +48,7 @@ export async function appendRecipeNode(
 	name: string,
 	ingredientChanges: IngredientChange[],
 	directionChanges: DirectionChange[],
-	author?: string | null,
+	author?: string | null
 ): Promise<RecipeNode> {
 	// Look up the parent to inherit ownerId.
 	const parentRows = await db
@@ -68,12 +67,11 @@ export async function appendRecipeNode(
 		name,
 		ingredientChanges,
 		directionChanges,
-		author: author ?? null,
+		author: author ?? null
 	};
 	const [inserted] = await db.insert(recipeNodes).values(row).returning();
 	return toUiRecipeNode(inserted);
 }
-
 
 /**
  * Fetch every node in the chain rooted by rootNodeId, oldest first.
@@ -93,11 +91,7 @@ export async function getRecipeNodesByRecipeId(rootNodeId: string): Promise<Reci
 	while (cursor !== null) {
 		if (visited.has(cursor)) break; // cycle guard
 		visited.add(cursor);
-		const rows = await db
-			.select()
-			.from(recipeNodes)
-			.where(eq(recipeNodes.id, cursor))
-			.limit(1);
+		const rows = await db.select().from(recipeNodes).where(eq(recipeNodes.id, cursor)).limit(1);
 		const row = rows[0];
 		if (!row) break;
 		nodes.push(toUiRecipeNode(row));
@@ -193,12 +187,31 @@ export function applyNodes(nodes: RecipeNode[]): RecipeState {
 function applyIngredientChange(
 	state: Map<string, Ingredient>,
 	notes: Map<string, string | null>,
-	change: IngredientChange,
+	change: IngredientChange
 ): void {
 	switch (change.changeType) {
 		case 'add': {
 			if (!change.body) return; // malformed: add requires a body
 			const id = change.body.id || change.id;
+			if (change.targetId !== null) {
+				// Reorder-only claim: an ancestor already owns the body for
+				// this row; the leaf just wants to move it to the end of
+				// insertion order. Move-then-set with the existing body so a
+				// later parent edit survives a fork-side reorder.
+				if (state.has(id)) {
+					const existing = state.get(id)!;
+					state.delete(id);
+					state.set(id, { ...existing, id });
+				}
+				return;
+			}
+			// Leaf owns the body (fresh add or reclaim). Delete-then-set:
+			// when the same id is being re-added by a later node, `Map.set`
+			// alone would leave the key at its original insertion position.
+			// Deleting first moves the key to the end so leaf-emitted
+			// additions control the final display order.
+			if (state.has(id)) state.delete(id);
+			if (notes.has(id)) notes.delete(id);
 			state.set(id, { ...change.body, id });
 			notes.set(id, change.note ?? null);
 			return;
@@ -218,18 +231,34 @@ function applyIngredientChange(
 			}
 			return;
 		}
+		case 'substitute': {
+			// Reserved for future use; no apply behavior yet. Silently skipped.
+			return;
+		}
 	}
 }
 
 function applyDirectionChange(
 	state: Map<string, Direction>,
 	notes: Map<string, string | null>,
-	change: DirectionChange,
+	change: DirectionChange
 ): void {
 	switch (change.changeType) {
 		case 'add': {
 			if (!change.body) return;
 			const id = change.body.id || change.id;
+			if (change.targetId !== null) {
+				// See applyIngredientChange above: reorder-only claim.
+				if (state.has(id)) {
+					const existing = state.get(id)!;
+					state.delete(id);
+					state.set(id, { ...existing, id });
+				}
+				return;
+			}
+			// Leaf owns the body.
+			if (state.has(id)) state.delete(id);
+			if (notes.has(id)) notes.delete(id);
 			state.set(id, { ...change.body, id });
 			notes.set(id, change.note ?? null);
 			return;
@@ -249,6 +278,10 @@ function applyDirectionChange(
 			}
 			return;
 		}
+		case 'substitute': {
+			// Reserved for future use; no apply behavior yet. Silently skipped.
+			return;
+		}
 	}
 }
 
@@ -262,7 +295,7 @@ export function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 		directionChanges: (row.directionChanges ?? []) as DirectionChange[],
 		author: row.author ?? null,
 		source: row.source ?? null,
-		isPublic: row.isPublic ?? false,
+		isPublic: row.isPublic ?? false
 	};
 }
 
@@ -298,12 +331,16 @@ function validateIngredientChange(c: unknown, index: number): asserts c is Ingre
 		throw new InvalidChangeError(`ingredientChanges[${index}].id must be a non-empty string`);
 	}
 	const op = obj.changeType;
-	if (op !== 'add' && op !== 'edit' && op !== 'remove') {
-		throw new InvalidChangeError(`ingredientChanges[${index}].changeType must be 'add' | 'edit' | 'remove'`);
+	if (op !== 'add' && op !== 'edit' && op !== 'remove' && op !== 'substitute') {
+		throw new InvalidChangeError(
+			`ingredientChanges[${index}].changeType must be 'add' | 'edit' | 'remove' | 'substitute'`
+		);
 	}
 	if (op === 'add') {
-		if (obj.targetId !== null) {
-			throw new InvalidChangeError(`ingredientChanges[${index}] (add) must have targetId === null`);
+		if (obj.targetId !== null && (typeof obj.targetId !== 'string' || obj.targetId.length === 0)) {
+			throw new InvalidChangeError(
+				`ingredientChanges[${index}] (add) must have targetId === null or a non-empty string`
+			);
 		}
 		if (!obj.body || typeof obj.body !== 'object') {
 			throw new InvalidChangeError(`ingredientChanges[${index}] (add) must have a body`);
@@ -315,6 +352,11 @@ function validateIngredientChange(c: unknown, index: number): asserts c is Ingre
 		if (!obj.body || typeof obj.body !== 'object') {
 			throw new InvalidChangeError(`ingredientChanges[${index}] (edit) must have a body`);
 		}
+	} else if (op === 'substitute') {
+		// 'substitute' is reserved for future use; no shape requirements beyond
+		// the id check above. Storage and wire format are identical to other
+		// change types so behavior can be added later without a schema
+		// migration.
 	} else {
 		// remove
 		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
@@ -335,12 +377,16 @@ function validateDirectionChange(c: unknown, index: number): asserts c is Direct
 		throw new InvalidChangeError(`directionChanges[${index}].id must be a non-empty string`);
 	}
 	const op = obj.changeType;
-	if (op !== 'add' && op !== 'edit' && op !== 'remove') {
-		throw new InvalidChangeError(`directionChanges[${index}].changeType must be 'add' | 'edit' | 'remove'`);
+	if (op !== 'add' && op !== 'edit' && op !== 'remove' && op !== 'substitute') {
+		throw new InvalidChangeError(
+			`directionChanges[${index}].changeType must be 'add' | 'edit' | 'remove' | 'substitute'`
+		);
 	}
 	if (op === 'add') {
-		if (obj.targetId !== null) {
-			throw new InvalidChangeError(`directionChanges[${index}] (add) must have targetId === null`);
+		if (obj.targetId !== null && (typeof obj.targetId !== 'string' || obj.targetId.length === 0)) {
+			throw new InvalidChangeError(
+				`directionChanges[${index}] (add) must have targetId === null or a non-empty string`
+			);
 		}
 		if (!obj.body || typeof obj.body !== 'object') {
 			throw new InvalidChangeError(`directionChanges[${index}] (add) must have a body`);
@@ -352,6 +398,8 @@ function validateDirectionChange(c: unknown, index: number): asserts c is Direct
 		if (!obj.body || typeof obj.body !== 'object') {
 			throw new InvalidChangeError(`directionChanges[${index}] (edit) must have a body`);
 		}
+	} else if (op === 'substitute') {
+		// Reserved; see ingredient validator for the rationale.
 	} else {
 		// remove
 		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
@@ -414,13 +462,12 @@ async function assertNodeOwnership(nodeId: string, ownerId: string): Promise<voi
 export async function updateRecipeNode(
 	payload: UpdateRecipeNodePayload,
 	ownerId: string,
-	author?: string | null,
+	author?: string | null
 ): Promise<RecipeState> {
 	validatePayload(payload);
 	await assertNodeOwnership(payload.nodeId, ownerId);
 
-	const noChanges =
-		payload.ingredientChanges.length === 0 && payload.directionChanges.length === 0;
+	const noChanges = payload.ingredientChanges.length === 0 && payload.directionChanges.length === 0;
 	if (noChanges) {
 		const root = await getRootRecipeNode(payload.nodeId);
 		if (!root) throw new Error('Node not found');
@@ -435,7 +482,7 @@ export async function updateRecipeNode(
 	} = {
 		ingredientChanges: payload.ingredientChanges,
 		directionChanges: payload.directionChanges,
-		timestamp: new Date(),
+		timestamp: new Date()
 	};
 	// First-edit-wins: only write author when the node has no author yet.
 	if (author != null) {
@@ -448,7 +495,6 @@ export async function updateRecipeNode(
 	if (!root) throw new Error('Node not found');
 	return applyNodes(await getRecipeNodesByRecipeId(root.id));
 }
-
 
 /**
  * A recipe as it appears in the list/tree UI. Each RecipeNode is its own
