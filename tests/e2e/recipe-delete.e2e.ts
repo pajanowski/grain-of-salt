@@ -12,43 +12,44 @@
 import { expect, test } from '@playwright/test';
 import { v4 as uuidv4 } from 'uuid';
 import {
-  openCreateForm,
-  getRecipeNameInput,
-  getCreateButton,
-  getRecipeLink
+	openCreateForm,
+	getRecipeNameInput,
+	getCreateButton,
+	getRecipeLink
 } from './helpers/page-utils';
 
 test('delete recipe removes it from the list and returns 404', async ({ page }) => {
+	const recipeName = uuidv4();
 
-  const recipeName = uuidv4();
+	// Create the recipe via the home page form
+	await page.goto('/mise');
+	await openCreateForm(page);
+	await getRecipeNameInput(page).fill(recipeName);
+	await getCreateButton(page).click();
+	await expect(getRecipeLink(page, recipeName)).toBeVisible();
 
-  // Create the recipe via the home page form
-  await page.goto('/mise');
-  await openCreateForm(page);
-  await getRecipeNameInput(page).fill(recipeName);
-  await getCreateButton(page).click();
-  await expect(getRecipeLink(page, recipeName)).toBeVisible();
+	// Navigate to the recipe detail page
+	const recipeLink = getRecipeLink(page, recipeName);
+	await recipeLink.click();
+	await expect(page).toHaveURL(/\/recipes\/[0-9a-f-]+/);
+	const recipeUrl = page.url();
 
-  // Navigate to the recipe detail page
-  const recipeLink = getRecipeLink(page, recipeName);
-  await recipeLink.click();
-  await expect(page).toHaveURL(/\/recipes\/[0-9a-f-]+/);
-  const recipeUrl = page.url();
+	// Accept the browser confirm dialog that "Delete recipe" fires
+	page.on('dialog', (dialog) => dialog.accept());
 
-  // Accept the browser confirm dialog that "Delete recipe" fires
-  page.on('dialog', (dialog) => dialog.accept());
+	// Open the recipe actions menu and click "Delete recipe"
+	// The trigger button has aria-label="Recipe actions"
+	const actionsButton = page.getByRole('button', { name: 'Recipe actions' });
+	await actionsButton.click();
+	await page.getByRole('menuitem', { name: 'Delete recipe' }).click();
 
-  // Open the recipe actions menu and click "Delete recipe"
-  // The trigger button has aria-label="Recipe actions"
-  const actionsButton = page.getByRole('button', { name: 'Recipe actions' });
-  await actionsButton.click();
-  await page.getByRole('menuitem', { name: 'Delete recipe' }).click();
+	// Assert the recipe link is gone from the home page list
+	await expect(page).toHaveURL('/mise');
+	await expect(getRecipeLink(page, recipeName)).not.toBeVisible();
 
-  // Assert the recipe link is gone from the home page list
-  await expect(page).toHaveURL('/mise');
-  await expect(getRecipeLink(page, recipeName)).not.toBeVisible();
-
-  // Assert navigating directly to the recipe URL returns 404
-  await page.goto(recipeUrl);
-  await expect(page.getByText('Recipe not found')).toBeVisible();
+	// Assert navigating directly to the recipe URL surfaces a 404 *inside* the
+	// mise frame (so the sidebar + navigation stay usable).
+	await page.goto(recipeUrl);
+	await expect(page.getByText('Recipe not found')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Recipe List' })).toBeVisible();
 });
