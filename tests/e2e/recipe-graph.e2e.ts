@@ -100,7 +100,7 @@ test.describe('recipe graph page', () => {
     await expect(page).toHaveURL(/\/mise\/recipes\/[0-9a-f-]+/);
     const url = page.url()
     console.log(url)
-    page.getByRole('link', { name: 'Graph' }).click();
+    page.getByTestId('tab-graph').click()
 
     // SvelteFlow nodes use the .svelte-flow__node class.
     // The first node is the root (current recipe) which links to the recipe list,

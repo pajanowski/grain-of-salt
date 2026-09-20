@@ -31,11 +31,16 @@ type DraftPayload = UpdateRecipeNodePayload;
 // ===========================================================================
 
 function ingredient(partial: Partial<Ingredient> & { id: string }): Ingredient {
-  return { name: '', amount: 0, unit: '', ...partial };
+  return { name: '', amount: 0, unit: '', note: null, ...partial };
 }
 
+// `applyNodes` always attaches `note` (null when unset) to every
+// materialized ingredient so consumers don't have to special-case the
+// unset case. Tests that deep-equal against applyNodes output must
+// include `note: null` on fixtures to match — that's what this helper
+// provides. The `direction()` helper does the same for directions.
 function direction(partial: { id: string; body: string }): Direction {
-  return partial;
+  return { ...partial, note: null };
 }
 
 function node(
