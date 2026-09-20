@@ -12,6 +12,11 @@
 	 * `position: fixed` with coordinates computed from the trigger's
 	 * `getBoundingClientRect()`. This avoids overflow clipping from
 	 * ancestor containers (e.g. `overflow: hidden` on the rounded card).
+	 *
+	 * If the trigger is near the bottom of the viewport and the menu would
+	 * overflow off the bottom edge, the menu flips to open upward from the
+	 * trigger instead. If it would still overflow upward, the top is
+	 * clamped to the viewport top so the first item is always reachable.
 	 */
 
 	import { browser } from '$app/environment';
@@ -25,6 +30,8 @@
 	let open = $state(false);
 	let triggerEl = $state<HTMLButtonElement | null>(null);
 	let menuEl = $state<HTMLDivElement | null>(null);
+	// null while closed; set after the menu mounts so the height is real.
+	let menuPos = $state<{ top: number; right: number } | null>(null);
 
 	function selectItem(item: MenuItem) {
 		if ('disabled' in item && item.disabled) return;
@@ -66,13 +73,37 @@
 		};
 	});
 
-	// Re-compute position whenever the menu opens
+	// Compute position once the menu is mounted so we can measure its
+	// height and flip above the trigger when the menu would otherwise
+	// overflow the bottom of the viewport. Runs after `menuEl` is bound
+	// on the open transition; before the next paint the new `menuPos`
+	// is applied via `menuStyle`, so the user never sees the menu at
+	// the bottom-of-screen default position.
+	$effect(() => {
+		if (!open || !browser) {
+			menuPos = null;
+			return;
+		}
+		if (!triggerEl || !menuEl) return;
+
+		const r = triggerEl.getBoundingClientRect();
+		const vh = window.innerHeight;
+		const vw = window.innerWidth;
+		const gap = 4;
+		const menuH = menuEl.getBoundingClientRect().height;
+		const spaceBelow = vh - r.bottom - gap;
+		const spaceAbove = r.top - gap;
+
+		const openDownward = spaceBelow >= menuH || spaceBelow >= spaceAbove;
+		const rawTop = openDownward ? r.bottom + gap : r.top - menuH - gap;
+		// Clamp so the top of the menu never sits above the viewport top.
+		const top = Math.max(gap, rawTop);
+		menuPos = { top, right: vw - r.right };
+	});
+
 	let menuStyle = $derived(
-		open && triggerEl
-			? (() => {
-					const r = triggerEl.getBoundingClientRect();
-					return `position:fixed;top:${r.bottom + 4}px;right:${window.innerWidth - r.right}px;`;
-				})()
+		open && menuPos
+			? `position:fixed;top:${menuPos.top}px;right:${menuPos.right}px;`
 			: 'display:none;'
 	);
 </script>

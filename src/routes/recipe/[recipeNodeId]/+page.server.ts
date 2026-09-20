@@ -123,6 +123,7 @@ function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 		directionChanges: row.direction_changes as RecipeNode['directionChanges'],
 		author: row.author ?? null,
 		source: row.source ?? null,
-		isPublic: row.is_public
+		isPublic: row.is_public,
+		isFavorite: row.is_favorite ?? false
 	};
 }

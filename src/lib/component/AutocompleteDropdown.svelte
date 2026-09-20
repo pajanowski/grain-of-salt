@@ -159,10 +159,39 @@ Autocomplete unit more accessible.
 		}
 	});
 
+	let dropdownEl = $state<HTMLDivElement | null>(null);
+	// null while closed; set after the listbox mounts so the height is real.
+	let dropdownPos = $state<{ top: number; left: number } | null>(null);
+
 	let menuStyle = $derived.by(() => {
-		if (!open || !anchor) return 'display:none;';
+		if (!open || !anchor || !dropdownPos) return 'display:none;';
+		return `position:fixed;top:${dropdownPos.top}px;left:${dropdownPos.left}px;`;
+	});
+
+	// Position the listbox below the anchor by default; flip above the
+	// anchor when it would overflow the bottom of the viewport, so the
+	// first option is always reachable from the keyboard / scroll wheel.
+	// Runs after `dropdownEl` is bound; the listbox renders once with
+	// `display: none` (no `dropdownPos`), then re-renders positioned.
+	$effect(() => {
+		if (!open || !browser) {
+			dropdownPos = null;
+			return;
+		}
+		if (!anchor || !dropdownEl) return;
+
 		const r = anchor.getBoundingClientRect();
-		return `position:fixed;top:${r.bottom + 4}px;left:${r.left}px;`;
+		const vh = window.innerHeight;
+		const gap = 4;
+		const menuH = dropdownEl.getBoundingClientRect().height;
+		const spaceBelow = vh - r.bottom - gap;
+		const spaceAbove = r.top - gap;
+
+		const openDownward = spaceBelow >= menuH || spaceBelow >= spaceAbove;
+		const rawTop = openDownward ? r.bottom + gap : r.top - menuH - gap;
+		// Clamp so the top of the listbox never sits above the viewport top.
+		const top = Math.max(gap, rawTop);
+		dropdownPos = { top, left: r.left };
 	});
 </script>
 
@@ -175,6 +204,7 @@ Autocomplete unit more accessible.
 		style={menuStyle}
 		data-testid={testid}
 		onkeydown={onListboxKeydown}
+		bind:this={dropdownEl}
 	>
 		{#if items.length === 0}
 			<span class="block px-3 py-1.5 text-sm text-gray-500">{emptyLabel}</span>

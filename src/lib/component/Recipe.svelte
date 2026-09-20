@@ -754,6 +754,14 @@
 			alert(`Failed to update visibility: ${errorMessage(e)}`);
 		}
 	}
+	async function toggleFavorite() {
+		try {
+			await api.patch(`/mise/api/recipe-node/${currentNode.id}/favorite`);
+			await invalidateAll();
+		} catch (e) {
+			alert(`Failed to update favorite: ${errorMessage(e)}`);
+		}
+	}
 	async function copyShareLink() {
 		const url = `${window.location.origin}/recipe/${currentNode.id}`;
 		await navigator.clipboard.writeText(url);
@@ -765,6 +773,10 @@
 		{ label: 'Rename recipe', onSelect: openRename },
 		{ label: 'Fork recipe', onSelect: openFork },
 		{ label: currentNode.isPublic ? 'Make private' : 'Make public', onSelect: togglePublic },
+		{
+			label: currentNode.isFavorite ? 'Unfavorite' : 'Favorite',
+			onSelect: toggleFavorite
+		},
 		{ label: 'Delete recipe', onSelect: confirmDelete, danger: true }
 	]);
 </script>
@@ -795,7 +807,26 @@
 			</a>
 		</div>
 		<div>
-			<h1 class="text-2xl font-bold">{recipe.name}</h1>
+			<h1 class="flex items-center gap-2 text-2xl font-bold">
+				{#if data.currentNode.isFavorite}
+					<svg
+						data-testid="recipe-favorite-star"
+						aria-label="Favorite"
+						class="h-5 w-5 fill-amber-400 stroke-amber-500"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<polygon
+							points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+						/>
+					</svg>
+				{/if}
+				{recipe.name}
+			</h1>
 			{#if data.currentNode.author}
 				<p class="text-sm text-stone-500">by {data.currentNode.author}</p>
 			{/if}

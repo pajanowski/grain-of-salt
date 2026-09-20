@@ -56,4 +56,6 @@ export interface RecipeNode {
 	source: string | null;
 	/** True when this node is reachable without authentication. */
 	isPublic: boolean;
+	/** True when the owner has marked this node as a favorite. */
+	isFavorite: boolean;
 }

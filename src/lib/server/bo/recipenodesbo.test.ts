@@ -51,6 +51,7 @@ function node(
     author: null,
     source: null,
     isPublic: false,
+    isFavorite: false,
   };
 }
 
@@ -720,6 +721,7 @@ function seedNode(
     author: null,
     source: null,
     isPublic: false,
+    isFavorite: false,
   };
 }
 

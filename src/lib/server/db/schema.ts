@@ -42,6 +42,7 @@ export const recipeNodes = pgTable('recipe_nodes', {
 	author: text('author'),
 	source: text('source'),
 	isPublic: boolean('is_public').notNull().default(false),
+	isFavorite: boolean('is_favorite').notNull().default(false),
 });
 
 

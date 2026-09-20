@@ -71,7 +71,8 @@ function node(partial: Partial<RecipeNode> & { id: string }): RecipeNode {
 		directionChanges: partial.directionChanges ?? [],
 		author: null,
 		source: null,
-		isPublic: false
+		isPublic: false,
+		isFavorite: false
 	};
 }
 

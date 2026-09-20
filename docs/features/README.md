@@ -19,6 +19,7 @@ and [ADR 0002](../adr/0002-fork-as-chain-extension.md).
 - [Forking](./forking.md) — Append a new node to a recipe's chain (ADR 0002)
 - [Recipe management](./recipe-management.md) — Rename and delete a recipe
 - [Public recipe](./public-recipe.md) — Mark a node public; read-only view at `/recipe/[id]` without auth
+- [Recipe favorites](./recipe-favorites.md) — Mark a node as favorite from the recipe actions menu; star appears next to the recipe name
 
 ## Development
 

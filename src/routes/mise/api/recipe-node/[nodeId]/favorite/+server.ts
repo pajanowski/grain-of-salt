@@ -5,15 +5,16 @@ import { eq } from 'drizzle-orm';
 
 /**
  * PATCH /mise/api/recipe-node/[nodeId]/favorite
- * Body: { isFavorite: boolean }
+ * Body: none. Each PATCH flips the is_favorite flag (favorite → unfavorite,
+ * unfavorite → favorite).
  *
- * Sets or clears the is_favorite flag on a recipe node. The node must
- * belong to the signed-in user.
+ * The node must belong to the signed-in user. The endpoint mirrors the
+ * `/public` endpoint shape: same auth checks, same JSON response.
  *
  * Response: 200 { isFavorite: boolean }
  * Errors:   401 unauthenticated, 403 not owner, 404 node not found
  */
-export const PATCH: RequestHandler = async ({ params, request, locals }) => {
+export const PATCH: RequestHandler = async ({ params, locals }) => {
 	const ownerId = locals.user?.id;
 	if (!ownerId) {
 		return new Response('Sign in first', { status: 401 });
@@ -24,9 +25,8 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 		return new Response('Node not found', { status: 404 });
 	}
 
-	// Verify ownership before writing.
 	const rows = await db
-		.select({ ownerId: recipeNodes.ownerId })
+		.select({ ownerId: recipeNodes.ownerId, isFavorite: recipeNodes.isFavorite })
 		.from(recipeNodes)
 		.where(eq(recipeNodes.id, nodeId))
 		.limit(1);
@@ -37,23 +37,13 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 		return new Response('Forbidden', { status: 403 });
 	}
 
-	let body: { isFavorite?: unknown };
-	try {
-		body = await request.json();
-	} catch {
-		return new Response('Invalid JSON', { status: 400 });
-	}
-
-	if (typeof body.isFavorite !== 'boolean') {
-		return new Response('isFavorite must be a boolean', { status: 400 });
-	}
-
+	const next = !rows[0].isFavorite;
 	await db
 		.update(recipeNodes)
-		.set({ isFavorite: body.isFavorite })
+		.set({ isFavorite: next })
 		.where(eq(recipeNodes.id, nodeId));
 
-	return new Response(JSON.stringify({ isFavorite: body.isFavorite }), {
+	return new Response(JSON.stringify({ isFavorite: next }), {
 		status: 200,
 		headers: { 'content-type': 'application/json' }
 	});
