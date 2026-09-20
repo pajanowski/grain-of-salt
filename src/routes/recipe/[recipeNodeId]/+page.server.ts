@@ -7,12 +7,16 @@ import type { SelectRecipeNode } from '$lib/server/db/schema';
 /**
  * Load a public recipe node by its UUID.
  *
- * Uses event.locals.supabase (the per-request Supabase client) so that RLS
- * policies are enforced at every step of the chain walk. The anon-key client
- * used for unauthenticated requests only sees rows where is_public = true
- * via policy `recipe_nodes_select_public`.
+ * Uses event.locals.supabase for the starting-node RLS check so anon
+ * callers 404 immediately when the requested node isn't public. The full
+ * parent chain is then walked with the `get_recipe_chain` SQL function
+ * (security definer, anon-granted) because the public page must render
+ * the *compiled* recipe — every ancestor's ingredients and directions —
+ * even when some of those ancestors are themselves private. RLS alone
+ * would stop the walk at the first private ancestor and silently drop
+ * its content.
  *
- * If the starting node is absent or private → history is empty → throw 404.
+ * If the starting node is absent or private → throw 404.
  *
  * Cache headers ensure shared links don't hammer the DB.
  */
@@ -23,13 +27,10 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 		throw error(404, 'Recipe not found');
 	}
 
-	// Walk the chain using the per-request Supabase client.
-	// This respects RLS in both local dev (Supabase API → Postgres) and
-	// in Supabase Cloud (connection pooler enforces RLS on the anon JWT).
-	//
-	// Use the Supabase client for the starting-node check (respects RLS via
-	// request.jwt_role = 'anon' in Supabase local, and via the connection
-	// pooler in Supabase Cloud). Skip if not public → 404.
+	// RLS-gated check that the starting node is public. Without this, an
+	// anon caller could probe whether a private node id exists by
+	// comparing the compiled response against a 404. The full chain is
+	// fetched separately via the security-definer RPC.
 	const { data: startRow } = await locals.supabase
 		.from('recipe_nodes')
 		.select('id,is_public')
@@ -78,42 +79,38 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 type SupabaseClient = NonNullable<ReturnType<typeof import('$lib/server/supabase').createRequestClient>>;
 
 /**
- * Walk the parent_id chain using the per-request Supabase client.
- * RLS is enforced on every step: a private node (or non-existent ID)
- * returns zero rows and the walk stops. Returns oldest-first (root → current).
+ * Walk the parent_id chain via the `get_recipe_chain` RPC.
+ *
+ * The RPC is security-definer and anon-granted (see migration
+ * 20260909100000_public_recipe.sql), so it returns ancestors regardless
+ * of their own is_public flag. That is intentional: a user who marks a
+ * descendant node public expects the public page to render the full
+ * compiled recipe — not just the descendant's own deltas. The starting
+ * node's public-ness is already enforced by the RLS-gated SELECT above
+ * before this walk runs.
+ *
+ * Returns oldest-first (root → current).
  */
 async function walkChain(
 	startId: string,
 	supabase: SupabaseClient
 ): Promise<RecipeNode[]> {
-	const chain: RecipeNode[] = [];
-	let currentId: string | null = startId;
+	const { data, error: err } = await supabase.rpc('get_recipe_chain', {
+		start_id: startId
+	});
 
-	while (currentId) {
-		// This SELECT is gated by RLS policy `recipe_nodes_select_public`.
-		// Anon callers only see rows where is_public = true.
-		const { data, error: err } = await supabase
-			.from('recipe_nodes')
-			.select('*')
-			.eq('id', currentId)
-			.limit(1);
-
-		if (err || !data || data.length === 0) {
-			break;
-		}
-
-		const row = data[0] as SelectRecipeNode;
-		// Supabase JS client returns raw Postgres column names (snake_case).
-		// .select('*') gives is_public, not isPublic.
-		if (!row.is_public) {
-			break;
-		}
-
-		chain.push(toUiRecipeNode(row));
-		currentId = row.parentId;
+	if (err) {
+		throw error(500, 'Failed to load recipe chain');
+	}
+	if (!data || data.length === 0) {
+		return [];
 	}
 
-	return chain;
+	// The RPC returns rows leaf-first (depth 0 = start node, increasing
+	// depth = walking up the parent chain). Replay needs oldest-first
+	// (root → current), so reverse before mapping.
+	const rows = (data as SelectRecipeNode[]).slice().reverse();
+	return rows.map(toUiRecipeNode);
 }
 
 function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {

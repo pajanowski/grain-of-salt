@@ -1,6 +1,9 @@
 -- Mark a single recipe node as Public. The flag is per-node, not per-
--- recipe: marking a leaf public exposes only that node's view, never
--- ancestors or siblings. The corresponding read-only page lives at
+-- recipe, but the public page at /recipe/[recipeNodeId] renders the FULLY
+-- COMPILED recipe by walking the entire parent chain (this function) and
+-- replaying every node's changes — so a public leaf will display its
+-- ancestor's ingredients and directions too, even when those ancestors
+-- are still private. The corresponding read-only page lives at
 -- /recipe/[recipeNodeId] outside the /mise/ group.
 alter table public.recipe_nodes
   add column is_public boolean not null default false;
