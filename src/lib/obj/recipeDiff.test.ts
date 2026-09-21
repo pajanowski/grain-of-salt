@@ -39,6 +39,20 @@ function ingredientEdit(
 	};
 }
 
+function ingredientSubstitute(
+	targetId: string,
+	ing: { name: string; amount: number; unit: string },
+	note: string | null = null
+): IngredientChange {
+	return {
+		id: `sub-${targetId}`,
+		changeType: 'substitute',
+		targetId,
+		note,
+		body: { id: targetId, ...ing }
+	};
+}
+
 function ingredientRemove(targetId: string, note: string | null = null): IngredientChange {
 	return { id: `rm-${targetId}`, changeType: 'remove', targetId, note, body: null };
 }
@@ -51,6 +65,16 @@ function directionEdit(targetId: string, body: string): DirectionChange {
 	return {
 		id: `edit-${targetId}`,
 		changeType: 'edit',
+		targetId,
+		note: null,
+		body: { id: targetId, body }
+	};
+}
+
+function directionSubstitute(targetId: string, body: string): DirectionChange {
+	return {
+		id: `sub-${targetId}`,
+		changeType: 'substitute',
 		targetId,
 		note: null,
 		body: { id: targetId, body }
@@ -374,5 +398,97 @@ describe('formatNode', () => {
 		formatNode(nd, prior);
 		// The prior map should still be empty — formatNode doesn't apply changes.
 		expect(prior.ingredients.size).toBe(0);
+	});
+});
+
+// ===========================================================================
+// substitute changeType — same materialize as 'edit' but a distinct label
+// (SUB vs EDIT) and a distinct color (blue vs amber) in the UI. Tests pin
+// both the formatting shape and the changeType pass-through so consumers
+// can rely on it.
+// ===========================================================================
+
+describe('substitute', () => {
+	it('formats an ingredient substitute with SUB badge and before → after when target exists', () => {
+		const change = ingredientSubstitute('i1', { name: 'Olive oil', amount: 1, unit: 'tbsp' });
+		const prior = new Map<string, Ingredient>([
+			['i1', ingredient({ id: 'i1', name: 'Butter', amount: 1, unit: 'tbsp' })]
+		]);
+		const formatted = formatNode(node({ id: 'n1', ingredientChanges: [change] }), {
+			ingredients: prior,
+			directions: new Map()
+		});
+		expect(formatted).toHaveLength(1);
+		expect(formatted[0].changeType).toBe('substitute');
+		expect(formatted[0].text).toBe('SUB 1 tbsp Butter → 1 tbsp Olive oil');
+		expect(formatted[0].segments).not.toBeNull();
+	});
+
+	it('formats an ingredient substitute with only the new value when target is missing', () => {
+		const change = ingredientSubstitute('ghost', { name: 'Olive oil', amount: 1, unit: '' });
+		const formatted = formatNode(node({ id: 'n1', ingredientChanges: [change] }), emptyMaps());
+		expect(formatted[0].changeType).toBe('substitute');
+		expect(formatted[0].text).toBe('SUB 1 Olive oil');
+	});
+
+	it('passes the note through so the UI can render it', () => {
+		const change = ingredientSubstitute(
+			'i1',
+			{ name: 'Olive oil', amount: 1, unit: '' },
+			'dairy-free'
+		);
+		const prior = new Map<string, Ingredient>([
+			['i1', ingredient({ id: 'i1', name: 'Butter', amount: 1 })]
+		]);
+		const formatted = formatNode(node({ id: 'n1', ingredientChanges: [change] }), {
+			ingredients: prior,
+			directions: new Map()
+		});
+		expect(formatted[0].note).toBe('dairy-free');
+	});
+
+	it('formats a direction substitute with SUB badge and before → after when target exists', () => {
+		const change = directionSubstitute('d1', 'Use olive oil.');
+		const prior: RecipeStateMaps = {
+			ingredients: new Map(),
+			directions: new Map([['d1', direction({ id: 'd1', body: 'Use butter.' })]])
+		};
+		const formatted = formatNode(node({ id: 'n1', directionChanges: [change] }), prior);
+		expect(formatted[0].changeType).toBe('substitute');
+		expect(formatted[0].text).toBe('SUB "Use butter." → "Use olive oil."');
+	});
+
+	it('substitute and edit produce identical stateAfter through formatChain', () => {
+		const editNodes: RecipeNode[] = [
+			node({
+				id: 'n1',
+				ingredientChanges: [ingredientAdd('i1', { name: 'Butter', amount: 1, unit: '' })]
+			}),
+			node({
+				id: 'n2',
+				parentId: 'n1',
+				ingredientChanges: [ingredientEdit('i1', { name: 'Olive oil', amount: 1, unit: '' })]
+			})
+		];
+		const substituteNodes: RecipeNode[] = [
+			node({
+				id: 'n1',
+				ingredientChanges: [ingredientAdd('i1', { name: 'Butter', amount: 1, unit: '' })]
+			}),
+			node({
+				id: 'n2',
+				parentId: 'n1',
+				ingredientChanges: [ingredientSubstitute('i1', { name: 'Olive oil', amount: 1, unit: '' })]
+			})
+		];
+		const editEntries = formatChain(editNodes);
+		const subEntries = formatChain(substituteNodes);
+		// After both chains, the materialized state should be identical.
+		expect(subEntries[1].stateAfter.ingredients.get('i1')).toEqual(
+			editEntries[1].stateAfter.ingredients.get('i1')
+		);
+		// ...but the second node's formatted changes differ in label only:
+		expect(editEntries[1].changes[0].text).toMatch(/^EDIT /);
+		expect(subEntries[1].changes[0].text).toMatch(/^SUB /);
 	});
 });

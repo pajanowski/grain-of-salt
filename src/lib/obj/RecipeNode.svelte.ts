@@ -28,11 +28,12 @@ export interface Change<T> {
 	changeType: ChangeType;
 	// For 'add' on a brand-new row: null. For 'add' repositioning an
 	// ancestor-originated row: the row id (same as body.id). For 'edit'
-	// / 'remove': the row id.
+	// / 'remove' / 'substitute': the row id.
 	targetId: string | null;
 	// Note about change, most likely will be used to explain the reasoning
 	note: string | null;
-	// The full Ingredient or Direction contents for add/edit; null for remove.
+	// The full Ingredient or Direction contents for add/edit/substitute;
+	// null for remove.
 	body: T | null;
 }
 

@@ -16,12 +16,14 @@
 	function changeBg(changeType: string): string {
 		if (changeType === 'add') return '#dcfce7'; // green-100
 		if (changeType === 'remove') return '#fee2e2'; // red-100
-		return '#fef3c7'; // amber-100
+		if (changeType === 'substitute') return '#dbeafe'; // blue-100
+		return '#fef3c7'; // amber-100 (edit)
 	}
 
 	function changeLabel(changeType: string): string {
 		if (changeType === 'add') return 'ADD';
 		if (changeType === 'remove') return 'REMOVE';
+		if (changeType === 'substitute') return 'SUB';
 		return 'EDIT';
 	}
 
@@ -42,6 +44,8 @@
 	class:bg-sky-50={data.isCurrent}
 	style:border-width={data.isCurrent ? '2px' : '1px'}
 	style:width="220px"
+	data-testid="recipe-node-card"
+	data-recipe-node-name={data.name}
 >
 	<Handle type="target" position={Position.Top} />
 
@@ -53,8 +57,14 @@
 		<div class="mt-1">
 			<div class="mb-0.5 text-[10px] font-semibold text-stone-500">INGREDIENTS</div>
 			{#each data.ingredientChanges as c (c.id)}
-				<div class="mb-0.5 rounded px-1 py-0.5" style:background-color={changeBg(c.changeType)}>
-					<span class="mr-1 font-mono text-[9px] font-bold uppercase">{changeLabel(c.changeType)}</span>
+				<div
+					class="mb-0.5 rounded px-1 py-0.5"
+					style:background-color={changeBg(c.changeType)}
+					data-change-type={c.changeType}
+				>
+					<span class="mr-1 font-mono text-[9px] font-bold uppercase"
+						>{changeLabel(c.changeType)}</span
+					>
 					<span class="text-stone-700">{changeText(c)}</span>
 				</div>
 			{/each}
@@ -65,8 +75,14 @@
 		<div class="mt-1">
 			<div class="mb-0.5 text-[10px] font-semibold text-stone-500">DIRECTIONS</div>
 			{#each data.directionChanges as c (c.id)}
-				<div class="mb-0.5 rounded px-1 py-0.5" style:background-color={changeBg(c.changeType)}>
-					<span class="mr-1 font-mono text-[9px] font-bold uppercase">{changeLabel(c.changeType)}</span>
+				<div
+					class="mb-0.5 rounded px-1 py-0.5"
+					style:background-color={changeBg(c.changeType)}
+					data-change-type={c.changeType}
+				>
+					<span class="mr-1 font-mono text-[9px] font-bold uppercase"
+						>{changeLabel(c.changeType)}</span
+					>
 					<span class="text-stone-700">{directionText(c)}</span>
 				</div>
 			{/each}

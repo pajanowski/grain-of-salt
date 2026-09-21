@@ -1,10 +1,6 @@
 <script lang="ts">
 	import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
-	import {
-		formatChain,
-		nodeDisplayLabel,
-		formatTimestamp,
-	} from '$lib/obj/recipeDiff';
+	import { formatChain, nodeDisplayLabel, formatTimestamp } from '$lib/obj/recipeDiff';
 	import NoteSidebar from './NoteSidebar.svelte';
 
 	const { history }: { history: RecipeNode[] } = $props();
@@ -15,7 +11,7 @@
 		change: {
 			id: string;
 			kind: 'ingredient' | 'direction';
-			changeType: 'add' | 'edit' | 'remove';
+			changeType: 'add' | 'edit' | 'remove' | 'substitute';
 			text: string;
 		};
 		currentNote: string | null;
@@ -46,7 +42,7 @@
 			<p class="opacity-60 italic">No history yet.</p>
 		{:else}
 			<ol id="recipe-history-entries" class="flex flex-col gap-2 list-none p-0">
-			{#each entries as entry (entry.node.id)}
+				{#each entries as entry (entry.node.id)}
 					<li class="border rounded p-2">
 						<header class="flex justify-between items-baseline">
 							<strong>{nodeDisplayLabel(entry.node)}</strong>
@@ -66,9 +62,11 @@
 										class:bg-green-100={c.changeType === 'add'}
 										class:bg-red-100={c.changeType === 'remove'}
 										class:bg-amber-100={c.changeType === 'edit'}
+										class:bg-blue-100={c.changeType === 'substitute'}
+										data-change-type={c.changeType}
 									>
-									<span class="mr-1 font-mono text-[9px] font-bold uppercase">{badge}</span>
-									<span class="text-stone-700">{content}</span>
+										<span class="mr-1 font-mono text-[9px] font-bold uppercase">{badge}</span>
+										<span class="text-stone-700">{content}</span>
 										{#if c.note}
 											<button
 												type="button"

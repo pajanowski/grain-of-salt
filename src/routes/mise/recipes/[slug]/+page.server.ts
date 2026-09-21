@@ -1,6 +1,11 @@
 import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
-import { getRecipeNodesByRecipeIdV2, applyNodes } from '$lib/server/bo/recipenodesbo';
+import {
+	getRecipeNodesByRecipeIdV2,
+	applyNodes,
+	findDescendantSubstitutes
+} from '$lib/server/bo/recipenodesbo';
+import type { DescendantSubstitutes } from '$lib/server/bo/recipenodesbo';
 import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
 
 /**
@@ -9,8 +14,13 @@ import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
  * We walk up the parentId chain to the root, then replay all nodes forward
  * (root → ... → current) to build the materialized recipe state. The
  * `parentChain` shows ancestor recipes for breadcrumb navigation.
+ *
+ * `descendantSubstitutes` is the list of substitute changes authored by
+ * any later node in the chain (a fork-off that swaps one of this
+ * node's rows for a different value). Rendered as a per-row "Subs"
+ * chip on the leaf, plus a slide-out sidebar listing each entry.
  */
-export const load: PageServerLoad = async ({ depends, params }) => {
+export const load: PageServerLoad = async ({ depends, params, locals }) => {
 	depends('app:recipe');
 	const recipeNodeId = params.slug;
 
@@ -40,6 +50,16 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 		.slice(0, -1) // drop current
 		.map((node: RecipeNode) => ({ id: node.id, name: node.name }));
 
+	// Find every substitute authored by a descendant of the current
+	// node. Only meaningful when the user is signed in — unauthenticated
+	// browsers see an empty list and the panel renders nothing.
+	const { session, user } = await locals.safeGetSession();
+	const ownerId = user?.id ?? null;
+	void session; // referenced for consistency with sibling loaders
+	const descendantSubstitutes: DescendantSubstitutes = ownerId
+		? await findDescendantSubstitutes(current.id, ownerId)
+		: { flat: [], byRowId: {}, byRowKind: {} };
+
 	return {
 		recipe: {
 			// Recipe identity is the root node, not the node currently being
@@ -55,6 +75,7 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 		// add-id) from Case B (inherited from ancestor). See ADR 0001.
 		currentNode: { ...current, author: current.author, source: current.source },
 		history, // full node chain for the history UI
-		parentChain
+		parentChain,
+		descendantSubstitutes
 	};
-}
+};

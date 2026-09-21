@@ -115,6 +115,9 @@
 		const label = labelFor(item);
 		if (item.change.changeType === 'add') return `ADD ${label}`;
 		if (item.change.changeType === 'remove') return `REMOVE ${label}`;
+		// 'edit' and 'substitute' share the diff label shape; only the
+		// badge text and row color differ (substitute → SUB + blue).
+		if (item.change.changeType === 'substitute') return `SUB ${label}`;
 		return `EDIT ${label}`;
 	}
 
@@ -156,6 +159,10 @@
 	}
 
 	function menuItems(item: AnnotatedChange<IngredientChange | DirectionChange>): MenuItem[] {
+		// 'substitute' is a kind of edit — same shape, same materialize behavior.
+		// The row's kebab menu exposes the standard 'edit' affordance only
+		// (Add note / Edit note / Remove change); the choice between EDIT and
+		// SUB is data, not a UI decision point.
 		const hasNote = !!item.change.note;
 		return [
 			{
@@ -199,7 +206,9 @@
 					class:bg-green-100={item.change.changeType === 'add'}
 					class:bg-red-100={item.change.changeType === 'remove'}
 					class:bg-amber-100={item.change.changeType === 'edit'}
+					class:bg-blue-100={item.change.changeType === 'substitute'}
 					data-change-id={item.change.id}
+					data-change-type={item.change.changeType}
 					data-status={item.status}
 				>
 					<span class="mr-1 font-mono text-[9px] font-bold uppercase">{badge}</span>

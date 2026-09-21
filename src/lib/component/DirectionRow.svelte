@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Direction, Ingredient } from '$lib/obj/Recipe.svelte';
+	import type { DescendantSubstitute } from '$lib/types/descendantSubstitute';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import Tabs from './Tabs.svelte';
 	import NoteIcon from './NoteIcon.svelte';
@@ -20,12 +21,30 @@
 		note: string | null;
 		onNote: () => void;
 		onUpdate: (next: Direction) => void;
-		onUpdateNote: (note: string | null) => void;
-		onRemove: () => void;
-		onMove: (direction: 'up' | 'down') => void;
-		readOnly?: boolean;
-		ingredients?: Ingredient[];
-	};
+		/**
+		 * Save the edited value as a `substitute` change instead of an
+		 * `edit` change. Same wire shape, distinct changeType label so the
+		 * row renders with the blue SUB badge. See IngredientRow for the
+		 * full rationale.
+		 */
+	onSubstitute?: (next: Direction) => void;
+	onUpdateNote: (note: string | null) => void;
+	onRemove: () => void;
+	onMove: (direction: 'up' | 'down') => void;
+	readOnly?: boolean;
+	ingredients?: Ingredient[];
+	/**
+	 * Descendant substitute changes authored by later nodes in the
+	 * recipe chain that target this exact direction row. When the
+	 * list is non-null (even an empty array), a "Subs: N" chip
+	 * renders next to the note icon and clicking it opens the
+	 * substitutes sidebar.
+	 *
+	 * `null` means the row has no descendant substitutes (chip hidden).
+	 */
+	descendantSubstitutes?: DescendantSubstitute[] | null;
+	onOpenSubstitutes?: () => void;
+};
 
 	let {
 		direction,
@@ -34,9 +53,12 @@
 		note,
 		onNote,
 		onUpdate,
+		onSubstitute,
 		onUpdateNote,
 		onRemove,
 		onMove,
+		descendantSubstitutes = null,
+		onOpenSubstitutes,
 		readOnly = false,
 		ingredients = []
 	}: Props = $props();
@@ -49,6 +71,11 @@
 	let pickerOpen = $state(false);
 	let pickerFilterText = $state('');
 
+	// Which changeType to emit on save. See IngredientRow — the Substitute
+	// menu item flips this for the duration of the form so the saved row
+	// gets the blue SUB badge.
+	let saveChangeType = $state<'edit' | 'substitute'>('edit');
+
 	// Tokenize the masked view of the current body. Recomputed on every
 	// change to `draft.body` or `ingredients`. Used by all the edit
 	// handlers below to translate display-position caret moves back to
@@ -59,7 +86,13 @@
 		draft = { ...direction };
 		noteDraft = note ?? '';
 		editTab = 'details';
+		saveChangeType = 'edit';
 		editing = true;
+	}
+
+	function startSubstitute() {
+		startEdit();
+		saveChangeType = 'substitute';
 	}
 
 	function cancelEdit() {
@@ -68,7 +101,10 @@
 	}
 
 	function doEdit() {
-		onUpdate({ ...draft });
+		// See IngredientRow: route through onSubstitute if the user opened
+		// the form via the Substitute menu item. Falls back to onUpdate.
+		const handler = saveChangeType === 'substitute' ? (onSubstitute ?? onUpdate) : onUpdate;
+		handler({ ...draft });
 		const trimmedNote = noteDraft.trim();
 		onUpdateNote(trimmedNote.length > 0 ? trimmedNote : null);
 		editing = false;
@@ -375,6 +411,7 @@
 
 	const items: MenuItem[] = $derived([
 		{ label: 'Edit', onSelect: startEdit },
+		{ label: 'Substitute', onSelect: startSubstitute },
 		{
 			label: 'Move up',
 			disabled: index === 0,
@@ -459,6 +496,18 @@
 						data-testid="direction-note-button"
 					>
 						<NoteIcon />
+					</button>
+				{/if}
+				{#if descendantSubstitutes && descendantSubstitutes.length > 0}
+					<button
+						type="button"
+						class="inline-flex items-center gap-1 px-2 h-5 text-xs rounded-full bg-blue-100 text-blue-800 hover:bg-blue-200 shrink-0"
+						title={`${descendantSubstitutes.length} descendant substitute${descendantSubstitutes.length === 1 ? "" : "s"} available`}
+						aria-label="View descendant substitutes"
+						onclick={onOpenSubstitutes}
+						data-testid="substitutes-chip"
+					>
+						Subs: {descendantSubstitutes.length}
 					</button>
 				{/if}
 			</div>

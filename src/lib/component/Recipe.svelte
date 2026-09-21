@@ -16,6 +16,7 @@
 	import NodeChanges from './NodeChanges.svelte';
 	import Tabs from './Tabs.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
+	import SubstitutesPanel from './SubstitutesPanel.svelte';
 	import UnitAutocomplete from './UnitAutocomplete.svelte';
 	import {
 		tokenizeMaskedBody,
@@ -32,6 +33,26 @@
 	let recipe = $derived(data.recipe);
 	let currentNode = $derived(data.currentNode);
 	let rootNodeId = $derived(recipe.id);
+	// Substitutes authored by any descendant of the current node.
+	// See src/routes/mise/recipes/[slug]/+page.server.ts — the loader
+	// resolves the descendant graph server-side and passes it in. The
+	// component passes entries to row components (for the "Subs" chip)
+	// and renders the slide-out sidebar with the matching entries.
+	let descendantSubstitutesByRowId = $derived(data.descendantSubstitutes?.byRowId ?? {});
+
+	// Selected row for the substitutes sidebar. `{ rowId, kind } | null`.
+	// When set, the sidebar renders every descendant substitute that
+	// targets this row.
+	type SubstituteSelection = {
+		rowId: string;
+		kind: 'ingredient' | 'direction';
+		rowLabel: string;
+	};
+	let openSubstitutesFor = $state<SubstituteSelection | null>(null);
+
+	function closeSubstitutesSidebar() {
+		openSubstitutesFor = null;
+	}
 
 	let leafIngredientChanges = $state<IngredientChange[]>([]);
 	let leafDirectionChanges = $state<DirectionChange[]>([]);
@@ -113,27 +134,35 @@
 		);
 	}
 
-	function editIngredient(rowId: string, next: Ingredient) {
+	function editIngredient(
+		rowId: string,
+		next: Ingredient,
+		changeType: 'edit' | 'substitute' = 'edit'
+	) {
 		const record = leafRecordForIngredient(rowId);
-		if (record && record.body && record.changeType === 'add' && record.targetId === null) {
+		// 'substitute' is syntactic sugar over 'edit': same wire shape
+		// (targetId + body), same materialize behavior; the changeType
+		// label is the only thing that differs so the row gets the blue
+		// SUB badge in NodeChanges and the graph.
+		//
+		// Reclaim only applies when the user picked Edit: editing a row
+		// whose leaf owns it (a fresh `add`) updates the body in place.
+		// For `substitute`, we always emit a new change so the row's
+		// history carries an explicit "this was a substitution" record.
+		if (
+			changeType === 'edit' &&
+			record &&
+			record.body &&
+			record.changeType === 'add' &&
+			record.targetId === null
+		) {
 			// Reclaim: this row's leaf `add` owns the body (it was freshly
 			// added or a previous edit rebuilt it). Update in place.
 			record.body = { ...next };
-		} else if (record && record.body && record.changeType === 'add') {
-			// Reorder-only `add` (targetId !== null): the body belongs to the
-			// ancestor. Don't mutate it — append a fresh `edit` that overrides
-			// the ancestor's value for this leaf.
-			leafIngredientChanges.push({
-				id: uuid(),
-				changeType: 'edit',
-				targetId: rowId,
-				note: null,
-				body: { ...next }
-			});
 		} else {
 			leafIngredientChanges.push({
 				id: uuid(),
-				changeType: 'edit',
+				changeType,
 				targetId: rowId,
 				note: null,
 				body: { ...next }
@@ -215,24 +244,28 @@
 		});
 	}
 
-	function editDirection(rowId: string, next: Direction) {
+	function editDirection(
+		rowId: string,
+		next: Direction,
+		changeType: 'edit' | 'substitute' = 'edit'
+	) {
 		const record = leafRecordForDirection(rowId);
-		if (record && record.body && record.changeType === 'add' && record.targetId === null) {
+		// See editIngredient: 'substitute' is syntactic sugar over 'edit'.
+		// Reclaim only applies to 'edit'; 'substitute' always emits a new
+		// change so the row's history records the substitution.
+		if (
+			changeType === 'edit' &&
+			record &&
+			record.body &&
+			record.changeType === 'add' &&
+			record.targetId === null
+		) {
 			// See editIngredient: reclaim path.
 			record.body = { ...next };
-		} else if (record && record.body && record.changeType === 'add') {
-			// Reorder-only `add`: ancestor owns the body, don't mutate.
-			leafDirectionChanges.push({
-				id: uuid(),
-				changeType: 'edit',
-				targetId: rowId,
-				note: null,
-				body: { ...next }
-			});
 		} else {
 			leafDirectionChanges.push({
 				id: uuid(),
-				changeType: 'edit',
+				changeType,
 				targetId: rowId,
 				note: null,
 				body: { ...next }
@@ -887,9 +920,17 @@
 							note={ingredientNoteFor(ing.id)}
 							onNote={() => openRowNote(ing.id, 'ingredient')}
 							onUpdate={(next) => editIngredient(ing.id, next)}
+							onSubstitute={(next) => editIngredient(ing.id, next, 'substitute')}
 							onUpdateNote={(note) => setRowNote(ing.id, 'ingredient', note)}
 							onRemove={() => removeIngredient(ing.id)}
 							onMove={(dir) => moveIngredient(ing.id, dir)}
+							descendantSubstitutes={descendantSubstitutesByRowId[ing.id] ?? null}
+							onOpenSubstitutes={() =>
+								(openSubstitutesFor = {
+									rowId: ing.id,
+									kind: 'ingredient',
+									rowLabel: `${ing.amount ?? ''} ${ing.unit ?? ''} ${ing.name}`.trim()
+								})}
 						/>
 					</li>
 				{/each}
@@ -1009,10 +1050,18 @@
 							note={directionNoteFor(dir.id)}
 							onNote={() => openRowNote(dir.id, 'direction')}
 							onUpdate={(next) => editDirection(dir.id, next)}
+							onSubstitute={(next) => editDirection(dir.id, next, 'substitute')}
 							onUpdateNote={(note) => setRowNote(dir.id, 'direction', note)}
 							onRemove={() => removeDirection(dir.id)}
 							onMove={(moveDir) => moveDirection(dir.id, moveDir)}
 							ingredients={displayedIngredients}
+							descendantSubstitutes={descendantSubstitutesByRowId[dir.id] ?? null}
+							onOpenSubstitutes={() =>
+								(openSubstitutesFor = {
+									rowId: dir.id,
+									kind: 'direction',
+									rowLabel: dir.body
+								})}
 						/>
 					</li>
 				{/each}
@@ -1163,4 +1212,10 @@
 	onclose={closeRowNote}
 	onsave={commitRowNote}
 	ondelete={deleteRowNote}
+/>
+
+<SubstitutesPanel
+	selection={openSubstitutesFor}
+	byRowId={descendantSubstitutesByRowId}
+	onclose={closeSubstitutesSidebar}
 />

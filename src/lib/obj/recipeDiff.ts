@@ -77,12 +77,13 @@ export function wordDiff(prev: string, next: string): DiffSegment[] {
 
 export interface FormattedChange {
 	kind: 'ingredient' | 'direction';
-	changeType: 'add' | 'edit' | 'remove';
+	changeType: 'add' | 'edit' | 'remove' | 'substitute';
 	text: string;
 	/**
-	 * For 'edit' changes: word-level diff of the before/after value.
-	 * Render 'new' tokens with a darker yellow background to show what changed.
-	 * Null for 'add' / 'remove' (the full text is the added/removed thing).
+	 * For 'edit' and 'substitute' changes: word-level diff of the before/after
+	 * value. Render 'new' tokens with a darker yellow background to show what
+	 * changed. Null for 'add' / 'remove' (the full text is the added/removed
+	 * thing).
 	 */
 	segments: DiffSegment[] | null;
 	/** Author-provided note, surfaced as a clickable icon in the UI. */
@@ -109,12 +110,21 @@ function formatIngredientChangeFull(
 		const text = before ? `REMOVE ${ingredientLabel(before)}` : `REMOVE ${label}`;
 		return { kind: 'ingredient', changeType: 'remove', text, segments: null, note: change.note };
 	}
-	// edit
+	// edit / substitute — both produce a before→after diff in the history view.
+	// The changeType is preserved on the FormattedChange so the UI can render
+	// the row in the correct color (substitute → blue, edit → amber).
 	const before = change.targetId ? priorState.get(change.targetId) : undefined;
 	const beforeLabel = before ? ingredientLabel(before) : '';
-	const text = before ? `EDIT ${beforeLabel} → ${label}` : `EDIT ${label}`;
+	const badge = change.changeType === 'substitute' ? 'SUB' : 'EDIT';
+	const text = before ? `${badge} ${beforeLabel} → ${label}` : `${badge} ${label}`;
 	const segments = before ? wordDiff(beforeLabel, label) : null;
-	return { kind: 'ingredient', changeType: 'edit', text, segments, note: change.note };
+	return {
+		kind: 'ingredient',
+		changeType: change.changeType === 'substitute' ? 'substitute' : 'edit',
+		text,
+		segments,
+		note: change.note
+	};
 }
 
 // Internal: format a single direction change to the full FormattedChange shape.
@@ -154,15 +164,24 @@ function formatDirectionChangeFull(
 		const text = before ? `REMOVE "${beforeBody}"` : `REMOVE ${label}`;
 		return { kind: 'direction', changeType: 'remove', text, segments: null, note: change.note };
 	}
-	// edit
+	// edit / substitute — both produce a before→after diff. The changeType
+	// is preserved so the UI can render the row in the correct color
+	// (substitute → blue, edit → amber).
 	const before = change.targetId ? recipeState.directions.get(change.targetId) : undefined;
 	const beforeBody = before
 		? buildDisplayBody(before.body, Array.from(recipeState.ingredients.values()))
 		: '';
 	const beforeQuoted = before ? `"${beforeBody}"` : '';
-	const text = before ? `EDIT ${beforeQuoted} → ${label}` : `EDIT ${label}`;
+	const badge = change.changeType === 'substitute' ? 'SUB' : 'EDIT';
+	const text = before ? `${badge} ${beforeQuoted} → ${label}` : `${badge} ${label}`;
 	const segments = before ? wordDiff(beforeBody, displayBody) : null;
-	return { kind: 'direction', changeType: 'edit', text, segments, note: change.note };
+	return {
+		kind: 'direction',
+		changeType: change.changeType === 'substitute' ? 'substitute' : 'edit',
+		text,
+		segments,
+		note: change.note
+	};
 }
 
 /**
@@ -195,8 +214,9 @@ export function formatDirectionChange(
 export function formatNode(node: RecipeNode, priorState: RecipeStateMaps): FormattedChange[] {
 	const out: FormattedChange[] = [];
 	for (const c of node.ingredientChanges) {
-		// 'substitute' has no display form yet; silently skip it.
-		if (c.changeType === 'substitute') continue;
+		// 'substitute' is treated as 'edit' by the formatter (same before/after
+		// diff); only the rendered badge text and color differ (see
+		// formatIngredientChangeFull / formatDirectionChangeFull).
 		// Reorder-only `add`s (targetId !== null) are position claims on
 		// ancestor-originated rows; they don't change the row's body or
 		// introduce a new row, so they have no diff-able effect to surface.
@@ -204,7 +224,6 @@ export function formatNode(node: RecipeNode, priorState: RecipeStateMaps): Forma
 		out.push(formatIngredientChangeFull(c, priorState.ingredients));
 	}
 	for (const c of node.directionChanges) {
-		if (c.changeType === 'substitute') continue;
 		if (c.changeType === 'add' && c.targetId !== null) continue;
 		out.push(formatDirectionChangeFull(c, priorState));
 	}
@@ -288,7 +307,10 @@ function applyIngredientChange(state: Map<string, Ingredient>, change: Ingredien
 			state.set(id, { ...change.body, id });
 			return;
 		}
-		case 'edit': {
+		case 'edit':
+		case 'substitute': {
+			// 'substitute' is syntactic sugar over 'edit' (see BO). Same
+			// materialize behavior; only the changeType label differs.
 			if (!change.targetId || !change.body) return;
 			if (state.has(change.targetId)) {
 				state.set(change.targetId, { ...change.body, id: change.targetId });
@@ -297,10 +319,6 @@ function applyIngredientChange(state: Map<string, Ingredient>, change: Ingredien
 		}
 		case 'remove': {
 			if (change.targetId) state.delete(change.targetId);
-			return;
-		}
-		case 'substitute': {
-			// Reserved for future use; no apply behavior yet. Silently skipped.
 			return;
 		}
 	}
@@ -324,7 +342,9 @@ function applyDirectionChange(state: Map<string, Direction>, change: DirectionCh
 			state.set(id, { ...change.body, id });
 			return;
 		}
-		case 'edit': {
+		case 'edit':
+		case 'substitute': {
+			// 'substitute' is syntactic sugar over 'edit'. See BO.
 			if (!change.targetId || !change.body) return;
 			if (state.has(change.targetId)) {
 				state.set(change.targetId, { ...change.body, id: change.targetId });
@@ -333,10 +353,6 @@ function applyDirectionChange(state: Map<string, Direction>, change: DirectionCh
 		}
 		case 'remove': {
 			if (change.targetId) state.delete(change.targetId);
-			return;
-		}
-		case 'substitute': {
-			// Reserved for future use; no apply behavior yet. Silently skipped.
 			return;
 		}
 	}

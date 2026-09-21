@@ -183,7 +183,7 @@ export function getRowSaveButton(row: Locator) {
 export async function clickRowAction(
 	page: Page,
 	row: Locator,
-	action: 'Edit' | 'Move up' | 'Move down' | 'Remove'
+	action: 'Edit' | 'Substitute' | 'Move up' | 'Move down' | 'Remove'
 ) {
 	await getRowActionsButton(row).click();
 	await page.getByRole('menuitem', { name: action }).click();

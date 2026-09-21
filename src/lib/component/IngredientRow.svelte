@@ -7,6 +7,7 @@
 	import NoteIcon from './NoteIcon.svelte';
 	import UnitAutocomplete from './UnitAutocomplete.svelte';
 	import { normalizeUnit, displayUnit } from '$lib/unit';
+	import type { DescendantSubstitute } from '$lib/types/descendantSubstitute';
 
 	type Props = {
 		ingredient: Ingredient;
@@ -15,10 +16,37 @@
 		note: string | null;
 		onNote: () => void;
 		onUpdate: (next: Ingredient) => void;
+		/**
+		 * Save the edited value as a `substitute` change instead of an
+		 * `edit` change. Same wire shape, distinct changeType label so the
+		 * row renders with the blue SUB badge. The Save button picks
+		 * between `onUpdate` and `onSubstitute` based on the menu item the
+		 * user picked to open the form.
+		 */
+		onSubstitute?: (next: Ingredient) => void;
 		onUpdateNote: (note: string | null) => void;
 		onRemove: () => void;
 		onMove: (direction: 'up' | 'down') => void;
+		/**
+		 * Descendant substitute changes authored by later nodes in the
+		 * recipe chain that target this exact ingredient row. When the
+		 * list is non-null (even an empty array), a "Subs: N" chip
+		 * renders next to the note icon and clicking it opens the
+		 * substitutes sidebar.
+		 *
+		 * `null` means the row has no descendant substitutes (chip hidden).
+		 */
+		descendantSubstitutes?: DescendantSubstitute[] | null;
+		onOpenSubstitutes?: () => void;
 		readOnly?: boolean;
+		/**
+		 * Which changeType to record when the row is saved via Edit or
+		 * Substitute. The two menu items open the same form; the only
+		 * difference is which changeType label the leaf emits on save.
+		 * Defaults to 'edit'. Substitute uses this when its menu item is
+		 * picked so the saved row renders with the blue SUB badge.
+		 */
+		changeType?: 'edit' | 'substitute';
 	};
 
 	let {
@@ -28,10 +56,14 @@
 		note,
 		onNote,
 		onUpdate,
+		onSubstitute,
 		onUpdateNote,
 		onRemove,
 		onMove,
-		readOnly = false
+		descendantSubstitutes = null,
+		onOpenSubstitutes,
+		readOnly = false,
+		changeType = 'edit'
 	}: Props = $props();
 
 	let editing = $state(false);
@@ -41,13 +73,24 @@
 	let editTab = $state<'details' | 'note'>('details');
 	let noteDraft = $state('');
 
+	// Which changeType to emit on save. The Edit menu item leaves this as
+	// 'edit'; the Substitute menu item flips it to 'substitute' for the
+	// duration of the form, so the saved row gets the blue SUB badge.
+	let saveChangeType = $state<'edit' | 'substitute'>('edit');
+
 	function startEdit() {
 		draft = { ...ingredient };
 		amountDraft = ingredient.amount ? String(ingredient.amount) : '';
 		amountError = null;
 		noteDraft = note ?? '';
 		editTab = 'details';
+		saveChangeType = changeType;
 		editing = true;
+	}
+
+	function startSubstitute() {
+		startEdit();
+		saveChangeType = 'substitute';
 	}
 
 	function cancelEdit() {
@@ -62,7 +105,18 @@
 		}
 		amountError = null;
 		const normalizedUnit = normalizeUnit(draft.unit);
-		onUpdate({ ...draft, amount: amtResult.value!, unit: normalizedUnit });
+		// Pass through saveChangeType so the leaf's onUpdate can emit a
+		// 'substitute' change instead of 'edit' when the user picked the
+		// Substitute menu item. Recipe.svelte is the source of truth for
+		// the wire shape and validation. If onSubstitute is not provided
+		// (e.g. caller didn't wire it), fall back to onUpdate — the
+		// changeType label is still preserved on save in Recipe.svelte.
+		const handler = saveChangeType === 'substitute' ? (onSubstitute ?? onUpdate) : onUpdate;
+		handler({
+			...draft,
+			amount: amtResult.value!,
+			unit: normalizedUnit
+		});
 		const trimmedNote = noteDraft.trim();
 		onUpdateNote(trimmedNote.length > 0 ? trimmedNote : null);
 		editing = false;
@@ -85,6 +139,7 @@
 
 	const items: MenuItem[] = $derived([
 		{ label: 'Edit', onSelect: startEdit },
+		{ label: 'Substitute', onSelect: startSubstitute },
 		{
 			label: 'Move up',
 			disabled: index === 0,
@@ -168,19 +223,31 @@
 					<span class="opacity-60 ml-1">{formatAmount(ingredient.amount)}</span>
 					<span class="opacity-60 ml-1">{displayUnit(ingredient.unit, ingredient.amount)}</span>
 				</span>
-				{#if note && !readOnly}
-					<button
-						type="button"
-						class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200 shrink-0"
-						title={note}
-						aria-label="Edit note"
-						onclick={onNote}
-						data-testid="ingredient-note-button"
-					>
-						<NoteIcon />
-					</button>
-				{/if}
-			</div>
+			{#if note && !readOnly}
+				<button
+					type="button"
+					class="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200 shrink-0"
+					title={note}
+					aria-label="Edit note"
+					onclick={onNote}
+					data-testid="ingredient-note-button"
+				>
+					<NoteIcon />
+				</button>
+			{/if}
+			{#if descendantSubstitutes && descendantSubstitutes.length > 0}
+				<button
+					type="button"
+					class="inline-flex items-center gap-1 px-2 h-5 text-xs rounded-full bg-blue-100 text-blue-800 hover:bg-blue-200 shrink-0"
+					title={`${descendantSubstitutes.length} descendant substitute${descendantSubstitutes.length === 1 ? "" : "s"} available`}
+					aria-label="View descendant substitutes"
+					onclick={onOpenSubstitutes}
+					data-testid="substitutes-chip"
+				>
+					Subs: {descendantSubstitutes.length}
+				</button>
+			{/if}
+		</div>
 			{#if note && readOnly}
 				<p class="flex items-center gap-1.5 text-sm text-stone-500 italic pl-5" title={note}>
 					<NoteIcon />

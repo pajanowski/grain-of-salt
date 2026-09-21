@@ -314,6 +314,125 @@ describe('applyNodes', () => {
     });
   });
 
+  describe('substitute', () => {
+    // `substitute` is a label-only synonym for `edit`: same wire shape
+    // (targetId + body), same materialize behavior. The tests below
+    // mirror the `edit` describe block to lock in parity — if
+    // `substitute` ever drifts from `edit`'s apply path, these will
+    // fail first.
+    it('replaces the existing ingredient by targetId, mirroring edit', () => {
+      const nodes: RecipeNode[] = [
+        node({
+          id: 'n1',
+          ingredientChanges: [
+            ingredient({ id: 'i1', name: 'Eggs', amount: 2, unit: 'whole' })
+              ? ingredientChange({
+                  id: 'c1',
+                  changeType: 'add',
+                  body: { id: 'i1', name: 'Eggs', amount: 2, unit: 'whole', note: null }
+                })
+              : ingredientChange({ id: 'c1' })
+          ],
+        }),
+        node({
+          id: 'n2',
+          parentId: 'n1',
+          ingredientChanges: [
+            ingredientChange({
+              id: 'c2',
+              changeType: 'substitute',
+              targetId: 'i1',
+              body: { id: 'i1', name: 'Flax eggs', amount: 2, unit: 'tbsp', note: null }
+            })
+          ],
+        }),
+      ];
+      const state = applyNodes(nodes);
+      expect(state.ingredients).toHaveLength(1);
+      expect(state.ingredients[0].name).toBe('Flax eggs');
+      expect(state.ingredients[0].amount).toBe(2);
+      expect(state.ingredients[0].unit).toBe('tbsp');
+    });
+
+    it('replaces the existing direction by targetId, mirroring edit', () => {
+      const nodes: RecipeNode[] = [
+        node({
+          id: 'n1',
+          directionChanges: [
+            directionChange({
+              id: 'c1',
+              changeType: 'add',
+              body: direction({ id: 'd1', body: 'Mix dry ingredients.' })
+            })
+          ]
+        }),
+        node({
+          id: 'n2',
+          parentId: 'n1',
+          directionChanges: [
+            directionChange({
+              id: 'c2',
+              changeType: 'substitute',
+              targetId: 'd1',
+              body: direction({ id: 'd1', body: 'Sift dry ingredients together.' })
+            })
+          ]
+        })
+      ];
+      const state = applyNodes(nodes);
+      expect(state.directions).toHaveLength(1);
+      expect(state.directions[0].body).toBe('Sift dry ingredients together.');
+    });
+
+    it('is a no-op when targetId does not exist', () => {
+      const nodes: RecipeNode[] = [
+        node({
+          id: 'n1',
+          ingredientChanges: [
+            ingredientChange({
+              id: 'c1',
+              changeType: 'substitute',
+              targetId: 'ghost',
+              body: ingredient({ id: 'ghost', name: 'Flour' })
+            })
+          ]
+        })
+      ];
+      const state = applyNodes(nodes);
+      expect(state.ingredients).toEqual([]);
+    });
+
+    it('chains across parent→child sequences identically to edit', () => {
+      const nodes: RecipeNode[] = [
+        node({
+          id: 'root',
+          ingredientChanges: [
+            ingredientChange({
+              id: 'c1',
+              changeType: 'add',
+              body: { id: 'i1', name: 'Eggs', amount: 2, unit: 'whole', note: null }
+            })
+          ]
+        }),
+        node({
+          id: 'fork',
+          parentId: 'root',
+          ingredientChanges: [
+            ingredientChange({
+              id: 'c2',
+              changeType: 'substitute',
+              targetId: 'i1',
+              body: { id: 'i1', name: 'Banana', amount: 1, unit: 'whole', note: null }
+            })
+          ]
+        })
+      ];
+      const state = applyNodes(nodes);
+      expect(state.ingredients).toHaveLength(1);
+      expect(state.ingredients[0].name).toBe('Banana');
+    });
+  });
+
   describe('directions', () => {
     it('handles add/edit/remove symmetrically with ingredients', () => {
       const nodes: RecipeNode[] = [

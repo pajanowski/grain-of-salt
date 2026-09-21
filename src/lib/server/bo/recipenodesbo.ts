@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { db } from '../db/index';
 import { recipeNodes } from '../db/schema';
 import type { InsertRecipeNode, SelectRecipeNode } from '../db/schema';
@@ -216,7 +216,12 @@ function applyIngredientChange(
 			notes.set(id, change.note ?? null);
 			return;
 		}
-		case 'edit': {
+		case 'edit':
+		case 'substitute': {
+			// 'substitute' is syntactic sugar over 'edit': same wire shape
+			// (targetId + body), same materialize behavior. UI surfaces use
+			// the changeType to pick a distinct color (blue vs amber), but
+			// replay treats them identically.
 			if (!change.targetId || !change.body) return; // malformed
 			if (state.has(change.targetId)) {
 				state.set(change.targetId, { ...change.body, id: change.targetId });
@@ -229,10 +234,6 @@ function applyIngredientChange(
 				state.delete(change.targetId);
 				notes.delete(change.targetId);
 			}
-			return;
-		}
-		case 'substitute': {
-			// Reserved for future use; no apply behavior yet. Silently skipped.
 			return;
 		}
 	}
@@ -263,7 +264,11 @@ function applyDirectionChange(
 			notes.set(id, change.note ?? null);
 			return;
 		}
-		case 'edit': {
+		case 'edit':
+		case 'substitute': {
+			// See applyIngredientChange: 'substitute' is syntactic sugar over
+			// 'edit', same wire shape and same materialize behavior. UI uses
+			// changeType for color only.
 			if (!change.targetId || !change.body) return;
 			if (state.has(change.targetId)) {
 				state.set(change.targetId, { ...change.body, id: change.targetId });
@@ -276,10 +281,6 @@ function applyDirectionChange(
 				state.delete(change.targetId);
 				notes.delete(change.targetId);
 			}
-			return;
-		}
-		case 'substitute': {
-			// Reserved for future use; no apply behavior yet. Silently skipped.
 			return;
 		}
 	}
@@ -346,18 +347,17 @@ function validateIngredientChange(c: unknown, index: number): asserts c is Ingre
 		if (!obj.body || typeof obj.body !== 'object') {
 			throw new InvalidChangeError(`ingredientChanges[${index}] (add) must have a body`);
 		}
-	} else if (op === 'edit') {
+	} else if (op === 'edit' || op === 'substitute') {
+		// 'substitute' is syntactic sugar over 'edit': same wire shape
+		// (targetId + body), same materialize behavior. UI surfaces use
+		// the changeType for color (blue vs amber) but the validator
+		// enforces identical shape requirements.
 		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
-			throw new InvalidChangeError(`ingredientChanges[${index}] (edit) must have a targetId`);
+			throw new InvalidChangeError(`ingredientChanges[${index}] (${op}) must have a targetId`);
 		}
 		if (!obj.body || typeof obj.body !== 'object') {
-			throw new InvalidChangeError(`ingredientChanges[${index}] (edit) must have a body`);
+			throw new InvalidChangeError(`ingredientChanges[${index}] (${op}) must have a body`);
 		}
-	} else if (op === 'substitute') {
-		// 'substitute' is reserved for future use; no shape requirements beyond
-		// the id check above. Storage and wire format are identical to other
-		// change types so behavior can be added later without a schema
-		// migration.
 	} else {
 		// remove
 		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
@@ -392,15 +392,16 @@ function validateDirectionChange(c: unknown, index: number): asserts c is Direct
 		if (!obj.body || typeof obj.body !== 'object') {
 			throw new InvalidChangeError(`directionChanges[${index}] (add) must have a body`);
 		}
-	} else if (op === 'edit') {
+	} else if (op === 'edit' || op === 'substitute') {
+		// See ingredient validator: 'substitute' has the same shape as
+		// 'edit' (targetId + body); the changeType only differs for UI
+		// color.
 		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
-			throw new InvalidChangeError(`directionChanges[${index}] (edit) must have a targetId`);
+			throw new InvalidChangeError(`directionChanges[${index}] (${op}) must have a targetId`);
 		}
 		if (!obj.body || typeof obj.body !== 'object') {
-			throw new InvalidChangeError(`directionChanges[${index}] (edit) must have a body`);
+			throw new InvalidChangeError(`directionChanges[${index}] (${op}) must have a body`);
 		}
-	} else if (op === 'substitute') {
-		// Reserved; see ingredient validator for the rationale.
 	} else {
 		// remove
 		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
@@ -522,6 +523,184 @@ export interface RecipeTreeNode extends RecipeSummary {
  *
  * Filtered by ownerId at the database so unrelated recipes never reach JS.
  */
+/**
+ * Find every substitute change in any descendant of `rootNodeId` that
+ * refers to a row of the root. The crawler walks the chain via
+ * `parent_id` (same as the migration-level recursive function) and
+ * collects `substitute` change records whose `targetId` matches an
+ * ingredient or direction id that exists in the materialized state of
+ * the chain up to and including `rootNodeId`.
+ *
+ * Why 'descendants' rather than 'all nodes in the chain':
+ *
+ *  - The chain represents history: parent_id points at the previous
+ *    node in the same recipe. When you fork from node X, the new node
+ *    Y has parent_id = X.id. Y's edits, removes, and substitutes
+ *    operate on the rows that exist as of X. A substitute that targets
+ *    a row that exists only after X is meaningless to X.
+ *
+ *  - We bound the look-back to the materialized state of the chain up
+ *    to `rootNodeId` so the crawler doesn't pick up rows introduced by
+ *    an intervening ancestor fork. That keeps the "substitutes
+ *    available" panel from showing ghosts.
+ *
+ * Used by the recipe page to render a "Substitutes available"
+ * section. Returns the display text (already formatted via the diff
+ * helper) and a link to the source descendant node.
+ */
+export interface DescendantSubstitute {
+	/** The descendant recipe node that authored the substitute. */
+	nodeId: string;
+	/** Display name of the source descendant node. */
+	nodeName: string;
+	/** Slug for linking into `/mise/recipes/[slug]`. */
+	nodeSlug: string;
+	/** Was the substitute on an ingredient row or a direction row? */
+	changeType: 'ingredient' | 'direction';
+	/** Display-ready summary the panel renders for this entry —
+	 *  e.g. "SUB 1 tbsp Olive oil" or "SUB Oil-based sauté." */
+	text: string;
+	/** Stable row id that this substitute targets (matches
+	 *  `Ingredient.id` / `Direction.id` at the time the root node
+	 *  was the current view). Ingredient and direction ids share
+	 *  the same keyspace in this codebase — callers must match by
+	 *  `changeType` as well. */
+	targetId: string;
+}
+
+/**
+ * Result of `findDescendantSubstitutes`. Two views on the same data:
+ *  - `flat`: every descendant substitute, in CTE walk order. Useful
+ *    when the caller wants a single "Substitutes available" panel.
+ *  - `byRowId`: same substitutes keyed by the row they target, with
+ *    the row's kind stored separately in `byRowKind`. Useful when
+ *    the caller renders a per-row "Subs" chip on the leaf and wants
+ *    to look up "what substitutes exist for this exact row".
+ */
+export interface DescendantSubstitutes {
+	flat: DescendantSubstitute[];
+	byRowId: Record<string, DescendantSubstitute[]>;
+	byRowKind: Record<string, 'ingredient' | 'direction'>;
+}
+
+export async function findDescendantSubstitutes(
+	rootNodeId: string,
+	ownerId?: string | null
+): Promise<DescendantSubstitutes> {
+	// Ownership gate: when called from an authenticated route, only
+	// return substitutes if the root node belongs to `ownerId`. When
+	// called without ownerId (e.g. internal tooling) skip the check.
+	if (ownerId != null) {
+		const ownRows: { ownerId: string | null }[] = await db
+			.select({ ownerId: recipeNodes.ownerId })
+			.from(recipeNodes)
+			.where(eq(recipeNodes.id, rootNodeId))
+			.limit(1);
+		if (ownRows.length === 0) return emptySubstitutes();
+		if (ownRows[0].ownerId !== ownerId) return emptySubstitutes();
+	}
+
+	// 1. Compute the set of row ids visible at rootNodeId by replaying
+	//    the chain from the topmost ancestor down through rootNodeId.
+	//    Substitutes in descendants that target rows that don't exist
+	//    at this point are skipped — they reference ancestor rows
+	//    that the descendant's recipe branch has since removed.
+	const chain = await getRecipeNodesByRecipeId(rootNodeId);
+	const visible = applyNodes(chain);
+	const visibleIngredientIds = new Set(visible.ingredients.map((i) => i.id));
+	const visibleDirectionIds = new Set(visible.directions.map((d) => d.id));
+
+	// 2. Walk every descendant of rootNodeId via a recursive CTE on
+	//    parent_id. Each descendant carries its full change arrays.
+	type DescRow = {
+		id: string;
+		name: string;
+		ingredientChanges: IngredientChange[];
+		directionChanges: DirectionChange[];
+	};
+	// Drizzle's `db.execute` on postgres-js returns the rows directly
+	// (not a QueryResult wrapper) when given a typed row parameter.
+	const descRows = await db.execute<DescRow>(sql`
+		with recursive descendants as (
+			select id, name, ingredient_changes, direction_changes, parent_id
+			from recipe_nodes
+			where parent_id = ${rootNodeId}
+			union all
+			select rn.id, rn.name, rn.ingredient_changes, rn.direction_changes, rn.parent_id
+			from recipe_nodes rn
+			inner join descendants d on rn.parent_id = d.id
+		)
+		select
+			id,
+			name,
+			ingredient_changes as "ingredientChanges",
+			direction_changes as "directionChanges"
+		from descendants
+	`);
+
+	// 3. Collect substitute changes that target a row visible at the
+	//    time of rootNodeId. Each is enriched with its source node's
+	//    id+name so the caller can render a link.
+	const flat: DescendantSubstitute[] = [];
+	const byRowId: Record<string, DescendantSubstitute[]> = {};
+	const byRowKind: Record<string, 'ingredient' | 'direction'> = {};
+	for (const row of descRows) {
+		for (const c of row.ingredientChanges as IngredientChange[]) {
+			if (c.changeType !== 'substitute') continue;
+			if (!c.targetId || !c.body) continue;
+			if (!visibleIngredientIds.has(c.targetId)) continue;
+			const entry: DescendantSubstitute = {
+				nodeId: row.id,
+				nodeName: row.name,
+				nodeSlug: row.id,
+				changeType: 'ingredient',
+				text: 'SUB ' + formatIngredientChangeText(c.body),
+				targetId: c.targetId
+			};
+			flat.push(entry);
+			(byRowId[c.targetId] ??= []).push(entry);
+			byRowKind[c.targetId] = 'ingredient';
+		}
+		for (const c of row.directionChanges as DirectionChange[]) {
+			if (c.changeType !== 'substitute') continue;
+			if (!c.targetId || !c.body) continue;
+			if (!visibleDirectionIds.has(c.targetId)) continue;
+			const entry: DescendantSubstitute = {
+				nodeId: row.id,
+				nodeName: row.name,
+				nodeSlug: row.id,
+				changeType: 'direction',
+				text: 'SUB ' + formatDirectionChangeText(c.body),
+				targetId: c.targetId
+			};
+			flat.push(entry);
+			(byRowId[c.targetId] ??= []).push(entry);
+			byRowKind[c.targetId] = 'direction';
+		}
+	}
+	return { flat, byRowId, byRowKind };
+}
+
+function emptySubstitutes(): DescendantSubstitutes {
+	return { flat: [], byRowId: {}, byRowKind: {} };
+}
+
+function formatIngredientChangeText(body: {
+	name: string;
+	amount?: number;
+	unit?: string;
+}): string {
+	const parts: string[] = [];
+	if (body.amount) parts.push(String(body.amount));
+	if (body.unit) parts.push(body.unit);
+	parts.push(body.name);
+	return parts.filter(Boolean).join(' ').trim() || 'ingredient';
+}
+
+function formatDirectionChangeText(body: { body: string }): string {
+	return body.body || '(empty)';
+}
+
 export async function getRecipeTree(ownerId: string): Promise<RecipeTreeNode[]> {
 	const allRows: SelectRecipeNode[] = await db
 		.select()
