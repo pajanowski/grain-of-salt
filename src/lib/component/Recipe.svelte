@@ -123,14 +123,37 @@
 		return leafIngredientChanges.find(
 			(c) =>
 				(c.changeType === 'add' && c.body?.id === rowId) ||
-				(c.changeType === 'edit' && c.targetId === rowId)
+				(c.changeType === 'edit' && c.targetId === rowId) ||
+				(c.changeType === 'substitute' && c.targetId === rowId)
 		);
 	}
 	function leafRecordForDirection(rowId: string): DirectionChange | undefined {
 		return leafDirectionChanges.find(
 			(c) =>
 				(c.changeType === 'add' && c.body?.id === rowId) ||
-				(c.changeType === 'edit' && c.targetId === rowId)
+				(c.changeType === 'edit' && c.targetId === rowId) ||
+				(c.changeType === 'substitute' && c.targetId === rowId)
+		);
+	}
+	// A row can only be substituted if the leaf hasn't already authored
+	// an `add` (fresh row the leaf owns), `edit`, or `substitute` for it.
+	// Substitute on top of an existing leaf change would either be
+	// incoherent (subbing a row you just added) or redundant (subbing a
+	// row you've already edited or subbed). Reorder-only `add` claims
+	// (targetId !== null) are position assertions, not real changes, so
+	// they don't block substitution.
+	function canSubstituteIngredient(rowId: string): boolean {
+		return !leafIngredientChanges.some(
+			(c) =>
+				(c.changeType === 'add' && c.body?.id === rowId) ||
+				((c.changeType === 'edit' || c.changeType === 'substitute') && c.targetId === rowId)
+		);
+	}
+	function canSubstituteDirection(rowId: string): boolean {
+		return !leafDirectionChanges.some(
+			(c) =>
+				(c.changeType === 'add' && c.body?.id === rowId) ||
+				((c.changeType === 'edit' || c.changeType === 'substitute') && c.targetId === rowId)
 		);
 	}
 
@@ -921,6 +944,7 @@
 							onNote={() => openRowNote(ing.id, 'ingredient')}
 							onUpdate={(next) => editIngredient(ing.id, next)}
 							onSubstitute={(next) => editIngredient(ing.id, next, 'substitute')}
+							canSubstitute={canSubstituteIngredient(ing.id)}
 							onUpdateNote={(note) => setRowNote(ing.id, 'ingredient', note)}
 							onRemove={() => removeIngredient(ing.id)}
 							onMove={(dir) => moveIngredient(ing.id, dir)}
@@ -1051,6 +1075,7 @@
 							onNote={() => openRowNote(dir.id, 'direction')}
 							onUpdate={(next) => editDirection(dir.id, next)}
 							onSubstitute={(next) => editDirection(dir.id, next, 'substitute')}
+							canSubstitute={canSubstituteDirection(dir.id)}
 							onUpdateNote={(note) => setRowNote(dir.id, 'direction', note)}
 							onRemove={() => removeDirection(dir.id)}
 							onMove={(moveDir) => moveDirection(dir.id, moveDir)}

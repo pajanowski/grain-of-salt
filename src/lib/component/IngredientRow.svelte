@@ -24,6 +24,16 @@
 		 * user picked to open the form.
 		 */
 		onSubstitute?: (next: Ingredient) => void;
+		/**
+		 * When false, the "Substitute" menu item is rendered as disabled.
+		 * Substitute is only valid on rows that the leaf has not already
+		 * authored an `add` (fresh row the leaf owns), `edit`, or
+		 * `substitute` change for — otherwise the operation would either
+		 * be incoherent (subbing a row you just added) or redundant
+		 * (stacking a substitute on top of an edit/substitute). Reorder-
+		 * only `add` claims don't block substitute.
+		 */
+		canSubstitute?: boolean;
 		onUpdateNote: (note: string | null) => void;
 		onRemove: () => void;
 		onMove: (direction: 'up' | 'down') => void;
@@ -57,6 +67,7 @@
 		onNote,
 		onUpdate,
 		onSubstitute,
+		canSubstitute = true,
 		onUpdateNote,
 		onRemove,
 		onMove,
@@ -139,7 +150,9 @@
 
 	const items: MenuItem[] = $derived([
 		{ label: 'Edit', onSelect: startEdit },
-		{ label: 'Substitute', onSelect: startSubstitute },
+		...(canSubstitute
+			? [{ label: 'Substitute' as const, onSelect: startSubstitute }]
+			: []),
 		{
 			label: 'Move up',
 			disabled: index === 0,

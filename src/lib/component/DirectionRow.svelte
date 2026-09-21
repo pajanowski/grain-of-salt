@@ -28,6 +28,13 @@
 		 * full rationale.
 		 */
 	onSubstitute?: (next: Direction) => void;
+	/**
+	 * When false, the "Substitute" menu item is rendered as disabled.
+	 * Substitute is only valid on rows that the leaf has not already
+	 * authored an `add` (fresh row the leaf owns), `edit`, or
+	 * `substitute` change for. See IngredientRow for the full rationale.
+	 */
+	canSubstitute?: boolean;
 	onUpdateNote: (note: string | null) => void;
 	onRemove: () => void;
 	onMove: (direction: 'up' | 'down') => void;
@@ -54,6 +61,7 @@
 		onNote,
 		onUpdate,
 		onSubstitute,
+		canSubstitute = true,
 		onUpdateNote,
 		onRemove,
 		onMove,
@@ -411,7 +419,9 @@
 
 	const items: MenuItem[] = $derived([
 		{ label: 'Edit', onSelect: startEdit },
-		{ label: 'Substitute', onSelect: startSubstitute },
+		...(canSubstitute
+			? [{ label: 'Substitute' as const, onSelect: startSubstitute }]
+			: []),
 		{
 			label: 'Move up',
 			disabled: index === 0,
