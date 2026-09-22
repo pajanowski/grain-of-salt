@@ -12,7 +12,8 @@
 	import DirectionRow from './DirectionRow.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import IngredientPicker from './IngredientPicker.svelte';
-	import Modal from './Modal.svelte';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import NodeChanges from './NodeChanges.svelte';
 	import Tabs from './Tabs.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
@@ -1186,51 +1187,59 @@
 	/>
 </div>
 
-<Modal bind:showModal={showRenameModal}>
-	{#snippet header()}<h2 class="font-semibold">Rename recipe</h2>{/snippet}
-	<form
-		onsubmit={(e) => {
-			e.preventDefault();
-			confirmRename();
-		}}
-	>
-		<label class="flex flex-col gap-1">
-			<span class="text-sm font-medium">New name</span>
-			<input bind:value={renameName} aria-label="New recipe name" />
-		</label>
-		<div class="mt-3 flex gap-2">
-			<button type="submit" class="btn-amber" disabled={renameBusy}
-				>{renameBusy ? 'Saving…' : 'Save'}</button
-			>
-			<button type="button" class="btn-amber secondary" onclick={() => (showRenameModal = false)}
-				>Cancel</button
-			>
-		</div>
-	</form>
-</Modal>
+<Dialog.Root bind:open={showRenameModal}>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title>Rename recipe</Dialog.Title>
+		</Dialog.Header>
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				confirmRename();
+			}}
+		>
+			<label class="flex flex-col gap-1">
+				<span class="text-sm font-medium">New name</span>
+				<input bind:value={renameName} aria-label="New recipe name" />
+			</label>
+			<Dialog.Footer>
+				<Button type="submit" disabled={renameBusy}>{renameBusy ? 'Saving…' : 'Save'}</Button>
+				<Button
+					type="button"
+					variant="outline"
+					onclick={() => (showRenameModal = false)}>Cancel</Button
+				>
+			</Dialog.Footer>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>
 
-<Modal bind:showModal={showForkModal}>
-	{#snippet header()}<h2 class="font-semibold">Fork recipe</h2>{/snippet}
-	<form
-		onsubmit={(e) => {
-			e.preventDefault();
-			confirmFork();
-		}}
-	>
-		<label class="flex flex-col gap-1">
-			<span class="text-sm font-medium">Fork name</span>
-			<input bind:value={forkName} aria-label="Forked recipe name" />
-		</label>
-		<div class="mt-3 flex gap-2">
-			<button type="submit" class="btn-amber" disabled={forkBusy}
-				>{forkBusy ? 'Forking…' : 'Fork'}</button
-			>
-			<button type="button" class="btn-amber secondary" onclick={() => (showForkModal = false)}
-				>Cancel</button
-			>
-		</div>
-	</form>
-</Modal>
+<Dialog.Root bind:open={showForkModal}>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title>Fork recipe</Dialog.Title>
+		</Dialog.Header>
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				confirmFork();
+			}}
+		>
+			<label class="flex flex-col gap-1">
+				<span class="text-sm font-medium">Fork name</span>
+				<input bind:value={forkName} aria-label="Forked recipe name" />
+			</label>
+			<Dialog.Footer>
+				<Button type="submit" disabled={forkBusy}>{forkBusy ? 'Forking…' : 'Fork'}</Button>
+				<Button
+					type="button"
+					variant="outline"
+					onclick={() => (showForkModal = false)}>Cancel</Button
+				>
+			</Dialog.Footer>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>
 
 <NoteSidebar
 	note={openRowNoteEditor}

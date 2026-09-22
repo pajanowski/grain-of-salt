@@ -1,5 +1,8 @@
 <script lang="ts">
 	import type { RecipeTreeNode } from '$lib/server/bo/recipenodesbo';
+	import Expand from '@lucide/svelte/icons/expand';
+	import Minimize2 from '@lucide/svelte/icons/minimize-2';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 
 	let {
 		recipeTree,
@@ -123,40 +126,10 @@
 		<h1 class="text-xl font-semibold">Recipe List</h1>
 		<div class="flex gap-1">
 			<button type="button" class="rl-btn rounded" onclick={expandAll} aria-label="Expand all">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					class="h-4 w-4"
-					aria-hidden="true"
-				>
-					<polyline points="15 3 21 3 21 9" />
-					<polyline points="9 21 3 21 3 15" />
-					<line x1="21" x2="14" y1="3" y2="10" />
-					<line x1="3" x2="10" y1="21" y2="14" />
-				</svg>
+				<Expand class="h-4 w-4" aria-hidden="true" />
 			</button>
 			<button type="button" class="rl-btn rounded" onclick={collapseAll} aria-label="Collapse all">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					class="h-4 w-4"
-					aria-hidden="true"
-				>
-					<polyline points="4 14 10 14 10 20" />
-					<polyline points="20 10 14 10 14 4" />
-					<line x1="14" x2="21" y1="3" y2="10" />
-					<line x1="3" x2="10" y1="21" y2="14" />
-				</svg>
+				<Minimize2 class="h-4 w-4" aria-hidden="true" />
 			</button>
 		</div>
 	</header>
@@ -190,15 +163,12 @@
 									aria-expanded={!collapsed.has(node.id)}
 									onclick={() => toggle(node.id)}
 								>
-									<svg
-										viewBox="0 0 20 20"
-										class="h-3 w-3 transition-transform"
+									<span
+										class="inline-flex transition-transform"
 										class:rotate-90={!collapsed.has(node.id)}
-										fill="currentColor"
-										aria-hidden="true"
 									>
-										<path d="M7 5l6 5-6 5V5z" />
-									</svg>
+										<ChevronRight class="h-3 w-3" aria-hidden="true" />
+									</span>
 								</button>
 								<a
 									href="/mise/recipes/{node.id}"

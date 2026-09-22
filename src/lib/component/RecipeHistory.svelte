@@ -2,6 +2,8 @@
 	import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
 	import { formatChain, nodeDisplayLabel, formatTimestamp } from '$lib/obj/recipeDiff';
 	import NoteSidebar from './NoteSidebar.svelte';
+	import NotepadText from '@lucide/svelte/icons/notepad-text';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 
 	const { history }: { history: RecipeNode[] } = $props();
 
@@ -34,7 +36,11 @@
 	>
 		<span class="text-lg font-semibold">History</span>
 		<span class="text-xs opacity-60">{entries.length} node{entries.length === 1 ? '' : 's'}</span>
-		<span class="text-sm opacity-60">{expanded ? '▾' : '▸'}</span>
+		<ChevronDown
+			size={16}
+			aria-hidden="true"
+			class={['transition-transform', expanded ? 'rotate-180' : '']}
+		/>
 	</button>
 
 	{#if expanded}
@@ -83,9 +89,9 @@
 														},
 														currentNote: c.note
 													})}
-											>
-												📝
-											</button>
+													>
+													<NotepadText size={12} aria-hidden="true" />
+													</button>
 										{/if}
 									</li>
 								{/each}

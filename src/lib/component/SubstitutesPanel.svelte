@@ -1,18 +1,16 @@
 <script lang="ts">
 	import type { DescendantSubstitute } from '$lib/types/descendantSubstitute';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
 
 	/**
 	 * Slide-out side bar listing the descendant substitute changes
-	 * authored for a specific ingredient or direction row. Mirrors the
-	 * pattern in `NoteSidebar.svelte` but has a fixed purpose: show
-	 * what other nodes in the recipe chain subbed the row with and
-	 * link the user to the source node so they can read the full
-	 * recipe.
+	 * authored for a specific ingredient or direction row.
 	 *
 	 * Triggered by clicking the "Subs: N" chip rendered next to the
-	 * row's note icon. Click backdrop, X button, or press Escape to
-	 * close. The opener is responsible for setting `selection`; this
-	 * component just renders the panel when selection is non-null.
+	 * row's note icon. Backdrop click, Escape, or the X button all
+	 * close it. The opener is responsible for setting `selection`;
+	 * this component just renders the panel when selection is
+	 * non-null.
 	 */
 	type Props = {
 		/**
@@ -28,39 +26,38 @@
 
 	let { selection, byRowId, onclose }: Props = $props();
 
+	let open = $state(false);
+
+	// Sync the sheet's open state with `selection`.
+	$effect(() => {
+		open = selection !== null;
+	});
+
 	/** Substitutes for the currently selected row, or empty list. */
 	const substitutes = $derived(selection ? (byRowId[selection.rowId] ?? []) : []);
 
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			e.preventDefault();
+	function handleOpenChange(next: boolean) {
+		if (!next) {
+			open = false;
 			onclose();
 		}
 	}
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
-
-{#if selection}
-	<!-- Backdrop click closes. Z-index matches NoteSidebar. -->
-	<button
-		type="button"
-		class="fixed inset-0 z-40 bg-black/30 cursor-default"
-		aria-label="Close substitutes panel"
-		onclick={onclose}
-		data-testid="substitutes-backdrop"
-	></button>
-
-	<aside
-		class="fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-white border-l border-stone-200 shadow-xl flex flex-col"
-		aria-label="Descendant substitutes"
+<Sheet.Root bind:open onOpenChange={handleOpenChange}>
+	<Sheet.Content
+		side="right"
+		class="w-full max-w-sm gap-0 p-0"
 		data-testid="substitutes-panel"
+		showCloseButton={false}
 	>
-		<header class="flex items-start justify-between gap-2 px-4 py-3 border-b border-stone-200">
+		<header
+			class="flex items-start justify-between gap-2 px-4 py-3 border-b border-stone-200"
+		>
 			<div class="flex flex-col gap-1 min-w-0 flex-1">
 				<h2 class="text-sm font-semibold text-stone-800">Descendant substitutes</h2>
 				<p class="text-xs text-stone-500 break-words" data-testid="substitutes-row-label">
-					for: <span class="font-medium text-stone-700">{selection.rowLabel}</span>
+					for: <span class="font-medium text-stone-700">{selection?.rowLabel}</span>
 				</p>
 			</div>
 			<button
@@ -102,5 +99,5 @@
 				</p>
 			{/each}
 		</div>
-	</aside>
-{/if}
+	</Sheet.Content>
+</Sheet.Root>

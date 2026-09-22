@@ -2,7 +2,6 @@
 	import { enhance } from '$app/forms';
 	import { writable } from 'svelte/store';
 	import type { ActionData, PageData } from './$types';
-	import GrainOfSaltTitle from '$lib/component/GrainOfSaltTitle.svelte';
 	import Spinner from '$lib/component/Spinner.svelte';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -20,7 +19,9 @@
 </svelte:head>
 
 <div class="flex min-h-screen flex-col items-center justify-center gap-8 bg-white p-4 sm:p-8">
-	<GrainOfSaltTitle />
+	<div class="flex flex-col items-center gap-1">
+		<h1 class="text-5xl font-extrabold tracking-tight text-amber-400">Grain of Salt</h1>
+	</div>
 	<div class="w-full max-w-sm rounded-lg border border-stone-200 bg-white p-6 shadow-md">
 		<h2 class="mb-6 text-2xl font-semibold text-stone-800">Sign in</h2>
 

@@ -417,7 +417,9 @@ test.describe('descendant substitutes row chip + sidebar', () => {
 		await page.getByTestId('substitutes-chip').first().click();
 		const panel = page.getByTestId('substitutes-panel');
 		await expect(panel).toBeVisible();
-		await page.getByTestId('substitutes-backdrop').click();
+		// shadcn Sheet renders an overlay div with data-slot="sheet-overlay";
+		// Bits UI's DismissibleLayer turns outside-click into a close.
+		await page.locator('[data-slot="sheet-overlay"]').click();
 		await expect(panel).toHaveCount(0);
 	});
 

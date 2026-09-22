@@ -45,19 +45,21 @@ test.describe('public recipe — toggle and share link', () => {
 		await getRecipeActionsMenuItem(page, 'Make public').click();
 
 		// Wait for the UI to update (invalidateAll resolves).
+		await page.keyboard.press('Escape');
 		await getRecipeActionsButton(page).click();
 		await expect(getRecipeActionsMenuItem(page, 'Make private')).toBeVisible();
 
 		// Share link should now be visible in the header.
 		await expect(getPublicRecipeShareLink(page, nodeId)).toBeVisible();
 
-		// Toggle back to private — click menu trigger twice to close then
-		// reopen, so the menu item is visible when we click it.
-		await getRecipeActionsButton(page).click();
+		// Toggle back to private — Escape closes the menu (Bits UI's
+		// DismissibleLayer), then reopen and pick the item.
+		await page.keyboard.press('Escape');
 		await getRecipeActionsButton(page).click();
 		await getRecipeActionsMenuItem(page, 'Make private').click();
 
 		// Menu label should flip back.
+		await page.keyboard.press('Escape');
 		await getRecipeActionsButton(page).click();
 		await expect(getRecipeActionsMenuItem(page, 'Make public')).toBeVisible();
 

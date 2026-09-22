@@ -2,6 +2,8 @@
 	import type { Ingredient } from '$lib/obj/Recipe.svelte';
 	import { formatAmount } from '$lib/formatAmount';
 	import { parseAmount } from '$lib/parseAmount';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import Tabs from './Tabs.svelte';
 	import NoteIcon from './NoteIcon.svelte';
@@ -83,6 +85,7 @@
 	let amountError = $state<string | null>(null);
 	let editTab = $state<'details' | 'note'>('details');
 	let noteDraft = $state('');
+	let confirmRemoveOpen = $state(false);
 
 	// Which changeType to emit on save. The Edit menu item leaves this as
 	// 'edit'; the Substitute menu item flips it to 'substitute' for the
@@ -134,9 +137,12 @@
 	}
 
 	function confirmRemove() {
-		if (window.confirm(`Remove ingredient "${ingredient.name}"?`)) {
-			onRemove();
-		}
+		confirmRemoveOpen = true;
+	}
+
+	function doRemove() {
+		confirmRemoveOpen = false;
+		onRemove();
 	}
 
 	// Focus the name input when editing starts — avoids bind:this hydration issues
@@ -273,3 +279,19 @@
 		{/if}
 	{/if}
 </li>
+
+<AlertDialog.Root bind:open={confirmRemoveOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>Remove ingredient?</AlertDialog.Title>
+			<AlertDialog.Description>
+				This will remove "{ingredient.name}" from this node. The ancestor row will still
+				be visible on parent nodes.
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+			<AlertDialog.Action variant="destructive" onclick={doRemove} data-testid="confirm-remove">Remove</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

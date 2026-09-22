@@ -13,6 +13,9 @@
 	 * `ondelete` and then `onclose`. Cancel just calls `onclose`.
 	 */
 
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+
 	export type SidebarChange = {
 		id: string;
 		kind: 'ingredient' | 'direction';
@@ -30,23 +33,27 @@
 	let { note, onclose, onsave, ondelete }: Props = $props();
 
 	let draft = $state('');
+	let open = $state(false);
 
-	// Reset the draft whenever a new note opens. Without this the textarea
-	// would carry over the previous note's text after the user closed it
-	// without saving.
+	// Sync the sheet's open state with `note`. Bits UI Sheet renders
+	// nothing when closed and mounts the panel + overlay when open, so we
+	// drive the Sheet via this derived state.
 	$effect(() => {
 		if (note) {
 			draft = note.currentNote ?? '';
+			open = true;
 		} else {
-			draft = '';
+			open = false;
 		}
 	});
 
 	const editable = $derived(!!onsave);
 
-	function handleKeydown(e: KeyboardEvent) {
-		if (!note) return;
-		if (e.key === 'Escape') onclose();
+	function handleOpenChange(next: boolean) {
+		if (!next) {
+			open = false;
+			onclose();
+		}
 	}
 
 	function commit() {
@@ -61,35 +68,22 @@
 	}
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-{#if note}
-	<!--
-		Backdrop: clicking outside the panel closes it.
-	-->
-	<aside
-		class="fixed top-0 right-0 h-full w-96 max-w-full bg-white shadow-2xl z-50 flex flex-col"
-		aria-label="Change note"
-	>
-		<header class="bg-amber-300 px-4 py-3 flex justify-between items-center shrink-0">
-			<h2 class="text-base font-bold uppercase tracking-wide">
+<Sheet.Root bind:open onOpenChange={handleOpenChange}>
+	<Sheet.Content side="right" class="w-96 max-w-full gap-0 p-0">
+		<Sheet.Header class="bg-amber-300 px-4 py-3 rounded-none">
+			<Sheet.Title class="text-base font-bold uppercase tracking-wide text-stone-900">
 				{editable ? 'Edit note' : 'Note'}
-			</h2>
-			<button
-				type="button"
-				class="btn-amber secondary text-sm font-bold opacity-70 hover:opacity-100"
-				aria-label="Close"
-				onclick={onclose}>X</button
-			>
-		</header>
+			</Sheet.Title>
+		</Sheet.Header>
 
 		<div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
 			<!-- The change the note is attached to, shown as a quote. -->
 			<blockquote class="border-l-4 border-amber-300 pl-3 italic opacity-90">
-				{note.change.text}
+				{note?.change.text}
 			</blockquote>
 
 			<p class="text-xs opacity-50 uppercase tracking-wide">
-				{note.change.kind} · {note.change.changeType}
+				{note?.change.kind} · {note?.change.changeType}
 			</p>
 
 			<hr class="opacity-20" />
@@ -99,35 +93,28 @@
 					class="border rounded px-2 py-1 text-sm w-full"
 					rows="6"
 					bind:value={draft}
-					placeholder="Write a note about this change…"></textarea>
+					placeholder="Write a note about this change…"
+				></textarea>
 				<div class="flex gap-2 mt-1">
-					<button
-						type="button"
-						class="btn-amber flat-button"
-						onclick={commit}
-						data-testid="note-confirm"
-					>
-						Confirm
-					</button>
-					{#if note.currentNote && ondelete}
-						<button
+					<Button type="button" onclick={commit} data-testid="note-confirm">Confirm</Button>
+					{#if note?.currentNote && ondelete}
+						<Button
 							type="button"
-							class="btn-amber flat-button text-red-700 hover:bg-red-100"
+							variant="outline"
+							class="text-red-700"
 							onclick={remove}
 							data-testid="note-delete"
 						>
 							Delete
-						</button>
+						</Button>
 					{/if}
-					<button type="button" class="btn-amber secondary flat-button" onclick={onclose}>
-						Cancel
-					</button>
+					<Button type="button" variant="outline" onclick={onclose}>Cancel</Button>
 				</div>
 			{:else}
 				<p class="whitespace-pre-wrap text-base leading-relaxed">
-					{note.currentNote ?? '(no note)'}
+					{note?.currentNote ?? '(no note)'}
 				</p>
 			{/if}
 		</div>
-	</aside>
-{/if}
+	</Sheet.Content>
+</Sheet.Root>

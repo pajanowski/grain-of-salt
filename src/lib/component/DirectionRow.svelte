@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Direction, Ingredient } from '$lib/obj/Recipe.svelte';
 	import type { DescendantSubstitute } from '$lib/types/descendantSubstitute';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import Tabs from './Tabs.svelte';
 	import NoteIcon from './NoteIcon.svelte';
@@ -78,6 +79,7 @@
 	let textareaRef = $state<HTMLTextAreaElement | null>(null);
 	let pickerOpen = $state(false);
 	let pickerFilterText = $state('');
+	let confirmRemoveOpen = $state(false);
 
 	// Which changeType to emit on save. See IngredientRow — the Substitute
 	// menu item flips this for the duration of the form so the saved row
@@ -120,9 +122,12 @@
 	}
 
 	function confirmRemove() {
-		if (window.confirm(`Remove this direction?`)) {
-			onRemove();
-		}
+		confirmRemoveOpen = true;
+	}
+
+	function doRemove() {
+		confirmRemoveOpen = false;
+		onRemove();
 	}
 
 	/** Reset the textarea DOM to match the masked view of `draft.body`. */
@@ -533,3 +538,19 @@
 		{/if}
 	{/if}
 </li>
+
+<AlertDialog.Root bind:open={confirmRemoveOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>Remove direction?</AlertDialog.Title>
+			<AlertDialog.Description>
+				This will remove this direction from this node. The ancestor row will still be
+				visible on parent nodes.
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+			<AlertDialog.Action variant="destructive" onclick={doRemove} data-testid="confirm-remove">Remove</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

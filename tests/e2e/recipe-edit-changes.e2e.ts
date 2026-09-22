@@ -53,10 +53,12 @@ import {
   clickRowAction
 } from './helpers/page-utils';
 
-// The Remove row action shows a `window.confirm` dialog before applying.
-// Playwright auto-dismisses dialogs (returning false from confirm), which
-// would silently swallow the remove. Register an accept handler so the
-// remove actually fires.
+// Note: a dialog event handler used to live here to auto-accept the
+// `window.confirm` that the Remove row action triggered. Wave 3 of the
+// shadcn migration replaced that confirm with an AlertDialog (which is
+// not a native dialog, so page.on('dialog', ...) would never fire for
+// it). Tests that exercise Remove now click the AlertDialog's Remove
+// button directly. Keep this file's other beforeEach hooks intact.
 test.beforeEach(async ({ page }) => {
   console.log('[e2e] beforeEach: registering dialog handler');
   page.on('dialog', async (dialog) => {
@@ -463,6 +465,8 @@ test.describe('ingredient changes isolate correctly across the 4-node fixture', 
     await openRecipe(page, RECIPE.siblingA);
 
     await clickRowAction(page, ingredientRow(page, 'Milk'), 'Remove');
+    // Confirm via the AlertDialog (no longer window.confirm).
+    await page.getByTestId('confirm-remove').click();
     await clickPageSave(page);
 
     await assertHistoryDoesNotContain(page, 'removed ingredient: 1 cup Milk');
@@ -528,6 +532,8 @@ test.describe('direction changes isolate correctly across the 4-node fixture', (
     // Remove "Whisk with milk" (initial content, index 1, untouched by other tests).
     await openRecipe(page, RECIPE.siblingA);
     await clickRowAction(page, directionRow(page, 1), 'Remove');
+    // Confirm via the AlertDialog (no longer window.confirm).
+    await page.getByTestId('confirm-remove').click();
     await clickPageSave(page);
 
     await assertHistoryDoesNotContain(page, 'removed direction: "Whisk with milk"');
