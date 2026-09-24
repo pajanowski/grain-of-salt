@@ -43,6 +43,18 @@ export const recipeNodes = pgTable('recipe_nodes', {
 	source: text('source'),
 	isPublic: boolean('is_public').notNull().default(false),
 	isFavorite: boolean('is_favorite').notNull().default(false),
+	/**
+	 * Storage path (relative to the recipe-images bucket) of the
+	 * "final dish" photo for this node. Scoped per-node: each version
+	 * of a recipe carries its own final-dish image; forking leaves it
+	 * null on the new node until the user picks a new photo.
+	 *
+	 * Resolved at render time through the /api/image server endpoint,
+	 * which mints a short-lived signed URL. Not directly accessible
+	 * via storage.objects SELECT — RLS on the bucket gates reads by
+	 * owner.
+	 */
+	imagePath: text('image_path'),
 });
 
 

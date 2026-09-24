@@ -7,6 +7,8 @@
 	import NoteIcon from './NoteIcon.svelte';
 	import DirectionBody from './DirectionBody.svelte';
 	import IngredientPicker from './IngredientPicker.svelte';
+	import ImageField from './ImageField.svelte';
+	import ImageStrip from './ImageStrip.svelte';
 	import {
 		formatDirectionBody,
 		tokenizeMaskedBody,
@@ -52,34 +54,67 @@
 	 */
 	descendantSubstitutes?: DescendantSubstitute[] | null;
 	onOpenSubstitutes?: () => void;
+	/**
+	 * The set of imagePaths the ancestor chain provides via the
+	 * applyNodes replay (without the leaf's own change). The "Inherit
+	 * images from parent" button on the edit form's Images tab uses
+	 * this to copy the inherited set onto the change record.
+	 */
+	inheritedImagePaths?: string[];
+	/**
+	 * Called when the user clicks a thumbnail on this row. The parent
+	 * page owns the lightbox state.
+	 */
+	onOpenImageLightbox?: (paths: string[], index: number) => void;
+	/**
+	 * The leaf node's id — used to scope per-change image uploads.
+	 * Optional for read-only consumers.
+	 */
+	nodeId?: string;
+	/**
+	 * The change record's id (uuid) for uploads during this form
+	 * session. Optional — when missing, the upload UI is hidden.
+	 */
+	changeId?: string;
 };
 
-	let {
-		direction,
-		index,
-		total,
-		note,
-		onNote,
-		onUpdate,
-		onSubstitute,
-		canSubstitute = true,
-		onUpdateNote,
-		onRemove,
-		onMove,
-		descendantSubstitutes = null,
-		onOpenSubstitutes,
-		readOnly = false,
-		ingredients = []
-	}: Props = $props();
+let {
+	direction,
+	index,
+	total,
+	note,
+	onNote,
+	onUpdate,
+	onSubstitute,
+	canSubstitute = true,
+	onUpdateNote,
+	onRemove,
+	onMove,
+	descendantSubstitutes = null,
+	onOpenSubstitutes,
+	readOnly = false,
+	ingredients = [],
+	inheritedImagePaths = [],
+	onOpenImageLightbox,
+	nodeId,
+	changeId
+}: Props = $props();
 
 	let editing = $state(false);
 	let draft = $state<Direction>({ ...direction });
-	let editTab = $state<'details' | 'note'>('details');
+	let editTab = $state<'details' | 'note' | 'images'>('details');
 	let noteDraft = $state('');
 	let textareaRef = $state<HTMLTextAreaElement | null>(null);
 	let pickerOpen = $state(false);
 	let pickerFilterText = $state('');
 	let confirmRemoveOpen = $state(false);
+
+	/**
+	 * Local image preview for the edit form. `undefined` means the
+	 * user has not opened the Images tab — the change's
+	 * `body.imagePaths` stays unset so ancestors pass through.
+	 */
+	let localImagePaths = $state<string[] | undefined>(undefined);
 
 	// Which changeType to emit on save. See IngredientRow — the Substitute
 	// menu item flips this for the duration of the form so the saved row
@@ -97,6 +132,8 @@
 		noteDraft = note ?? '';
 		editTab = 'details';
 		saveChangeType = 'edit';
+		// Reset the local image sentinel: each form open is independent.
+		localImagePaths = undefined;
 		editing = true;
 	}
 
@@ -114,7 +151,14 @@
 		// See IngredientRow: route through onSubstitute if the user opened
 		// the form via the Substitute menu item. Falls back to onUpdate.
 		const handler = saveChangeType === 'substitute' ? (onSubstitute ?? onUpdate) : onUpdate;
-		handler({ ...draft });
+		handler({
+			...draft,
+			// Wire imagePaths: undefined sentinel means "leave the field
+			// off the change record" so ancestors pass through. A defined
+			// list (possibly empty) means "this change explicitly sets the
+			// images to this list."
+			imagePaths: localImagePaths === undefined ? undefined : [...localImagePaths]
+		});
 		const trimmedNote = noteDraft.trim();
 		onUpdateNote(trimmedNote.length > 0 ? trimmedNote : null);
 		editing = false;
@@ -455,7 +499,14 @@
 			<Tabs
 				tabs={[
 					{ id: 'details', label: 'Details' },
-					{ id: 'note', label: noteDraft.length > 0 ? 'Note ●' : 'Note' }
+					{ id: 'note', label: noteDraft.length > 0 ? 'Note ●' : 'Note' },
+					{
+						id: 'images',
+						label:
+							localImagePaths && localImagePaths.length > 0
+								? `Images (${localImagePaths.length})`
+								: 'Images'
+					}
 				]}
 				selected={editTab}
 				onchange={(id) => (editTab = id)}
@@ -481,13 +532,27 @@
 						{textareaRef}
 					/>
 				{/if}
-			{:else}
+			{:else if editTab === 'note'}
 				<textarea
 					class="border rounded px-3 py-2 text-sm w-full"
 					rows="3"
 					placeholder="Optional note for this direction…"
 					aria-label="Note"
 					bind:value={noteDraft}></textarea>
+			{:else if editTab === 'images'}
+				<ImageField
+					localPaths={localImagePaths}
+					inheritedPaths={inheritedImagePaths}
+					nodeId={nodeId ?? ''}
+					changeId={changeId ?? ''}
+					kind="direction"
+					onAddPath={(p) => (localImagePaths = [...(localImagePaths ?? []), p])}
+					onRemovePath={(p) => {
+						if (localImagePaths === undefined) return;
+						localImagePaths = localImagePaths.filter((x) => x !== p);
+					}}
+					onInherit={(paths) => (localImagePaths = [...paths])}
+				/>
 			{/if}
 			<div class="flex gap-2">
 				<button type="button" class="btn-amber" onclick={doEdit}>Save</button>
@@ -533,6 +598,12 @@
 				</p>
 			{/if}
 		</div>
+		{#if direction.imagePaths && direction.imagePaths.length > 0}
+			<ImageStrip
+				imagePaths={direction.imagePaths}
+				onOpen={(paths, i) => onOpenImageLightbox?.(paths, i)}
+			/>
+		{/if}
 		{#if !readOnly}
 			<ContextMenu {items} label={`Actions for direction ${index + 1}`} />
 		{/if}

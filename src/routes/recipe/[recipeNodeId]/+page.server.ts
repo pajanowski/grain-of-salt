@@ -124,6 +124,7 @@ function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 		author: row.author ?? null,
 		source: row.source ?? null,
 		isPublic: row.is_public,
-		isFavorite: row.is_favorite ?? false
+		isFavorite: row.is_favorite ?? false,
+		imagePath: row.image_path ?? null
 	};
 }

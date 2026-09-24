@@ -22,6 +22,7 @@ and [ADR 0002](../adr/0002-fork-as-chain-extension.md).
 - [Recipe management](./recipe-management.md) — Rename and delete a recipe
 - [Public recipe](./public-recipe.md) — Mark a node public; read-only view at `/recipe/[id]` without auth
 - [Recipe favorites](./recipe-favorites.md) — Mark a node as favorite from the recipe actions menu; star appears next to the recipe name
+- [Recipe images](./recipe-images.md) — Per-version final-dish photo and per-change ingredient/direction images with fall-through replay; inline thumbnails + lightbox; edit-form Images tab with Inherit affordance
 
 ## Development
 

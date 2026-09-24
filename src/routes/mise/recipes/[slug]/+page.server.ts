@@ -42,6 +42,16 @@ export const load: PageServerLoad = async ({ depends, params, locals }) => {
 	// Materialize the full recipe state by replaying all nodes.
 	const state = applyNodes(history);
 
+	// `inheritedImages` is computed from the same materialized state.
+	// Edit forms surface whatever's currently displayed on each row
+	// (full chain replay, including the leaf's own change), and the
+	// "Inherit images from parent" button captures that set onto the
+	// change record. For a fresh fork with no edits, the ancestor's
+	// images surface naturally; for a leaf with existing edits, the
+	// leaf's staged set surfaces — both consistent with the user-
+	// visible row.
+	const inheritedState = state;
+
 	// Build the parent breadcrumb chain: ancestor recipes (not including self).
 	// Skip the first entry (root) — we don't include the recipe itself in the chain.
 	// Then skip the last entry (current) — that's the page we're on.
@@ -76,6 +86,27 @@ export const load: PageServerLoad = async ({ depends, params, locals }) => {
 		currentNode: { ...current, author: current.author, source: current.source },
 		history, // full node chain for the history UI
 		parentChain,
-		descendantSubstitutes
+		descendantSubstitutes,
+		/**
+		 * Per-row imagePaths as materialized by the chain. Edit forms
+		 * consume this to:
+		 *   - decide whether to render the "Inherit images from parent"
+		 *     button (visible only when the inherited set is non-empty)
+		 *   - populate the local preview when the user clicks the
+		 *     button (explicit copy of the inherited set onto the
+		 *     change record)
+		 */
+		inheritedImages: {
+			ingredients: Object.fromEntries(
+				inheritedState.ingredients
+					.filter((i) => i.imagePaths && i.imagePaths.length > 0)
+					.map((i) => [i.id, i.imagePaths as string[]])
+			),
+			directions: Object.fromEntries(
+				inheritedState.directions
+					.filter((d) => d.imagePaths && d.imagePaths.length > 0)
+					.map((d) => [d.id, d.imagePaths as string[]])
+			)
+		}
 	};
 };

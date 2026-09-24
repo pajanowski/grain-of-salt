@@ -31,7 +31,7 @@ type DraftPayload = UpdateRecipeNodePayload;
 // ===========================================================================
 
 function ingredient(partial: Partial<Ingredient> & { id: string }): Ingredient {
-  return { name: '', amount: 0, unit: '', note: null, ...partial };
+  return { name: '', amount: 0, unit: '', note: null, imagePaths: null, ...partial };
 }
 
 // `applyNodes` always attaches `note` (null when unset) to every
@@ -40,7 +40,7 @@ function ingredient(partial: Partial<Ingredient> & { id: string }): Ingredient {
 // include `note: null` on fixtures to match — that's what this helper
 // provides. The `direction()` helper does the same for directions.
 function direction(partial: { id: string; body: string }): Direction {
-  return { ...partial, note: null };
+  return { ...partial, note: null, imagePaths: null };
 }
 
 function node(
@@ -57,6 +57,7 @@ function node(
     source: null,
     isPublic: false,
     isFavorite: false,
+    imagePath: partial.imagePath ?? null,
   };
 }
 
@@ -630,6 +631,209 @@ describe('applyNodes', () => {
     });
   });
 
+  describe('imagePaths replay', () => {
+    // Per the imagePaths replay contract:
+    //   - body.imagePaths === null/undefined → fall through (preserve ancestor's)
+    //   - body.imagePaths === []              → cleared by this change
+    //   - body.imagePaths === [...]           → replace with this set
+
+    it('materializes imagePaths from an add change on the root node', () => {
+      const egg = ingredient({
+        id: 'i1',
+        name: 'Eggs',
+        amount: 2,
+        unit: 'whole',
+        imagePaths: ['eggs.jpg']
+      });
+      const nodes: RecipeNode[] = [
+        node({
+          id: 'n1',
+          ingredientChanges: [
+            ingredientChange({
+              id: 'c1',
+              changeType: 'add',
+              body: egg
+            })
+          ]
+        })
+      ];
+      const state = applyNodes(nodes);
+      expect(state.ingredients[0].imagePaths).toEqual(['eggs.jpg']);
+    });
+
+    it('falls through ancestor imagePaths when a descendant edit omits the field', () => {
+      // Root sets imagePaths: ['eggs.jpg'] on the add.
+      // Fork edits the row without specifying imagePaths.
+      // Replay should still resolve the row to ['eggs.jpg'].
+      const egg = ingredient({
+        id: 'i1',
+        name: 'Eggs',
+        amount: 2,
+        unit: 'whole',
+        imagePaths: ['eggs.jpg']
+      });
+      const eggFork = ingredient({ id: 'i1', name: 'Eggs', amount: 3, unit: 'whole' });
+      const nodes: RecipeNode[] = [
+        node({
+          id: 'n1',
+          ingredientChanges: [
+            ingredientChange({ id: 'c1', changeType: 'add', body: egg })
+          ]
+        }),
+        node({
+          id: 'n2',
+          parentId: 'n1',
+          ingredientChanges: [
+            ingredientChange({
+              id: 'c2',
+              changeType: 'edit',
+              targetId: 'i1',
+              body: eggFork
+            })
+          ]
+        })
+      ];
+      const state = applyNodes(nodes);
+      expect(state.ingredients).toHaveLength(1);
+      expect(state.ingredients[0].imagePaths).toEqual(['eggs.jpg']);
+    });
+
+    it('replaces ancestor imagePaths when a descendant edit provides a new set', () => {
+      const egg = ingredient({
+        id: 'i1',
+        name: 'Eggs',
+        amount: 2,
+        unit: 'whole',
+        imagePaths: ['eggs.jpg']
+      });
+      const eggFork = ingredient({
+        id: 'i1',
+        name: 'Eggs',
+        amount: 2,
+        unit: 'whole',
+        imagePaths: ['duck-eggs.jpg']
+      });
+      const nodes: RecipeNode[] = [
+        node({
+          id: 'n1',
+          ingredientChanges: [
+            ingredientChange({ id: 'c1', changeType: 'add', body: egg })
+          ]
+        }),
+        node({
+          id: 'n2',
+          parentId: 'n1',
+          ingredientChanges: [
+            ingredientChange({
+              id: 'c2',
+              changeType: 'edit',
+              targetId: 'i1',
+              body: eggFork
+            })
+          ]
+        })
+      ];
+      const state = applyNodes(nodes);
+      expect(state.ingredients[0].imagePaths).toEqual(['duck-eggs.jpg']);
+    });
+
+    it('clears imagePaths when a descendant edit provides an empty array', () => {
+      const egg = ingredient({
+        id: 'i1',
+        name: 'Eggs',
+        amount: 2,
+        unit: 'whole',
+        imagePaths: ['eggs.jpg']
+      });
+      const eggCleared = ingredient({
+        id: 'i1',
+        name: 'Eggs',
+        amount: 2,
+        unit: 'whole',
+        imagePaths: []
+      });
+      const nodes: RecipeNode[] = [
+        node({
+          id: 'n1',
+          ingredientChanges: [
+            ingredientChange({ id: 'c1', changeType: 'add', body: egg })
+          ]
+        }),
+        node({
+          id: 'n2',
+          parentId: 'n1',
+          ingredientChanges: [
+            ingredientChange({
+              id: 'c2',
+              changeType: 'edit',
+              targetId: 'i1',
+              body: eggCleared
+            })
+          ]
+        })
+      ];
+      const state = applyNodes(nodes);
+      expect(state.ingredients[0].imagePaths).toEqual([]);
+    });
+
+    it('drops imagePaths on remove', () => {
+      const egg = ingredient({
+        id: 'i1',
+        name: 'Eggs',
+        amount: 2,
+        unit: 'whole',
+        imagePaths: ['eggs.jpg']
+      });
+      const nodes: RecipeNode[] = [
+        node({
+          id: 'n1',
+          ingredientChanges: [
+            ingredientChange({ id: 'c1', changeType: 'add', body: egg })
+          ]
+        }),
+        node({
+          id: 'n2',
+          parentId: 'n1',
+          ingredientChanges: [
+            ingredientChange({
+              id: 'c2',
+              changeType: 'remove',
+              targetId: 'i1',
+              body: null
+            })
+          ]
+        })
+      ];
+      const state = applyNodes(nodes);
+      expect(state.ingredients).toEqual([]);
+    });
+
+    it('materializes imagePaths on directions with the same rules', () => {
+      const mixWithImages = {
+        id: 'd1',
+        body: 'Mix dry ingredients.',
+        imagePaths: ['mix-step-1.jpg', 'mix-step-2.jpg']
+      };
+      const nodes: RecipeNode[] = [
+        node({
+          id: 'n1',
+          directionChanges: [
+            directionChange({
+              id: 'c1',
+              changeType: 'add',
+              body: mixWithImages as unknown as Direction
+            })
+          ]
+        })
+      ];
+      const state = applyNodes(nodes);
+      expect(state.directions[0].imagePaths).toEqual([
+        'mix-step-1.jpg',
+        'mix-step-2.jpg'
+      ]);
+    });
+  });
+
   describe('malformed changes (silent skip)', () => {
     it('skips an add with no body', () => {
       const nodes: RecipeNode[] = [
@@ -846,6 +1050,7 @@ function seedNode(
     source: null,
     isPublic: false,
     isFavorite: false,
+    imagePath: null,
   };
 }
 

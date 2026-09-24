@@ -159,23 +159,36 @@ export function applyNodes(nodes: RecipeNode[]): RecipeState {
 	// Track the latest note per item from add/edit changes; deleted on remove.
 	const ingredientNotes = new Map<string, string | null>();
 	const directionNotes = new Map<string, string | null>();
+	// Track the latest imagePaths per item from add/edit changes. Per the
+	// imagePaths replay contract: body.imagePaths === null (or missing)
+	// means "fall through to ancestor's set"; body.imagePaths === []
+	// means "cleared by this change"; body.imagePaths === [...] means
+	// "replace with this set". We only touch the map when the body
+	// explicitly carries the field.
+	const ingredientImages = new Map<string, string[]>();
+	const directionImages = new Map<string, string[]>();
 
 	for (const node of nodes) {
 		for (const change of node.ingredientChanges) {
-			applyIngredientChange(ingredients, ingredientNotes, change);
+			applyIngredientChange(ingredients, ingredientNotes, ingredientImages, change);
 		}
 		for (const change of node.directionChanges) {
-			applyDirectionChange(directions, directionNotes, change);
+			applyDirectionChange(directions, directionNotes, directionImages, change);
 		}
 	}
 
 	const ingredientList = Array.from(ingredients.values()).map((ing) => ({
 		...ing,
-		note: ingredientNotes.get(ing.id) ?? null
+		note: ingredientNotes.get(ing.id) ?? null,
+		// Final imagePaths comes from the per-row image map; if absent
+		// (e.g. an add without body.imagePaths), the row renders
+		// without images.
+		imagePaths: ingredientImages.get(ing.id) ?? null
 	}));
 	const directionList = Array.from(directions.values()).map((dir) => ({
 		...dir,
-		note: directionNotes.get(dir.id) ?? null
+		note: directionNotes.get(dir.id) ?? null,
+		imagePaths: directionImages.get(dir.id) ?? null
 	}));
 
 	return {
@@ -184,9 +197,28 @@ export function applyNodes(nodes: RecipeNode[]): RecipeState {
 	};
 }
 
+/**
+ * Apply the imagePaths replay rule to the per-row image map. Called
+ * from both applyIngredientChange and applyDirectionChange for any
+ * change that carries a body. Skips when body.imagePaths is null or
+ * undefined (fall-through) or when the change has no body at all
+ * (e.g. remove).
+ */
+function applyImagePaths<T extends { id: string; imagePaths?: string[] | null }>(
+	state: Map<string, T>,
+	images: Map<string, string[]>,
+	body: T | null | undefined
+): void {
+	if (!body || !('imagePaths' in body)) return;
+	// explicit null = fall through (preserve ancestor's set)
+	if (body.imagePaths === null || body.imagePaths === undefined) return;
+	images.set(body.id, body.imagePaths);
+}
+
 function applyIngredientChange(
 	state: Map<string, Ingredient>,
 	notes: Map<string, string | null>,
+	images: Map<string, string[]>,
 	change: IngredientChange
 ): void {
 	switch (change.changeType) {
@@ -214,6 +246,7 @@ function applyIngredientChange(
 			if (notes.has(id)) notes.delete(id);
 			state.set(id, { ...change.body, id });
 			notes.set(id, change.note ?? null);
+			applyImagePaths(state, images, change.body);
 			return;
 		}
 		case 'edit':
@@ -226,6 +259,7 @@ function applyIngredientChange(
 			if (state.has(change.targetId)) {
 				state.set(change.targetId, { ...change.body, id: change.targetId });
 				notes.set(change.targetId, change.note ?? null);
+				applyImagePaths(state, images, change.body);
 			}
 			return;
 		}
@@ -233,6 +267,7 @@ function applyIngredientChange(
 			if (change.targetId) {
 				state.delete(change.targetId);
 				notes.delete(change.targetId);
+				images.delete(change.targetId);
 			}
 			return;
 		}
@@ -242,6 +277,7 @@ function applyIngredientChange(
 function applyDirectionChange(
 	state: Map<string, Direction>,
 	notes: Map<string, string | null>,
+	images: Map<string, string[]>,
 	change: DirectionChange
 ): void {
 	switch (change.changeType) {
@@ -262,6 +298,7 @@ function applyDirectionChange(
 			if (notes.has(id)) notes.delete(id);
 			state.set(id, { ...change.body, id });
 			notes.set(id, change.note ?? null);
+			applyImagePaths(state, images, change.body);
 			return;
 		}
 		case 'edit':
@@ -273,6 +310,7 @@ function applyDirectionChange(
 			if (state.has(change.targetId)) {
 				state.set(change.targetId, { ...change.body, id: change.targetId });
 				notes.set(change.targetId, change.note ?? null);
+				applyImagePaths(state, images, change.body);
 			}
 			return;
 		}
@@ -280,6 +318,7 @@ function applyDirectionChange(
 			if (change.targetId) {
 				state.delete(change.targetId);
 				notes.delete(change.targetId);
+				images.delete(change.targetId);
 			}
 			return;
 		}
@@ -297,7 +336,8 @@ export function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 		author: row.author ?? null,
 		source: row.source ?? null,
 		isPublic: row.isPublic ?? false,
-		isFavorite: row.isFavorite ?? false
+		isFavorite: row.isFavorite ?? false,
+		imagePath: row.imagePath ?? null
 	};
 }
 
@@ -347,6 +387,7 @@ function validateIngredientChange(c: unknown, index: number): asserts c is Ingre
 		if (!obj.body || typeof obj.body !== 'object') {
 			throw new InvalidChangeError(`ingredientChanges[${index}] (add) must have a body`);
 		}
+		validateIngredientBodyImagePaths(obj.body as Record<string, unknown>, index);
 	} else if (op === 'edit' || op === 'substitute') {
 		// 'substitute' is syntactic sugar over 'edit': same wire shape
 		// (targetId + body), same materialize behavior. UI surfaces use
@@ -358,6 +399,7 @@ function validateIngredientChange(c: unknown, index: number): asserts c is Ingre
 		if (!obj.body || typeof obj.body !== 'object') {
 			throw new InvalidChangeError(`ingredientChanges[${index}] (${op}) must have a body`);
 		}
+		validateIngredientBodyImagePaths(obj.body as Record<string, unknown>, index);
 	} else {
 		// remove
 		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
@@ -365,6 +407,49 @@ function validateIngredientChange(c: unknown, index: number): asserts c is Ingre
 		}
 		if (obj.body !== null) {
 			throw new InvalidChangeError(`ingredientChanges[${index}] (remove) must have body === null`);
+		}
+	}
+}
+
+/**
+ * Validate the optional imagePaths field on an ingredient change body.
+ * Allowed shapes: undefined / null (fall-through), string[] (replace
+ * with this set, including [] for explicit clear). Reject anything
+ * else (e.g. strings, objects, numbers) — the wire shape is strict.
+ */
+function validateIngredientBodyImagePaths(body: Record<string, unknown>, changeIndex: number): void {
+	if (!('imagePaths' in body) || body.imagePaths === null || body.imagePaths === undefined) return;
+	if (!Array.isArray(body.imagePaths)) {
+		throw new InvalidChangeError(
+			`ingredientChanges[${changeIndex}].body.imagePaths must be an array of strings when present`
+		);
+	}
+	for (const [i, p] of body.imagePaths.entries()) {
+		if (typeof p !== 'string' || p.length === 0) {
+			throw new InvalidChangeError(
+				`ingredientChanges[${changeIndex}].body.imagePaths[${i}] must be a non-empty string`
+			);
+		}
+	}
+}
+
+/**
+ * Direction-body imagePaths validator. Mirrors the ingredient version
+ * above — the field lives on the change body and uses the same
+ * null/[]/[...] replay contract.
+ */
+function validateDirectionBodyImagePaths(body: Record<string, unknown>, changeIndex: number): void {
+	if (!('imagePaths' in body) || body.imagePaths === null || body.imagePaths === undefined) return;
+	if (!Array.isArray(body.imagePaths)) {
+		throw new InvalidChangeError(
+			`directionChanges[${changeIndex}].body.imagePaths must be an array of strings when present`
+		);
+	}
+	for (const [i, p] of body.imagePaths.entries()) {
+		if (typeof p !== 'string' || p.length === 0) {
+			throw new InvalidChangeError(
+				`directionChanges[${changeIndex}].body.imagePaths[${i}] must be a non-empty string`
+			);
 		}
 	}
 }
@@ -392,6 +477,7 @@ function validateDirectionChange(c: unknown, index: number): asserts c is Direct
 		if (!obj.body || typeof obj.body !== 'object') {
 			throw new InvalidChangeError(`directionChanges[${index}] (add) must have a body`);
 		}
+		validateDirectionBodyImagePaths(obj.body as Record<string, unknown>, index);
 	} else if (op === 'edit' || op === 'substitute') {
 		// See ingredient validator: 'substitute' has the same shape as
 		// 'edit' (targetId + body); the changeType only differs for UI
@@ -402,6 +488,7 @@ function validateDirectionChange(c: unknown, index: number): asserts c is Direct
 		if (!obj.body || typeof obj.body !== 'object') {
 			throw new InvalidChangeError(`directionChanges[${index}] (${op}) must have a body`);
 		}
+		validateDirectionBodyImagePaths(obj.body as Record<string, unknown>, index);
 	} else {
 		// remove
 		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {

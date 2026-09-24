@@ -96,7 +96,8 @@ function node(partial: Partial<RecipeNode> & { id: string }): RecipeNode {
 		author: null,
 		source: null,
 		isPublic: false,
-		isFavorite: false
+		isFavorite: false,
+		imagePath: null
 	};
 }
 

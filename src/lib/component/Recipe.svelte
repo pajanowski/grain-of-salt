@@ -19,6 +19,7 @@
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
 	import SubstitutesPanel from './SubstitutesPanel.svelte';
 	import UnitAutocomplete from './UnitAutocomplete.svelte';
+	import ImageLightbox from './ImageLightbox.svelte';
 	import {
 		tokenizeMaskedBody,
 		displayToRaw,
@@ -34,6 +35,16 @@
 	let recipe = $derived(data.recipe);
 	let currentNode = $derived(data.currentNode);
 	let rootNodeId = $derived(recipe.id);
+	/**
+	 * Per-row imagePaths as materialized by the chain without the
+	 * current leaf. Edit forms consume this to render the "Inherit
+	 * images from parent" affordance on the Images tab. Loaded
+	 * server-side via applyNodes(history.slice(0, -1)) so each row's
+	 * inherited set is computed once for the whole page.
+	 */
+	let inheritedImages = $derived(
+		data.inheritedImages ?? { ingredients: {}, directions: {} }
+	);
 	// Substitutes authored by any descendant of the current node.
 	// See src/routes/mise/recipes/[slug]/+page.server.ts — the loader
 	// resolves the descendant graph server-side and passes it in. The
@@ -53,6 +64,29 @@
 
 	function closeSubstitutesSidebar() {
 		openSubstitutesFor = null;
+	}
+
+	// Lightbox state. Page-level — multiple per-row mounts would fight
+	// over focus and z-index. Rows call openImageLightbox(paths, i) on
+	// click; the ImageLightbox component takes it from here.
+	let lightboxOpen = $state(false);
+	let lightboxPaths = $state<string[]>([]);
+	let lightboxIndex = $state(0);
+	function openImageLightbox(paths: string[], index = 0) {
+		lightboxPaths = paths;
+		lightboxIndex = index;
+		lightboxOpen = true;
+	}
+	function closeImageLightbox() {
+		lightboxOpen = false;
+	}
+	function lightboxPrev() {
+		if (lightboxPaths.length === 0) return;
+		lightboxIndex = (lightboxIndex - 1 + lightboxPaths.length) % lightboxPaths.length;
+	}
+	function lightboxNext() {
+		if (lightboxPaths.length === 0) return;
+		lightboxIndex = (lightboxIndex + 1) % lightboxPaths.length;
 	}
 
 	let leafIngredientChanges = $state<IngredientChange[]>([]);
@@ -88,7 +122,17 @@
 					map.set(c.body.id, c.body);
 				}
 			} else if (c.changeType === 'edit' && c.body && c.targetId) {
-				map.set(c.targetId, c.body);
+				// Preserve fall-through semantics for imagePaths (and any
+				// future fall-through body field): an `undefined` value
+				// means "this change does not touch the field" — leave
+				// the ancestor's value intact.
+				const existing = map.get(c.targetId);
+				if (existing) {
+					const merged = applyFallThrough(existing, c.body);
+					map.set(c.targetId, merged);
+				} else {
+					map.set(c.targetId, c.body);
+				}
 			} else if (c.changeType === 'remove' && c.targetId) {
 				map.delete(c.targetId);
 			}
@@ -112,13 +156,40 @@
 					map.set(c.body.id, c.body);
 				}
 			} else if (c.changeType === 'edit' && c.body && c.targetId) {
-				map.set(c.targetId, c.body);
+				const existing = map.get(c.targetId);
+				if (existing) {
+					const merged = applyFallThrough(existing, c.body);
+					map.set(c.targetId, merged);
+				} else {
+					map.set(c.targetId, c.body);
+				}
 			} else if (c.changeType === 'remove' && c.targetId) {
 				map.delete(c.targetId);
 			}
 		}
 		return Array.from(map.values());
 	});
+
+	/**
+	 * Apply fall-through semantics to a leaf change's body: any field
+	 * set to `undefined` keeps the ancestor's value, any field with a
+	 * value (including `null` for "explicitly cleared") overrides.
+	 * Used by the client-side replay of leaf changes before save so
+	 * the staged UI matches what applyNodes will materialize on the
+	 * server.
+	 */
+	function applyFallThrough<T>(ancestor: T, body: T): T {
+		const result = { ...(ancestor as object), ...(body as object) } as T;
+		const bodyObj = body as Record<string, unknown>;
+		const ancObj = ancestor as Record<string, unknown>;
+		const resultObj = result as Record<string, unknown>;
+		for (const key of Object.keys(bodyObj)) {
+			if (bodyObj[key] === undefined) {
+				resultObj[key] = ancObj[key];
+			}
+		}
+		return result;
+	}
 
 	function leafRecordForIngredient(rowId: string): IngredientChange | undefined {
 		return leafIngredientChanges.find(
@@ -819,6 +890,59 @@
 			alert(`Failed to update favorite: ${errorMessage(e)}`);
 		}
 	}
+
+	/**
+	 * Cover-image state (per-recipe-version final-dish image). The
+	 * file is uploaded to recipe-images/{owner}/nodes/{nodeId}/final.{ext}
+	 * and the row's image_path column is set to the returned path.
+	 */
+	let coverImageBusy = $state(false);
+	let coverImageError = $state<string | null>(null);
+
+	async function onCoverImageSelected(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+		coverImageBusy = true;
+		coverImageError = null;
+		try {
+			const form = new FormData();
+			form.append('file', file);
+			const res = await fetch(`/mise/api/recipe-node/${currentNode.id}/image`, {
+				method: 'POST',
+				body: form
+			});
+			if (!res.ok) {
+				coverImageError = `${res.status}: ${await res.text()}`;
+				return;
+			}
+			await invalidateAll();
+		} catch (e) {
+			coverImageError = (e as Error).message;
+		} finally {
+			coverImageBusy = false;
+		}
+	}
+
+	async function onRemoveCoverImage() {
+		coverImageBusy = true;
+		coverImageError = null;
+		try {
+			const res = await fetch(`/mise/api/recipe-node/${currentNode.id}/image`, {
+				method: 'DELETE'
+			});
+			if (!res.ok) {
+				coverImageError = `${res.status}: ${await res.text()}`;
+				return;
+			}
+			await invalidateAll();
+		} catch (e) {
+			coverImageError = (e as Error).message;
+		} finally {
+			coverImageBusy = false;
+		}
+	}
 	async function copyShareLink() {
 		const url = `${window.location.origin}/recipe/${currentNode.id}`;
 		await navigator.clipboard.writeText(url);
@@ -840,8 +964,8 @@
 
 <div class="mx-auto flex max-w-3xl flex-col gap-6">
 	<!-- Recipe header -->
-	<div class="flex items-center justify-between">
-		<div>
+	<div class="flex items-start justify-between gap-4">
+		<div class="flex-1 min-w-0">
 			<h1 class="flex items-center gap-2 text-2xl font-bold">
 				{#if data.currentNode.isFavorite}
 					<svg
@@ -889,6 +1013,63 @@
 			{/if}
 		</div>
 		<ContextMenu items={menuItems} label="Recipe actions" />
+	</div>
+
+	<!-- Final-dish image (per-version: lives on the leaf node, not
+	     replayed across forks). Click the thumbnail to open the
+	     lightbox. The Set / Remove buttons are the per-version
+	     mutation affordances; see /api/recipe-node/[nodeId]/image. -->
+	<div class="flex items-start gap-4">
+		{#if data.currentNode.imagePath}
+			<button
+				type="button"
+				class="block h-32 w-44 overflow-hidden rounded border border-stone-300 hover:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 shrink-0"
+				onclick={() => openImageLightbox([data.currentNode.imagePath!], 0)}
+				aria-label="Open final-dish image"
+				data-testid="recipe-cover-image"
+			>
+				<img
+					src="/api/image?path={encodeURIComponent(data.currentNode.imagePath)}"
+					alt=""
+					class="h-full w-full object-cover"
+				/>
+			</button>
+		{:else}
+			<div
+				class="h-32 w-44 rounded border border-dashed border-stone-300 flex items-center justify-center text-xs text-stone-400 shrink-0"
+				data-testid="recipe-cover-image-empty"
+			>
+				No cover image
+			</div>
+		{/if}
+		<div class="flex flex-col gap-1.5">
+			<label
+				class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-stone-300 cursor-pointer hover:bg-stone-100 text-sm"
+				data-testid="upload-cover-label"
+			>
+				{data.currentNode.imagePath ? 'Replace cover image' : 'Set cover image'}
+				<input
+					type="file"
+					class="hidden"
+					accept="image/*"
+					onchange={onCoverImageSelected}
+					data-testid="upload-cover-input"
+				/>
+			</label>
+			{#if data.currentNode.imagePath}
+				<button
+					type="button"
+					class="text-xs text-stone-500 hover:text-red-600 underline"
+					onclick={onRemoveCoverImage}
+					data-testid="remove-cover-button"
+				>
+					Remove cover image
+				</button>
+			{/if}
+			{#if coverImageError}
+				<p class="text-sm text-red-600">{coverImageError}</p>
+			{/if}
+		</div>
 	</div>
 
 	<!-- Ingredients -->
@@ -956,6 +1137,10 @@
 									kind: 'ingredient',
 									rowLabel: `${ing.amount ?? ''} ${ing.unit ?? ''} ${ing.name}`.trim()
 								})}
+							inheritedImagePaths={inheritedImages.ingredients[ing.id] ?? []}
+							onOpenImageLightbox={(paths, i) => openImageLightbox(paths, i)}
+							nodeId={currentNode.id}
+							changeId={leafRecordForIngredient(ing.id)?.id}
 						/>
 					</li>
 				{/each}
@@ -1088,6 +1273,10 @@
 									kind: 'direction',
 									rowLabel: dir.body
 								})}
+							inheritedImagePaths={inheritedImages.directions[dir.id] ?? []}
+							onOpenImageLightbox={(paths, i) => openImageLightbox(paths, i)}
+							nodeId={currentNode.id}
+							changeId={leafRecordForDirection(dir.id)?.id}
 						/>
 					</li>
 				{/each}
@@ -1252,4 +1441,13 @@
 	selection={openSubstitutesFor}
 	byRowId={descendantSubstitutesByRowId}
 	onclose={closeSubstitutesSidebar}
+/>
+
+<ImageLightbox
+	open={lightboxOpen}
+	paths={lightboxPaths}
+	index={lightboxIndex}
+	onClose={closeImageLightbox}
+	onPrev={lightboxPrev}
+	onNext={lightboxNext}
 />

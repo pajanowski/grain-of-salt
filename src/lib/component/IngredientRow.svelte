@@ -8,6 +8,8 @@
 	import Tabs from './Tabs.svelte';
 	import NoteIcon from './NoteIcon.svelte';
 	import UnitAutocomplete from './UnitAutocomplete.svelte';
+	import ImageField from './ImageField.svelte';
+	import ImageStrip from './ImageStrip.svelte';
 	import { normalizeUnit, displayUnit } from '$lib/unit';
 	import type { DescendantSubstitute } from '$lib/types/descendantSubstitute';
 
@@ -59,6 +61,42 @@
 		 * picked so the saved row renders with the blue SUB badge.
 		 */
 		changeType?: 'edit' | 'substitute';
+		/**
+		 * The set of imagePaths the ancestor chain provides via the
+		 * applyNodes replay (without the leaf's own change). The "Inherit
+		 * images from parent" button on the edit form's Images tab uses
+		 * this to copy the inherited set onto the change record when the
+		 * user wants to keep the ancestor's images on this version.
+		 *
+		 * Empty when there's nothing to inherit (root recipes, or rows
+		 * whose ancestors have no images).
+		 */
+		inheritedImagePaths?: string[];
+		/**
+		 * Called when the user clicks a thumbnail on this row. The parent
+		 * page owns the lightbox state and decides which images to show.
+		 * The row passes its full materialized list plus the clicked
+		 * index so multi-image lightboxes can navigate.
+		 */
+		onOpenImageLightbox?: (paths: string[], index: number) => void;
+		/**
+		 * The leaf node's id — used to scope per-change image uploads.
+		 * Combined with the per-row `changeId` (minted below), uploads
+		 * land at `{owner}/{ingredients|directions}/{changeId}.{ext}`.
+		 * Optional for callers that don't support uploads (e.g. read-
+		 * only render of a row without an active edit form).
+		 */
+		nodeId?: string;
+		/**
+		 * The change record's id (uuid) for uploads during this form
+		 * session. The form mints this up-front in `startEdit` so the
+		 * upload endpoint knows where to write the file. The save
+		 * handler reuses the same id when it records the change so
+		 * the change record and the storage object key off the same
+		 * identifier. Optional — when missing, the upload UI is
+		 * disabled (read-only consumers like PublicRecipe.svelte).
+		 */
+		changeId?: string;
 	};
 
 	let {
@@ -76,16 +114,29 @@
 		descendantSubstitutes = null,
 		onOpenSubstitutes,
 		readOnly = false,
-		changeType = 'edit'
+		changeType = 'edit',
+		inheritedImagePaths = [],
+		onOpenImageLightbox,
+		nodeId,
+		changeId
 	}: Props = $props();
 
 	let editing = $state(false);
 	let draft = $state<Ingredient>({ ...ingredient });
 	let amountDraft = $state('');
 	let amountError = $state<string | null>(null);
-	let editTab = $state<'details' | 'note'>('details');
+	let editTab = $state<'details' | 'note' | 'images'>('details');
 	let noteDraft = $state('');
 	let confirmRemoveOpen = $state(false);
+
+	/**
+	 * Local image preview for the edit form. `undefined` means the
+	 * user has not opened the Images tab — the change's `body.imagePaths`
+	 * stays unset so ancestors pass through (fall-through replay).
+	 * Switching to a defined list (either by clicking Inherit or by
+	 * uploading) makes the change record the explicit replacement.
+	 */
+	let localImagePaths = $state<string[] | undefined>(undefined);
 
 	// Which changeType to emit on save. The Edit menu item leaves this as
 	// 'edit'; the Substitute menu item flips it to 'substitute' for the
@@ -99,6 +150,10 @@
 		noteDraft = note ?? '';
 		editTab = 'details';
 		saveChangeType = changeType;
+		// Reset the local image sentinel: each form open is independent.
+		// The user must explicitly open the Images tab to materialize a
+		// value, or it stays undefined and ancestors pass through.
+		localImagePaths = undefined;
 		editing = true;
 	}
 
@@ -129,7 +184,13 @@
 		handler({
 			...draft,
 			amount: amtResult.value!,
-			unit: normalizedUnit
+			unit: normalizedUnit,
+			// Wire imagePaths: undefined sentinel means "leave the field
+			// off the change record" so ancestors pass through. A defined
+			// list (possibly empty) means "this change explicitly sets the
+			// images to this list." Recipe.svelte strips the field when
+			// the value is undefined.
+			imagePaths: localImagePaths === undefined ? undefined : [...localImagePaths]
 		});
 		const trimmedNote = noteDraft.trim();
 		onUpdateNote(trimmedNote.length > 0 ? trimmedNote : null);
@@ -182,6 +243,7 @@
 	{#if editing}
 		<form
 			class="flex flex-col gap-2 flex-1 rounded border border-stone-200 bg-stone-50 p-3"
+			data-editing-ingredient
 			onkeydown={(e) => {
 				if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
 					e.preventDefault();
@@ -192,7 +254,14 @@
 			<Tabs
 				tabs={[
 					{ id: 'details', label: 'Details' },
-					{ id: 'note', label: noteDraft.length > 0 ? 'Note ●' : 'Note' }
+					{ id: 'note', label: noteDraft.length > 0 ? 'Note ●' : 'Note' },
+					{
+						id: 'images',
+						label:
+							localImagePaths && localImagePaths.length > 0
+								? `Images (${localImagePaths.length})`
+								: 'Images'
+					}
 				]}
 				selected={editTab}
 				onchange={(id) => (editTab = id)}
@@ -202,7 +271,6 @@
 					class="border rounded px-3 py-2"
 					placeholder="Ingredient name"
 					aria-label="Ingredient name"
-					data-editing-ingredient
 					bind:value={draft.name}
 				/>
 				<div class="flex gap-2">
@@ -219,14 +287,28 @@
 				{#if amountError}
 					<p class="text-sm text-red-600">{amountError}</p>
 				{/if}
-			{:else}
+				{:else if editTab === 'note'}
 				<textarea
 					class="border rounded px-3 py-2 text-sm w-full"
 					rows="3"
 					placeholder="Optional note for this ingredient…"
 					aria-label="Note"
 					bind:value={noteDraft}></textarea>
-			{/if}
+				{:else if editTab === 'images'}
+					<ImageField
+						localPaths={localImagePaths}
+						inheritedPaths={inheritedImagePaths}
+						nodeId={nodeId ?? ''}
+						changeId={changeId ?? ''}
+						kind="ingredient"
+						onAddPath={(p) => (localImagePaths = [...(localImagePaths ?? []), p])}
+						onRemovePath={(p) => {
+							if (localImagePaths === undefined) return;
+							localImagePaths = localImagePaths.filter((x) => x !== p);
+						}}
+						onInherit={(paths) => (localImagePaths = [...paths])}
+					/>
+				{/if}
 			<div class="flex gap-2">
 				<button type="button" class="btn-amber" onclick={doEdit}>Save</button>
 				<button type="button" class="btn-amber secondary" onclick={cancelEdit}>Cancel</button>
@@ -274,6 +356,12 @@
 				</p>
 			{/if}
 		</div>
+		{#if ingredient.imagePaths && ingredient.imagePaths.length > 0}
+			<ImageStrip
+				imagePaths={ingredient.imagePaths}
+				onOpen={(paths, i) => onOpenImageLightbox?.(paths, i)}
+			/>
+		{/if}
 		{#if !readOnly}
 			<ContextMenu {items} label={`Actions for ${ingredient.name}`} />
 		{/if}

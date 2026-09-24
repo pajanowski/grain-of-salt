@@ -59,4 +59,12 @@ export interface RecipeNode {
 	isPublic: boolean;
 	/** True when the owner has marked this node as a favorite. */
 	isFavorite: boolean;
+	/**
+	 * Storage path (relative to the recipe-images bucket) of the
+	 * "final dish" image for this node. Per-node, not per-recipe:
+	 * forking leaves it null on the new node. The replay pass does
+	 * NOT touch this — only changes inside ingredientChanges /
+	 * directionChanges cascade down the chain.
+	 */
+	imagePath: string | null;
 }
