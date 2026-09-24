@@ -6,10 +6,10 @@ import { eq } from 'drizzle-orm';
 import { createServiceClient } from '$lib/server/supabase';
 
 /**
- * GET /api/image?path=<storage-path>
+ * GET /mise/api/image?path=<storage-path>
  *
  * Mints a short-lived signed URL for a recipe image and 302-redirects
- * the browser to it. The browser's `<img src="/api/image?path=...">`
+ * the browser to it. The browser's `<img src="/mise/api/image?path=...">`
  * follows the redirect transparently.
  *
  * Two access paths:

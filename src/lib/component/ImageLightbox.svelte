@@ -14,7 +14,7 @@
 	 * (paths, index) on click via the `onOpen` callback prop; the
 	 * parent (`Recipe.svelte`) holds the open/paths/index state.
 	 *
-	 * Image source: `/api/image?path=<storage-path>` (signed-URL
+	 * Image source: `/mise/api/image?path=<storage-path>` (signed-URL
 	 * gateway). The browser follows the 302 transparently.
 	 *
 	 * Keyboard:
@@ -59,7 +59,7 @@
 			{#if paths.length > 0}
 				<div class="relative flex items-center justify-center">
 					<img
-						src="/api/image?path={encodeURIComponent(paths[index])}"
+						src="/mise/api/image?path={encodeURIComponent(paths[index])}"
 						alt=""
 						class="max-h-[92vh] max-w-full object-contain rounded-md"
 					/>
@@ -112,7 +112,7 @@
 					     browser downloads from the storage object URL,
 					     not from the api endpoint). -->
 					<a
-						href="/api/image?path={encodeURIComponent(paths[index])}&download=1"
+						href="/mise/api/image?path={encodeURIComponent(paths[index])}&download=1"
 						class="absolute bottom-2 right-2 bg-black/40 text-white hover:bg-black/60 rounded-md p-2 inline-flex"
 						data-testid="lightbox-download"
 						aria-label="Download image"

@@ -1029,7 +1029,7 @@
 				data-testid="recipe-cover-image"
 			>
 				<img
-					src="/api/image?path={encodeURIComponent(data.currentNode.imagePath)}"
+					src="/mise/api/image?path={encodeURIComponent(data.currentNode.imagePath)}"
 					alt=""
 					class="h-full w-full object-cover"
 				/>

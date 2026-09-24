@@ -173,7 +173,7 @@
 			{#each list as path, i (path)}
 				<li class="relative">
 					<img
-						src="/api/image?path={encodeURIComponent(path)}"
+						src="/mise/api/image?path={encodeURIComponent(path)}"
 						alt=""
 						class="h-16 w-16 object-cover rounded border border-stone-300"
 						data-testid="edit-image-thumb"

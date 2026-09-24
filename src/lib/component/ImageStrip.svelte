@@ -31,7 +31,7 @@
 				data-image-index={i}
 			>
 				<img
-					src="/api/image?path={encodeURIComponent(path)}"
+					src="/mise/api/image?path={encodeURIComponent(path)}"
 					alt=""
 					class="h-full w-full object-cover"
 					loading="lazy"
