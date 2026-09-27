@@ -39,7 +39,7 @@
 					(item) =>
 						item.label.toLowerCase().includes(trimmedSearch.toLowerCase()) ||
 						item.value.toLowerCase().includes(trimmedSearch.toLowerCase())
-				)
+				).sort((a,b) => a.label.startsWith(trimmedSearch.toLowerCase()) && a.label.length > b.label.length ? -1 : 1)
 	);
 
 	const exactMatch = $derived(

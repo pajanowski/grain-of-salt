@@ -17,13 +17,13 @@
 		};
 	});
 
+
 	function handleExactMatch(search: string, allItems: AutocompleteItem[]) {
 		const normalized = search.trim().toLowerCase();
 		const canonical =
 			allItems.find(
 				(item) =>
-					item.value.toLowerCase() === normalized ||
-					item.label.toLowerCase().includes(normalized)
+					item.value.toLowerCase() === normalized
 			)?.value ?? search.trim();
 		value = canonical;
 		onchange?.(canonical);

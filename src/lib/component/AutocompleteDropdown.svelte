@@ -135,6 +135,8 @@ Autocomplete unit more accessible.
 					e.preventDefault();
 					e.stopPropagation();
 					selectIndex(highlightedIndex);
+				} else if (highlightedIndex === -1) {
+					onClose();
 				}
 				return;
 			}
@@ -148,16 +150,16 @@ Autocomplete unit more accessible.
 
 	// Reset highlight when the dropdown opens or the item set changes
 	// shape.
-	$effect(() => {
-		if (!open) {
-			highlightedIndex = -1;
-		} else if (highlightedIndex < 0 && items.length > 0) {
-			// Open focused on the first option, like a native listbox.
-			highlightedIndex = 0;
-		} else if (highlightedIndex >= items.length) {
-			highlightedIndex = items.length > 0 ? 0 : -1;
-		}
-	});
+	// $effect(() => {
+	// 	if (!open) {
+	// 		highlightedIndex = -1;
+	// 	} else if (highlightedIndex < 0 && items.length > 0) {
+	// 		// Open focused on the first option, like a native listbox.
+	// 		highlightedIndex = 0;
+	// 	} else if (highlightedIndex >= items.length) {
+	// 		highlightedIndex = items.length > 0 ? 0 : -1;
+	// 	}
+	// });
 
 	let dropdownEl = $state<HTMLDivElement | null>(null);
 	// null while closed; set after the listbox mounts so the height is real.
