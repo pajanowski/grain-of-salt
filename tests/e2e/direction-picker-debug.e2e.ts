@@ -236,17 +236,28 @@ test('T10: ArrowDown then Enter selects the highlighted option', async ({ page }
 	const picker = getIngredientPicker(page);
 	await expect(picker).toBeVisible({ timeout: 3000 });
 
+	let firstOption = picker.locator('[role="option"]').first();
+	await expect(firstOption).toHaveAttribute('aria-selected', 'false');
 	// T2 made the dropdown open with index 0 already highlighted, so a
 	// single ArrowDown moves the highlight to index 1, not 0.
 	await page.keyboard.press('ArrowDown');
 	await page.waitForTimeout(100);
 
 	// The first option should no longer be highlighted.
-	const firstOption = picker.locator('[role="option"]').first();
-	await expect(firstOption).toHaveAttribute('aria-selected', 'false');
+	firstOption = picker.locator('[role="option"]').first();
+	await expect(firstOption).toHaveAttribute('aria-selected', 'true');
 	// The second option should now be the highlighted one.
-	const secondOption = picker.locator('[role="option"]').nth(1);
+	let secondOption = picker.locator('[role="option"]').nth(1);
+	await expect(secondOption).toHaveAttribute('aria-selected', 'false');
+
+	await page.keyboard.press('ArrowDown');
+	await page.waitForTimeout(100);
+
+  secondOption = picker.locator('[role="option"]').nth(1);
 	await expect(secondOption).toHaveAttribute('aria-selected', 'true');
+
+	firstOption = picker.locator('[role="option"]').first();
+	await expect(firstOption).toHaveAttribute('aria-selected', 'false');
 
 	// Enter activates it.
 	await page.keyboard.press('Enter');
