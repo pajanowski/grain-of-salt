@@ -98,17 +98,19 @@
 
 	function labelFor(item: AnnotatedChange<IngredientChange | DirectionChange>): string {
 		const c = item.change;
-		if (c.changeType === 'remove') return item.kind ;
-		if (!c.body) return item.kind;
-		if (item.kind === 'ingredient') {
-			const ing = c.body as Ingredient;
-			const parts: string[] = [ing.name];
-			if (ing.amount) parts.push(String(ing.amount));
-			if (ing.unit) parts.push(ing.unit);
-			return parts.join(' ');
-		}
-		const dir = c.body as { body: string };
-		return dir.body || '(empty)';
+    if (item.kind === 'ingredient'){
+      const c = item.change;
+      const ing = c.body as Ingredient;
+      const parts: string[] = [ing.name];
+      if (ing.amount) parts.push(String(ing.amount));
+      if (ing.unit) parts.push(ing.unit);
+      return parts.join(' ');
+    }       
+		if (item.kind === 'direction') {
+      const dir = c.body as { body: string };
+      return dir.body || '(empty)'
+    }
+    return "";
 	}
 
 	function changeText(item: AnnotatedChange<IngredientChange | DirectionChange>): string {
