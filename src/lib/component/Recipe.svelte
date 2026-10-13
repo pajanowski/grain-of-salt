@@ -264,7 +264,8 @@
 			});
 		}
 	}
-	function removeIngredient(rowId: string) {
+	function removeIngredient(ingredient: Ingredient) {
+    const rowId = ingredient.id;
 		const idx = leafIngredientChanges.findIndex(
 			(c) =>
 				(c.changeType === 'add' && c.body?.id === rowId) ||
@@ -278,7 +279,7 @@
 				changeType: 'remove',
 				targetId: rowId,
 				note: null,
-				body: null
+				body: ingredient
 			});
 		}
 	}
@@ -367,7 +368,8 @@
 			});
 		}
 	}
-	function removeDirection(rowId: string) {
+	function removeDirection(direction: Direction) {
+    const rowId = direction.id;
 		const idx = leafDirectionChanges.findIndex(
 			(c) =>
 				(c.changeType === 'add' && c.body?.id === rowId) ||
@@ -381,7 +383,7 @@
 				changeType: 'remove',
 				targetId: rowId,
 				note: null,
-				body: null
+				body: direction
 			});
 		}
 	}
@@ -1128,7 +1130,7 @@
 							onSubstitute={(next) => editIngredient(ing.id, next, 'substitute')}
 							canSubstitute={canSubstituteIngredient(ing.id)}
 							onUpdateNote={(note) => setRowNote(ing.id, 'ingredient', note)}
-							onRemove={() => removeIngredient(ing.id)}
+							onRemove={() => removeIngredient(ing)}
 							onMove={(dir) => moveIngredient(ing.id, dir)}
 							descendantSubstitutes={descendantSubstitutesByRowId[ing.id] ?? null}
 							onOpenSubstitutes={() =>
@@ -1263,7 +1265,7 @@
 							onSubstitute={(next) => editDirection(dir.id, next, 'substitute')}
 							canSubstitute={canSubstituteDirection(dir.id)}
 							onUpdateNote={(note) => setRowNote(dir.id, 'direction', note)}
-							onRemove={() => removeDirection(dir.id)}
+							onRemove={() => removeDirection(dir)}
 							onMove={(moveDir) => moveDirection(dir.id, moveDir)}
 							ingredients={displayedIngredients}
 							descendantSubstitutes={descendantSubstitutesByRowId[dir.id] ?? null}

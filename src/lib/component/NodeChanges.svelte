@@ -98,17 +98,21 @@
 
 	function labelFor(item: AnnotatedChange<IngredientChange | DirectionChange>): string {
 		const c = item.change;
-    if (item.kind === 'ingredient'){
+    if (item.kind === 'ingredient') {
       const c = item.change;
       const ing = c.body as Ingredient;
-      const parts: string[] = [ing.name];
-      if (ing.amount) parts.push(String(ing.amount));
-      if (ing.unit) parts.push(ing.unit);
+      if (!ing) {
+        return "ingredient"
+      }
+      const parts: string[] = ["INGREDIENT ", ing.name ?? ''];
+      if (ing.amount) parts.push(String(ing?.amount));
+      if (ing.unit) parts.push(ing?.unit);
       return parts.join(' ');
     }       
 		if (item.kind === 'direction') {
       const dir = c.body as { body: string };
-      return dir.body || '(empty)'
+      const body = dir.body || '(empty)'
+      return `DIRECTION ${body}`
     }
     return "";
 	}
@@ -201,8 +205,10 @@
 			{#each annotated as item (item.change.id)}
 				{@const text = changeText(item)}
 				{@const spaceIdx = text.indexOf(' ')}
-				{@const badge = spaceIdx >= 0 ? text.slice(0, spaceIdx) : text}
-				{@const content = spaceIdx >= 0 ? text.slice(spaceIdx + 1) : ''}
+				{@const tokens = text.split(' ')}
+				{@const badge = [tokens[0], tokens[1]].join(' ')}
+        {@const contentStartIndex = text.indexOf(badge) + badge.length + 1} 
+				{@const content = spaceIdx >= 0 ? text.slice(contentStartIndex) : ''}
 				<li
 					class="flex items-center gap-2 px-2 py-1"
 					class:bg-green-100={item.change.changeType === 'add'}

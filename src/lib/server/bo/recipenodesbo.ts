@@ -405,9 +405,6 @@ function validateIngredientChange(c: unknown, index: number): asserts c is Ingre
 		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
 			throw new InvalidChangeError(`ingredientChanges[${index}] (remove) must have a targetId`);
 		}
-		if (obj.body !== null) {
-			throw new InvalidChangeError(`ingredientChanges[${index}] (remove) must have body === null`);
-		}
 	}
 }
 
