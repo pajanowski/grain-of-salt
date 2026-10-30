@@ -42,6 +42,31 @@ export function getRecipeLink(page: Page, name: string) {
 	return page.getByRole('link', { name, exact: true });
 }
 
+/** The "Grain of Salt" home link in the header/sidebar. */
+export function getHeaderHomeLink(page: Page) {
+	return page.getByRole('link', { name: 'Grain of Salt' });
+}
+
+/** A card in the home screen favorites dashboard. */
+export function getFavoriteCard(page: Page, name: string) {
+	return page.getByTestId('recipe-favorite-card').filter({ hasText: name });
+}
+
+/** All cards in the home screen favorites dashboard. */
+export function getFavoriteCards(page: Page) {
+	return page.getByTestId('recipe-favorite-card');
+}
+
+/** A card in the home screen recent recipes dashboard. */
+export function getDashboardCard(page: Page, name: string) {
+	return page.getByTestId('recipe-dashboard-card').filter({ hasText: name });
+}
+
+/** All cards in the home screen recent recipes dashboard. */
+export function getDashboardCards(page: Page) {
+	return page.getByTestId('recipe-dashboard-card');
+}
+
 /** The "Recipe: <name>" heading on the recipe detail page. */
 export function getRecipeHeading(page: Page, name: string) {
 	return page.getByRole('heading', { name: `${name}` });

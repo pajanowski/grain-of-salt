@@ -1,7 +1,6 @@
 <script lang="ts">
 	import '../../app.css';
 	import favicon from '$lib/assets/favicon.svg';
-	import RecipeList from '$lib/component/RecipeList.svelte';
 	import MobileFloatingButtons from '$lib/component/MobileFloatingButtons.svelte';
 	import { api, errorMessage } from '$lib/api';
 	import { enhance } from '$app/forms';
@@ -18,8 +17,6 @@
 	let importUrlInputEl = $state<HTMLInputElement | null>(null);
 	let importLoading = $state(false);
 	let importError = $state<string | null>(null);
-	let searchQuery = $state('');
-	let recipeListRef = $state<{ focusSearch: () => void } | null>(null);
 
 	$effect(() => {
 		if (createRecipe && inputEl) {
@@ -122,15 +119,12 @@
 			});
 	}
 	function handleFloatingSearch() {
-		const needsOpen = sidebarCollapsed;
-		if (needsOpen) sidebarCollapsed = false;
-		// The sidebar slides in over ~200ms; defer the focus so the input is on
-		// screen when the mobile keyboard appears. If the sidebar is already
-		// open, focus immediately.
-		if (needsOpen) {
-			setTimeout(() => recipeListRef?.focusSearch(), 220);
+		if (window.location.pathname !== '/mise') {
+			window.location.href = '/mise';
 		} else {
-			queueMicrotask(() => recipeListRef?.focusSearch());
+			const searchInput = document.querySelector<HTMLInputElement>('.rl-search');
+			searchInput?.focus();
+			searchInput?.select();
 		}
 	}
 
@@ -202,8 +196,7 @@
 		</div>
 	{/if}
 
-	<!-- Full sidebar — always rendered so RecipeList state (search query, expanded
-	     nodes, create/import forms) persists across open/close. CSS handles the
+	<!-- Full sidebar — always rendered so create/import forms persist across open/close. CSS handles the
 	     mobile overlay vs desktop push-layout split. -->
 	<aside
 		class="fixed inset-y-0 left-0 z-40 flex w-full shrink-0 flex-col border-r border-stone-200 bg-stone-100 shadow-[2px_0_8px_rgba(0,0,0,0.08)] transition-transform duration-200 ease-out md:static md:z-auto md:w-64 md:translate-x-0 md:shadow-none {sidebarCollapsed
@@ -213,7 +206,7 @@
 	>
 			<!-- Sidebar header -->
 			<div class="flex items-center justify-between border-b border-stone-200 px-4 py-3">
-				<span class="font-semibold text-stone-700">Grain of Salt</span>
+				<a href="/mise" class="font-semibold text-stone-700 hover:text-amber-800">Grain of Salt</a>
 				<button
 					class="btn-amber secondary flex h-10 w-10 items-center justify-center rounded-lg"
 					onclick={() => {
@@ -240,8 +233,6 @@
 			</div>
 
 				<div class="flex flex-1 flex-col gap-3 overflow-y-auto p-4 pb-[calc(1rem+48px)] md:pb-0">
-				<RecipeList bind:this={recipeListRef} bind:searchQuery recipeTree={data.recipeTree} />
-
 				{#if createRecipe}
 					<div class="rounded-lg border border-stone-300 bg-stone-50 p-4 shadow-sm">
 						<p class="mb-3 font-semibold text-stone-800">New Recipe</p>

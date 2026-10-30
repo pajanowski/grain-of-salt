@@ -9,6 +9,7 @@ and [ADR 0002](../adr/0002-fork-as-chain-extension.md).
 ## User-facing
 
 - [Authentication](./authentication.md) — OTP email sign-in, account page, sign-out
+- [Recipe dashboard](./recipe-dashboard.md) — Recently changed recipes shown on the home page when no recipe is selected
 - [Recipe tree](./recipe-tree.md) — Nested list of all recipes on the home page
 - [Recipe creation](./recipe-creation.md) — Inline form on the home page
 - [Recipe import](./recipe-import.md) — Import a recipe from a URL via JSON-LD parsing

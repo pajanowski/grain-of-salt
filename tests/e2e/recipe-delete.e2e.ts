@@ -15,7 +15,8 @@ import {
 	openCreateForm,
 	getRecipeNameInput,
 	getCreateButton,
-	getRecipeLink
+	getRecipeLink,
+	getHeaderHomeLink
 } from './helpers/page-utils';
 
 test('delete recipe removes it from the list and returns 404', async ({ page }) => {
@@ -51,5 +52,5 @@ test('delete recipe removes it from the list and returns 404', async ({ page }) 
 	// mise frame (so the sidebar + navigation stay usable).
 	await page.goto(recipeUrl);
 	await expect(page.getByText('Recipe not found')).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Recipe List' })).toBeVisible();
+	await expect(getHeaderHomeLink(page)).toBeVisible();
 });

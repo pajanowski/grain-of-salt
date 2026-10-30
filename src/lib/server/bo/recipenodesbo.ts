@@ -405,6 +405,9 @@ function validateIngredientChange(c: unknown, index: number): asserts c is Ingre
 		if (typeof obj.targetId !== 'string' || obj.targetId.length === 0) {
 			throw new InvalidChangeError(`ingredientChanges[${index}] (remove) must have a targetId`);
 		}
+		if (obj.body !== null) {
+			throw new InvalidChangeError(`ingredientChanges[${index}] (remove) must have body === null`);
+		}
 	}
 }
 
@@ -414,7 +417,10 @@ function validateIngredientChange(c: unknown, index: number): asserts c is Ingre
  * with this set, including [] for explicit clear). Reject anything
  * else (e.g. strings, objects, numbers) — the wire shape is strict.
  */
-function validateIngredientBodyImagePaths(body: Record<string, unknown>, changeIndex: number): void {
+function validateIngredientBodyImagePaths(
+	body: Record<string, unknown>,
+	changeIndex: number
+): void {
 	if (!('imagePaths' in body) || body.imagePaths === null || body.imagePaths === undefined) return;
 	if (!Array.isArray(body.imagePaths)) {
 		throw new InvalidChangeError(
@@ -816,4 +822,123 @@ export async function getRecipeTree(ownerId: string): Promise<RecipeTreeNode[]> 
 	}
 
 	return topLevel;
+}
+
+export interface RecipeDashboardEntry {
+	rootId: string;
+	name: string;
+	forkCount: number; // direct children only
+	lastEditedAt: Date; // most recent write across root + descendants
+	leafId: string; // the node that produced lastEditedAt
+}
+
+function extractNodeDate(row: SelectRecipeNode): Date {
+	const val = row.updatedAt ?? row.timestamp;
+	return val instanceof Date ? val : new Date(val);
+}
+
+export function computeRecipeDashboard(
+	allRows: SelectRecipeNode[],
+	limit = 5
+): RecipeDashboardEntry[] {
+	if (allRows.length === 0) return [];
+
+	const nodeMap = new Map<string, SelectRecipeNode>();
+	for (const row of allRows) {
+		nodeMap.set(row.id, row);
+	}
+
+	function findRoot(node: SelectRecipeNode): SelectRecipeNode {
+		let curr = node;
+		const visited = new Set<string>();
+		while (curr.parentId !== null) {
+			if (visited.has(curr.id)) break;
+			visited.add(curr.id);
+			const parent = nodeMap.get(curr.parentId);
+			if (!parent) break;
+			curr = parent;
+		}
+		return curr;
+	}
+
+	const rootGroups = new Map<string, { root: SelectRecipeNode; nodes: SelectRecipeNode[] }>();
+	for (const row of allRows) {
+		const root = findRoot(row);
+		let group = rootGroups.get(root.id);
+		if (!group) {
+			group = { root, nodes: [] };
+			rootGroups.set(root.id, group);
+		}
+		group.nodes.push(row);
+	}
+
+	const entries: RecipeDashboardEntry[] = [];
+	for (const group of rootGroups.values()) {
+		let directChildrenCount = 0;
+		for (const node of group.nodes) {
+			if (node.parentId === group.root.id) {
+				directChildrenCount++;
+			}
+		}
+
+		let maxDate = extractNodeDate(group.root);
+		let leafId = group.root.id;
+
+		for (const node of group.nodes) {
+			const d = extractNodeDate(node);
+			if (d.getTime() >= maxDate.getTime()) {
+				maxDate = d;
+				leafId = node.id;
+			}
+		}
+
+		entries.push({
+			rootId: group.root.id,
+			name: group.root.name,
+			forkCount: directChildrenCount,
+			lastEditedAt: maxDate,
+			leafId
+		});
+	}
+
+	entries.sort((a, b) => b.lastEditedAt.getTime() - a.lastEditedAt.getTime());
+	return entries.slice(0, limit);
+}
+
+export async function getRecipeDashboard(
+	ownerId: string,
+	limit = 5
+): Promise<RecipeDashboardEntry[]> {
+	const allRows: SelectRecipeNode[] = await db
+		.select()
+		.from(recipeNodes)
+		.where(eq(recipeNodes.ownerId, ownerId));
+
+	return computeRecipeDashboard(allRows, limit);
+}
+
+export interface RecipeFavoriteEntry {
+	id: string;
+	name: string;
+	lastEditedAt: Date;
+}
+
+export function computeRecipeFavorites(allRows: SelectRecipeNode[]): RecipeFavoriteEntry[] {
+	const favorites = allRows.filter((r) => r.isFavorite);
+	return favorites
+		.map((row) => ({
+			id: row.id,
+			name: row.name,
+			lastEditedAt: extractNodeDate(row)
+		}))
+		.sort((a, b) => b.lastEditedAt.getTime() - a.lastEditedAt.getTime());
+}
+
+export async function getRecipeFavorites(ownerId: string): Promise<RecipeFavoriteEntry[]> {
+	const allRows: SelectRecipeNode[] = await db
+		.select()
+		.from(recipeNodes)
+		.where(eq(recipeNodes.ownerId, ownerId));
+
+	return computeRecipeFavorites(allRows);
 }
