@@ -1,8 +1,9 @@
 import type { Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { createRequestClient } from '$lib/server/supabase';
-import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/public';
+import { DEV_SESSION, DEV_USER, isSingleUserMode } from '$lib/server/singleUser';
 
 /**
  * Per-request Supabase client. Refreshes the session if needed and exposes
@@ -16,7 +17,12 @@ const supabase: Handle = async ({ event, resolve }) => {
 
 	// Skip Supabase entirely if env isn't configured (e.g. before first run).
 	if (!env.PUBLIC_SUPABASE_URL) {
-		event.locals.safeGetSession = async () => ({ session: null, user: null });
+		event.locals.safeGetSession = async () => {
+			if (isSingleUserMode()) {
+				return { session: DEV_SESSION, user: DEV_USER };
+			}
+			return { session: null, user: null };
+		};
 		return resolve(event, {
 			filterSerializedResponseHeaders(name) {
 				return name === 'content-range' || name === 'x-supabase-api-version';
@@ -30,6 +36,9 @@ const supabase: Handle = async ({ event, resolve }) => {
 		} = await event.locals.supabase.auth.getSession();
 
 		if (!session) {
+			if (isSingleUserMode()) {
+				return { session: DEV_SESSION, user: DEV_USER };
+			}
 			return { session: null, user: null };
 		}
 
@@ -42,6 +51,9 @@ const supabase: Handle = async ({ event, resolve }) => {
 		} = await event.locals.supabase.auth.getUser();
 
 		if (error) {
+			if (isSingleUserMode()) {
+				return { session: DEV_SESSION, user: DEV_USER };
+			}
 			return { session: null, user: null };
 		}
 

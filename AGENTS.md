@@ -2,7 +2,7 @@
 
 ## Common commands and tools
 
-`just setup-dev` to bootstrap all services (install + supabase + db push/seed) then `just dev` to develop.
+`just setup-dev` to bootstrap all services (install + supabase + db push/seed) then `just dev` to develop (with zero-login single-user mode enabled via `SINGLE_USER_MODE=true`).
 `pnpm exec playwright test` to run playwright tests locally. Avoid using docker container on this machine unless debugging a discrepancy between docker run and bare metal run.
 `gh` Github cli to access information about PRs, CI runs, etc
 

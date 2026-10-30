@@ -3,7 +3,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { v4 as uuidv4 } from 'uuid';
 import { sql } from 'drizzle-orm';
-import { recipeNodes } from '../src/lib/server/db/schema.js';
+import { profiles, recipeNodes } from '../src/lib/server/db/schema.js';
 import { DEMO_USER_ID } from '../src/lib/server/db/schema.js';
 import type { IngredientChange, DirectionChange } from '../src/lib/obj/RecipeNode.svelte.js';
 
@@ -73,6 +73,11 @@ async function ensureDemoUser() {
     )
     on conflict (id) do nothing
   `);
+
+  await db
+    .insert(profiles)
+    .values({ id: DEMO_USER_ID, displayName: 'Demo User' })
+    .onConflictDoNothing();
 }
 
 async function seed() {

@@ -21,7 +21,7 @@ _supabase-start:
 # Start local dev server (requires supabase running).
 # If supabase isn't started yet, run `just setup-dev` first.
 dev:
-    pnpm dev
+    SINGLE_USER_MODE="true" pnpm dev
 
 # Build + preview production build (one-shot or `vite build --watch`).
 preview:
@@ -74,6 +74,7 @@ test-e2e *extra:
     PUBLIC_SUPABASE_URL="http://localhost:54321" \
     MAILPIT_URL="http://localhost:54324" \
     PLAYWRIGHT_BASE_URL="http://localhost:4173" \
+    SINGLE_USER_MODE="false" \
     pnpm exec playwright test {{extra}}
 
 # E2e in UI mode (requires installed browsers).
@@ -82,6 +83,7 @@ test-e2e-ui:
     PUBLIC_SUPABASE_URL="http://localhost:54321" \
     MAILPIT_URL="http://localhost:54324" \
     PLAYWRIGHT_BASE_URL="http://localhost:4173" \
+    SINGLE_USER_MODE="false" \
     pnpm exec playwright test --ui
 
 # --- agent --------------------------------------------------------------------
@@ -112,6 +114,7 @@ agent-e2e-test *extra:
     PUBLIC_SUPABASE_URL="http://localhost:54321" \
     MAILPIT_URL="http://localhost:54324" \
     PLAYWRIGHT_BASE_URL="http://localhost:$PREVIEW_PORT" \
+    SINGLE_USER_MODE="false" \
     pnpm exec playwright test {{extra}}
 
 # Phase 3: tear down agent — stop preview, clean up PID. Does NOT touch supabase.
@@ -130,7 +133,7 @@ agent-e2e-preview:
         rm -f /tmp/grain-of-salt-agent-preview.pid /tmp/grain-of-salt-agent-preview.port
     fi
     # Start preview and record PID
-    pnpm preview --port 4173 &
+    SINGLE_USER_MODE="false" pnpm preview --port 4173 &
     echo $! > /tmp/grain-of-salt-agent-preview.pid
     echo 4173 > /tmp/grain-of-salt-agent-preview.port
     # Wait for server to be ready

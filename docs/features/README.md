@@ -28,3 +28,4 @@ and [ADR 0002](../adr/0002-fork-as-chain-extension.md).
 ## Development
 
 - [Demo data](./demo-data.md) — Sample recipes populated by `scripts/seed.ts`
+- [Single-user mode](./single-user-mode.md) — Zero-login local development setup using synthetic demo user session

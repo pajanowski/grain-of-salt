@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
+import { requireUser } from '$lib/server/auth-guard';
 import {
 	getRecipeNodesByRecipeIdV2,
 	applyNodes,
@@ -20,9 +21,10 @@ import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
  * node's rows for a different value). Rendered as a per-row "Subs"
  * chip on the leaf, plus a slide-out sidebar listing each entry.
  */
-export const load: PageServerLoad = async ({ depends, params, locals }) => {
-	depends('app:recipe');
-	const recipeNodeId = params.slug;
+export const load: PageServerLoad = async (event) => {
+	event.depends('app:recipe');
+	const user = await requireUser(event);
+	const recipeNodeId = event.params.slug;
 
 	// Fetch the chain from current node back to root.
 	const chainBackwards = await getRecipeNodesByRecipeIdV2(recipeNodeId);
@@ -63,9 +65,7 @@ export const load: PageServerLoad = async ({ depends, params, locals }) => {
 	// Find every substitute authored by a descendant of the current
 	// node. Only meaningful when the user is signed in — unauthenticated
 	// browsers see an empty list and the panel renders nothing.
-	const { session, user } = await locals.safeGetSession();
 	const ownerId = user?.id ?? null;
-	void session; // referenced for consistency with sibling loaders
 	const descendantSubstitutes: DescendantSubstitutes = ownerId
 		? await findDescendantSubstitutes(current.id, ownerId)
 		: { flat: [], byRowId: {}, byRowKind: {} };
