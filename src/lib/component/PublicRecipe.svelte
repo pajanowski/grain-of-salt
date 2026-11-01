@@ -1,54 +1,51 @@
 <script lang="ts">
-	import type { Ingredient, Direction } from '$lib/obj/Recipe.svelte';
-	import IngredientRow from './IngredientRow.svelte';
-	import DirectionRow from './DirectionRow.svelte';
-	import { invalidateAll } from '$app/navigation';
-	import { api, errorMessage } from '$lib/api';
+ import type { Ingredient, Direction } from '$lib/obj/Recipe.svelte';
+ import IngredientRow from './IngredientRow.svelte';
+ import DirectionRow from './DirectionRow.svelte';
+ import { invalidateAll } from '$app/navigation';
+ import { toggleRecipeFavorite, errorMessage } from '$lib/api';
 
-	type Props = {
-		recipe: {
-			name: string;
-			ingredients: Ingredient[];
-			directions: Direction[];
-		};
-		currentNode: {
-			id: string;
-			author: string | null;
-			source: string | null;
-			isPublic: boolean;
-			isFavorite?: boolean;
-		};
-		isSignedIn?: boolean;
-	};
+ type Props = {
+ 	recipe: {
+ 		name: string;
+ 		ingredients: Ingredient[];
+ 		directions: Direction[];
+ 	};
+ 	currentNode: {
+ 		id: string;
+ 		author: string | null;
+ 		source: string | null;
+ 		isPublic: boolean;
+ 		isFavorite?: boolean;
+ 	};
+ 	isSignedIn?: boolean;
+ };
 
-	let { recipe, currentNode, isSignedIn = false }: Props = $props();
+ let { recipe, currentNode, isSignedIn = false }: Props = $props();
 
-	let isFavorite = $state(false);
+ let isFavorite = $state(false);
 
-	$effect(() => {
-		isFavorite = Boolean(currentNode.isFavorite);
-	});
+ $effect(() => {
+ 	isFavorite = Boolean(currentNode.isFavorite);
+ });
 
-	async function handleFavoriteClick() {
-		if (!isSignedIn) {
-			const nextUrl = encodeURIComponent(`/recipe/${currentNode.id}`);
-			window.location.href = `/auth?next=${nextUrl}`;
-			return;
-		}
+ async function handleFavoriteClick() {
+ 	if (!isSignedIn) {
+ 		const nextUrl = encodeURIComponent(`/recipe/${currentNode.id}`);
+ 		window.location.href = `/auth?next=${nextUrl}`;
+ 		return;
+ 	}
 
-		const prev = isFavorite;
-		isFavorite = !prev;
-		try {
-			const res = await api.patch<{ isFavorite: boolean }>(`/mise/api/recipe-node/${currentNode.id}/favorite`);
-			if (res.data && typeof res.data.isFavorite === 'boolean') {
-				isFavorite = res.data.isFavorite;
-			}
-			await invalidateAll();
-		} catch (e) {
-			isFavorite = prev;
-			alert(`Failed to update favorite: ${errorMessage(e)}`);
-		}
-	}
+ 	const prev = isFavorite;
+ 	isFavorite = !prev;
+ 	try {
+ 		isFavorite = await toggleRecipeFavorite(currentNode.id);
+ 		await invalidateAll();
+ 	} catch (e) {
+ 		isFavorite = prev;
+ 		alert(`Failed to update favorite: ${errorMessage(e)}`);
+ 	}
+ }
 </script>
 
 <svelte:head>

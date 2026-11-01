@@ -28,7 +28,14 @@
 	} from '$lib/obj/directionMask';
 	import { normalizeUnit } from '$lib/unit';
 	import { invalidateAll, goto, invalidate } from '$app/navigation';
-	import { api, errorMessage } from '$lib/api';
+	import {
+		toggleRecipeFavorite,
+		setRecipeNodePublic,
+		renameRecipe,
+		forkRecipe,
+		saveRecipeNode,
+		errorMessage
+	} from '$lib/api';
 
 	const { data } = $props();
 
@@ -789,17 +796,12 @@
 
 	function performSave() {
 		if (!hasUnsavedChanges) return;
-		api
-			.put(`/mise/api/recipe-node/${currentNode.id}`, {
-				nodeId: currentNode.id,
-				ingredientChanges: leafIngredientChanges,
-				directionChanges: leafDirectionChanges
-			})
+		saveRecipeNode(currentNode.id, leafIngredientChanges, leafDirectionChanges)
 			.then(async () => {
 				await invalidateAll();
 				syncedNodeId = null;
 			})
-			.catch((e) => {
+			.catch((e: unknown) => {
 				alert(`Save failed: ${errorMessage(e)}`);
 			});
 	}
@@ -823,7 +825,7 @@
 		if (!trimmed || renameBusy) return;
 		renameBusy = true;
 		try {
-			await api.patch(`/mise/api/recipe/${rootNodeId}`, { name: trimmed });
+			await renameRecipe(rootNodeId, trimmed);
 			await invalidate('app:recipe-tree');
 			showRenameModal = false;
 		} catch (e) {
@@ -847,10 +849,7 @@
 		if (!trimmed || forkBusy) return;
 		forkBusy = true;
 		try {
-			const { data: newRecipe } = await api.post<{ id: string }>(
-				`/mise/api/recipe/${currentNode.id}/fork`,
-				{ name: trimmed }
-			);
+			const newRecipe = await forkRecipe(currentNode.id, trimmed);
 			showForkModal = false;
 			await invalidate('app:recipe-tree');
 			await goto(`/mise/recipes/${newRecipe.id}`);
@@ -882,9 +881,7 @@
 	async function togglePublic() {
 		const next = !currentNode.isPublic;
 		try {
-			await api.patch(`/mise/api/recipe-node/${currentNode.id}/public`, {
-				isPublic: next
-			});
+			await setRecipeNodePublic(currentNode.id, next);
 			await invalidateAll();
 		} catch (e) {
 			alert(`Failed to update visibility: ${errorMessage(e)}`);
@@ -894,10 +891,7 @@
 		const prev = isFavorite;
 		isFavorite = !prev;
 		try {
-			const res = await api.patch<{ isFavorite: boolean }>(`/mise/api/recipe-node/${currentNode.id}/favorite`);
-			if (res.data && typeof res.data.isFavorite === 'boolean') {
-				isFavorite = res.data.isFavorite;
-			}
+			isFavorite = await toggleRecipeFavorite(currentNode.id);
 			await invalidateAll();
 		} catch (e) {
 			isFavorite = prev;
