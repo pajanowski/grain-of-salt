@@ -6,15 +6,15 @@ export const load: LayoutServerLoad = async ({ depends, locals }) => {
 	depends('app:recipes');
 	depends('app:recipe-tree');
 
+	const demoMode = Boolean((locals as any).demoMode);
 	const { session, user } = await locals.safeGetSession();
 
-	// Signed-in users see their own recipes. Unauthenticated browsers
-	// (no Supabase session) see an empty list — they must sign in.
 	const ownerId = user?.id ?? null;
-	const recipeTree = ownerId ? await getRecipeTree(ownerId) : [];
+	const recipeTree = ownerId && !demoMode ? await getRecipeTree(ownerId) : [];
 	const supabaseConfigured = Boolean(env.PUBLIC_SUPABASE_URL);
 
 	return {
+		demoMode,
 		recipeTree,
 		session,
 		user,

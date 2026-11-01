@@ -12,6 +12,7 @@ A recipe management web application built around a directed acyclic graph (DAG) 
 - **Recipe Favorites:** Bookmark personal or public recipes and view them on the `/mise` dashboard.
 - **Dashboard & Hierarchy:** View favorited recipes, the 5 most recently edited recipes, and the complete navigable recipe hierarchy tree.
 - **Public Sharing:** Share individual recipe nodes via read-only URLs (`/recipe/[id]`).
+- **Demo Mode:** Client-side sandbox at `demo.grainofsalt.app` (`just demo`) backed by `localStorage` with zero database dependencies.
 - **Single-User Dev Mode:** Local development mode (`SINGLE_USER_MODE=true`) bypasses authentication for faster iteration.
 
 ---
@@ -66,6 +67,7 @@ A recipe management web application built around a directed acyclic graph (DAG) 
 | :--- | :--- |
 | `just setup-dev` | Installs dependencies, starts Supabase, applies migrations, and seeds demo data |
 | `just dev` | Runs Vite dev server with zero-login `SINGLE_USER_MODE=true` |
+| `just demo` | Runs client-side demo mode with `VITE_DEMO_MODE=1` (zero database dependencies) |
 | `pnpm db:start` | Starts local Supabase container services (Postgres, Auth, Inbucket) |
 | `pnpm db:status` | Displays running Supabase ports and API keys |
 | `pnpm db:reset` | Resets local database and reapplies migrations and seed scripts |
@@ -109,8 +111,10 @@ Detailed documentation and architectural decision records are in `docs/`:
 - [Feature Documentation](docs/features/README.md)
   - [Recipe Favorites](docs/features/recipe-favorites.md)
   - [Recipe Dashboard](docs/features/recipe-dashboard.md)
+  - [Demo Mode](docs/features/demo-mode.md)
   - [Single-User Dev Setup](docs/features/single-user-mode.md)
   - [Recipe Branching & Tree Navigation](docs/features/recipe-tree.md)
 - [Architectural Decision Records (ADRs)](docs/adr/)
   - [ADR 0001: Per-Node In-Place Edits](docs/adr/0001-per-node-in-place-edits.md)
   - [ADR 0002: Fork as Chain Extension](docs/adr/0002-fork-as-chain-extension.md)
+  - [ADR 0003: Demo Mode](docs/adr/0003-demo-mode.md)

@@ -34,6 +34,7 @@
 		renameRecipe,
 		forkRecipe,
 		saveRecipeNode,
+		deleteRecipe,
 		errorMessage
 	} from '$lib/api';
 
@@ -862,13 +863,13 @@
 
 	async function confirmDelete() {
 		if (!confirm(`Delete "${recipe.name}"? This cannot be undone.`)) return;
-		const res = await fetch(`/mise/api/recipe/${rootNodeId}`, { method: 'DELETE' });
-		if (!res.ok) {
-			alert(`Delete failed: ${res.status} ${res.statusText}`);
-			return;
+		try {
+			await deleteRecipe(rootNodeId);
+			await invalidate('app:recipe-tree');
+			await goto('/mise');
+		} catch (e) {
+			alert(`Delete failed: ${errorMessage(e)}`);
 		}
-		await invalidate('app:recipe-tree');
-		await goto('/mise');
 	}
 
 	let shareLinkCopied = $state(false);

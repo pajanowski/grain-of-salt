@@ -23,6 +23,10 @@ _supabase-start:
 dev:
     SINGLE_USER_MODE="true" pnpm dev
 
+# Start local demo mode (zero backend dependencies, client-side in-memory localStorage).
+demo:
+    VITE_DEMO_MODE="1" pnpm dev
+
 # Build + preview production build (one-shot or `vite build --watch`).
 preview:
     pnpm preview 

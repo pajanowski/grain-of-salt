@@ -24,6 +24,7 @@ and [ADR 0002](../adr/0002-fork-as-chain-extension.md).
 - [Public recipe](./public-recipe.md) — Mark a node public; read-only view at `/recipe/[id]` without auth
 - [Recipe favorites](./recipe-favorites.md) — Multi-user favorites via junction table; star toggle in recipe header; dashboard favorites feed with author attribution
 - [Recipe images](./recipe-images.md) — Per-version final-dish photo and per-change ingredient/direction images with fall-through replay; inline thumbnails + lightbox; edit-form Images tab with Inherit affordance
+- [Demo mode](./demo-mode.md) — Client-side localStorage sandbox on demo subdomain (demo.grainofsalt.app) with zero backend dependencies and reset controls
 
 ## Development
 
