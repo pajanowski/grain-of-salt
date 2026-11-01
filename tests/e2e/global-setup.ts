@@ -19,6 +19,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { signInAsTestUser } from './helpers/auth';
 export { TEST_USER_ID, TEST_USER_EMAIL } from './helpers/auth-shared';
 import { TEST_USER_ID, TEST_USER_EMAIL } from './helpers/auth-shared';
+import {
+  DEMO_USER_ID,
+  SEED_COMMUNITY_USER_ID
+} from '../../src/lib/server/db/schema';
 
 /**
  * Cached Supabase auth cookies shared across every test in the suite.
@@ -124,9 +128,15 @@ export default async function globalSetup() {
     console.log('[e2e global-setup] Provisioning demo + test users');
     await ensureUser(
       db,
-      '00000000-0000-0000-0000-000000000001',
+      DEMO_USER_ID,
       'demo@grain-of-salt.local',
       'Demo User'
+    );
+    await ensureUser(
+      db,
+      SEED_COMMUNITY_USER_ID,
+      'auguste@grain-of-salt.local',
+      'Chef Auguste'
     );
     await ensureUser(db, TEST_USER_ID, TEST_USER_EMAIL, 'Test User');
 

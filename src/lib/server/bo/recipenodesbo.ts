@@ -1,6 +1,6 @@
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/index';
-import { recipeNodes } from '../db/schema';
+import { recipeNodes, userRecipeFavorites, profiles } from '../db/schema';
 import type { InsertRecipeNode, SelectRecipeNode } from '../db/schema';
 import type { Ingredient, Direction } from '$lib/obj/Recipe.svelte';
 import type { RecipeNode, IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
@@ -921,6 +921,9 @@ export interface RecipeFavoriteEntry {
 	id: string;
 	name: string;
 	lastEditedAt: Date;
+	authorName?: string | null;
+	isOwner?: boolean;
+	urlPath?: string;
 }
 
 export function computeRecipeFavorites(allRows: SelectRecipeNode[]): RecipeFavoriteEntry[] {
@@ -929,16 +932,147 @@ export function computeRecipeFavorites(allRows: SelectRecipeNode[]): RecipeFavor
 		.map((row) => ({
 			id: row.id,
 			name: row.name,
-			lastEditedAt: extractNodeDate(row)
+			lastEditedAt: extractNodeDate(row),
+			authorName: null,
+			isOwner: true,
+			urlPath: `/mise/recipes/${row.id}`
 		}))
 		.sort((a, b) => b.lastEditedAt.getTime() - a.lastEditedAt.getTime());
 }
 
-export async function getRecipeFavorites(ownerId: string): Promise<RecipeFavoriteEntry[]> {
-	const allRows: SelectRecipeNode[] = await db
-		.select()
-		.from(recipeNodes)
-		.where(eq(recipeNodes.ownerId, ownerId));
+export async function isRecipeFavorited(userId: string, recipeNodeId: string): Promise<boolean> {
+	const rows = await db
+		.select({ recipeNodeId: userRecipeFavorites.recipeNodeId })
+		.from(userRecipeFavorites)
+		.where(
+			and(
+				eq(userRecipeFavorites.userId, userId),
+				eq(userRecipeFavorites.recipeNodeId, recipeNodeId)
+			)
+		)
+		.limit(1);
+	return rows.length > 0;
+}
 
-	return computeRecipeFavorites(allRows);
+export async function getFavoritesBatch(
+	userId: string,
+	recipeNodeIds: string[]
+): Promise<Record<string, boolean>> {
+	const result: Record<string, boolean> = {};
+	for (const id of recipeNodeIds) {
+		result[id] = false;
+	}
+	if (recipeNodeIds.length === 0) {
+		return result;
+	}
+	const rows = await db
+		.select({ recipeNodeId: userRecipeFavorites.recipeNodeId })
+		.from(userRecipeFavorites)
+		.where(
+			and(
+				eq(userRecipeFavorites.userId, userId),
+				inArray(userRecipeFavorites.recipeNodeId, recipeNodeIds)
+			)
+		);
+	for (const row of rows) {
+		result[row.recipeNodeId] = true;
+	}
+	return result;
+}
+
+export async function toggleRecipeFavorite(
+	userId: string,
+	recipeNodeId: string
+): Promise<{ isFavorite: boolean }> {
+	const nodeRows = await db
+		.select({ ownerId: recipeNodes.ownerId, isPublic: recipeNodes.isPublic })
+		.from(recipeNodes)
+		.where(eq(recipeNodes.id, recipeNodeId))
+		.limit(1);
+
+	if (nodeRows.length === 0) {
+		const err = new Error('Recipe node not found');
+		(err as { status?: number }).status = 404;
+		throw err;
+	}
+
+	const node = nodeRows[0];
+	if (node.ownerId !== userId && !node.isPublic) {
+		const err = new Error('Forbidden');
+		(err as { status?: number }).status = 403;
+		throw err;
+	}
+
+	const isCurrentlyFavorited = await isRecipeFavorited(userId, recipeNodeId);
+
+	if (isCurrentlyFavorited) {
+		await db
+			.delete(userRecipeFavorites)
+			.where(
+				and(
+					eq(userRecipeFavorites.userId, userId),
+					eq(userRecipeFavorites.recipeNodeId, recipeNodeId)
+				)
+			);
+		if (node.ownerId === userId) {
+			await db
+				.update(recipeNodes)
+				.set({ isFavorite: false })
+				.where(eq(recipeNodes.id, recipeNodeId));
+		}
+		return { isFavorite: false };
+	} else {
+		await db
+			.insert(userRecipeFavorites)
+			.values({ userId, recipeNodeId })
+			.onConflictDoNothing();
+		if (node.ownerId === userId) {
+			await db
+				.update(recipeNodes)
+				.set({ isFavorite: true })
+				.where(eq(recipeNodes.id, recipeNodeId));
+		}
+		return { isFavorite: true };
+	}
+}
+
+export async function getRecipeFavorites(
+	userId: string,
+	limit?: number,
+	offset?: number
+): Promise<RecipeFavoriteEntry[]> {
+	const rows = await db
+		.select({
+			recipeNodeId: userRecipeFavorites.recipeNodeId,
+			createdAt: userRecipeFavorites.createdAt,
+			nodeId: recipeNodes.id,
+			name: recipeNodes.name,
+			ownerId: recipeNodes.ownerId,
+			author: recipeNodes.author,
+			updatedAt: recipeNodes.updatedAt,
+			timestamp: recipeNodes.timestamp,
+			displayName: profiles.displayName
+		})
+		.from(userRecipeFavorites)
+		.innerJoin(recipeNodes, eq(userRecipeFavorites.recipeNodeId, recipeNodes.id))
+		.leftJoin(profiles, eq(recipeNodes.ownerId, profiles.id))
+		.where(eq(userRecipeFavorites.userId, userId))
+		.orderBy(desc(userRecipeFavorites.createdAt));
+
+	const sliced = typeof limit === 'number' ? rows.slice(offset ?? 0, (offset ?? 0) + limit) : rows;
+
+	return sliced.map((row) => {
+		const isOwner = row.ownerId === userId;
+		const authorName = isOwner ? null : (row.displayName || row.author || 'Community Chef');
+		const urlPath = isOwner ? `/mise/recipes/${row.nodeId}` : `/recipe/${row.nodeId}`;
+		const lastEditedAt = row.updatedAt ?? row.timestamp;
+		return {
+			id: row.nodeId,
+			name: row.name,
+			lastEditedAt: lastEditedAt instanceof Date ? lastEditedAt : new Date(lastEditedAt),
+			authorName,
+			isOwner,
+			urlPath
+		};
+	});
 }

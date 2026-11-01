@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
-import { applyNodes } from '$lib/server/bo/recipenodesbo';
+import { applyNodes, isRecipeFavorited } from '$lib/server/bo/recipenodesbo';
 import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
 import type { SelectRecipeNode } from '$lib/server/db/schema';
 
@@ -59,9 +59,18 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 		.slice(0, -1)
 		.map((node: RecipeNode) => ({ id: node.id, name: node.name }));
 
-	setHeaders({
-		'cache-control': 'public, s-maxage=60, stale-while-revalidate=300'
-	});
+	const viewerId = locals.user?.id ?? null;
+	const isFavoritedByViewer = viewerId ? await isRecipeFavorited(viewerId, recipeNodeId) : false;
+
+	if (!viewerId) {
+		setHeaders({
+			'cache-control': 'public, s-maxage=60, stale-while-revalidate=300'
+		});
+	} else {
+		setHeaders({
+			'cache-control': 'private, no-cache'
+		});
+	}
 
 	return {
 		recipe: {
@@ -70,7 +79,11 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 			ingredients: state.ingredients,
 			directions: state.directions
 		},
-		currentNode: { ...current },
+		currentNode: {
+			...current,
+			isFavorite: isFavoritedByViewer
+		},
+		isSignedIn: Boolean(viewerId),
 		history,
 		parentChain
 	};
@@ -113,18 +126,18 @@ async function walkChain(
 	return rows.map(toUiRecipeNode);
 }
 
-function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
+function toUiRecipeNode(row: Record<string, unknown>): RecipeNode {
 	return {
-		id: row.id,
-		name: row.name,
-		parentId: row.parent_id,
-		timestamp: row.timestamp instanceof Date ? row.timestamp : new Date(row.timestamp),
-		ingredientChanges: row.ingredient_changes as RecipeNode['ingredientChanges'],
-		directionChanges: row.direction_changes as RecipeNode['directionChanges'],
-		author: row.author ?? null,
-		source: row.source ?? null,
-		isPublic: row.is_public,
-		isFavorite: row.is_favorite ?? false,
-		imagePath: row.image_path ?? null
+		id: row.id as string,
+		name: row.name as string,
+		parentId: (row.parentId ?? row.parent_id ?? null) as string | null,
+		timestamp: row.timestamp instanceof Date ? row.timestamp : new Date(row.timestamp as string | number),
+		ingredientChanges: (row.ingredientChanges ?? row.ingredient_changes ?? []) as RecipeNode['ingredientChanges'],
+		directionChanges: (row.directionChanges ?? row.direction_changes ?? []) as RecipeNode['directionChanges'],
+		author: (row.author ?? null) as string | null,
+		source: (row.source ?? null) as string | null,
+		isPublic: Boolean(row.isPublic ?? row.is_public),
+		isFavorite: Boolean(row.isFavorite ?? row.is_favorite),
+		imagePath: (row.imagePath ?? row.image_path ?? null) as string | null
 	};
 }

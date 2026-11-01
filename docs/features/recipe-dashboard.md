@@ -5,8 +5,8 @@ The recipe dashboard is displayed on the main home landing screen (`/mise`) when
 ## Behaviour
 
 - The "Grain of Salt" sidebar/header label links directly to the home screen (`/mise`).
-- When favorited recipes exist, a "Favorites" section appears at the top of the dashboard, listing favorited recipes sorted by last edit date.
-- Beneath favorites, a "Recent recipes" section displays up to 5 recently changed root recipes, sorted descending by the most recent write across their lineage (root and descendants).
+- When favorited recipes exist, a "Favorites" section appears at the top of the dashboard, listing favorited recipes in a 3-column responsive grid sorted by last edit date.
+- Beneath favorites, a "Recent recipes" section displays up to 5 recently changed root recipes in a 3-column responsive grid, sorted descending by the most recent write across their lineage (root and descendants).
 - Each card shows the recipe name, direct fork count (`N fork` / `N forks` when greater than zero), and a human-readable relative timestamp (e.g., "just now", "5 minutes ago", "2 hours ago").
 - Clicking a card links directly to the recipe node (`/mise/recipes/[id]`).
 - The full recipe list and tree hierarchy is rendered directly on the home page beneath the recent recipes section.

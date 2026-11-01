@@ -6,6 +6,9 @@ import {
 	updateRecipeNode,
 	computeRecipeDashboard,
 	computeRecipeFavorites,
+	toggleRecipeFavorite,
+	isRecipeFavorited,
+	getFavoritesBatch,
 	InvalidChangeError,
 	type UpdateRecipeNodePayload
 } from './recipenodesbo';
@@ -1715,13 +1718,26 @@ describe('computeRecipeFavorites', () => {
 			{
 				id: 'fav-2',
 				name: 'Waffles',
-				lastEditedAt: new Date('2026-01-03T10:00:00Z')
+				lastEditedAt: new Date('2026-01-03T10:00:00Z'),
+				authorName: null,
+				isOwner: true,
+				urlPath: '/mise/recipes/fav-2'
 			},
 			{
 				id: 'fav-1',
 				name: 'Pancakes',
-				lastEditedAt: new Date('2026-01-01T10:00:00Z')
+				lastEditedAt: new Date('2026-01-01T10:00:00Z'),
+				authorName: null,
+				isOwner: true,
+				urlPath: '/mise/recipes/fav-1'
 			}
 		]);
+	});
+});
+
+describe('getFavoritesBatch empty input', () => {
+	it('returns empty record when no ids passed', async () => {
+		const result = await getFavoritesBatch('00000000-0000-0000-0000-000000000001', []);
+		expect(result).toEqual({});
 	});
 });

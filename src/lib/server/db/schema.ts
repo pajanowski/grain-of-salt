@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, jsonb, boolean, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, jsonb, boolean, primaryKey, index, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { IngredientChange, DirectionChange } from '../../obj/RecipeNode.svelte';
 
 /**
@@ -75,6 +75,31 @@ export const profiles = pgTable('profiles', {
 
 export type InsertProfile = typeof profiles.$inferInsert;
 export type SelectProfile = typeof profiles.$inferSelect;
+
+/**
+ * Junction table mapping user favorites to recipe nodes.
+ * Allows users to favorite their own recipe nodes as well as public recipe nodes
+ * authored by other users.
+ */
+export const userRecipeFavorites = pgTable(
+	'user_recipe_favorites',
+	{
+		userId: uuid('user_id').notNull(),
+		recipeNodeId: uuid('recipe_node_id')
+			.notNull()
+			.references((): AnyPgColumn => recipeNodes.id, { onDelete: 'cascade' }),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => [
+		primaryKey({ columns: [table.userId, table.recipeNodeId] }),
+		index('idx_user_recipe_favorites_user_created').on(table.userId, table.createdAt.desc(), table.recipeNodeId),
+		index('idx_user_recipe_favorites_recipe_node').on(table.recipeNodeId)
+	]
+);
+
+export type InsertUserRecipeFavorite = typeof userRecipeFavorites.$inferInsert;
+export type SelectUserRecipeFavorite = typeof userRecipeFavorites.$inferSelect;
+
 /**
  * Fixed UUID used by `scripts/seed.ts`. The matching `auth.users` row is
  * provisioned by the recipes migration. Seed/demo recipes live under this
@@ -82,3 +107,11 @@ export type SelectProfile = typeof profiles.$inferSelect;
  * see their own trees.
  */
 export const DEMO_USER_ID = '00000000-0000-0000-0000-000000000001';
+
+/**
+ * Fixed UUIDs used for deterministic cross-user testing and seed fixtures.
+ * SEED_COMMUNITY_USER_ID represents an external creator ("Chef Auguste").
+ */
+export const SEED_COMMUNITY_USER_ID = '00000000-0000-0000-0000-000000000002';
+export const SEED_COMMUNITY_PUBLIC_RECIPE_ID = '00000000-0000-0000-0000-000000000101';
+export const SEED_COMMUNITY_PRIVATE_RECIPE_ID = '00000000-0000-0000-0000-000000000102';

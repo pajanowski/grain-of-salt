@@ -123,3 +123,33 @@ test('dashboard displays fork count and links to the newest leaf when a recipe i
 	const updatedCard = getDashboardCard(page, recipeName);
 	await expect(updatedCard).toBeVisible();
 });
+
+test('dashboard limits recent recipes section to at most 5 recipes', async ({ page }) => {
+	await page.goto('/mise');
+
+	// Create 6 recipes
+	const createdNames: string[] = [];
+	for (let i = 0; i < 6; i++) {
+		const name = `Recent Test ${i} ${uuidv4()}`;
+		createdNames.push(name);
+		await openCreateForm(page);
+		await getRecipeNameInput(page).fill(name);
+		await getCreateButton(page).click();
+		await expect(getRecipeLink(page, name)).toBeVisible();
+	}
+
+	await page.goto('/mise');
+
+	// The recent recipes section should display at most 5 cards
+	const dashboardCards = page.getByTestId('recipe-dashboard-card');
+	const count = await dashboardCards.count();
+	expect(count).toBeLessThanOrEqual(5);
+
+	// The most recently created recipe (the 6th one, index 5) must be present
+	const latestName = createdNames[5];
+	await expect(getDashboardCard(page, latestName)).toBeVisible();
+
+	// The oldest created recipe (index 0) should have dropped out of the top 5 recents
+	const oldestName = createdNames[0];
+	await expect(getDashboardCard(page, oldestName)).not.toBeVisible();
+});

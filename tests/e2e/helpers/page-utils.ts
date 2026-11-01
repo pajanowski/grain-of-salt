@@ -57,6 +57,16 @@ export function getFavoriteCards(page: Page) {
 	return page.getByTestId('recipe-favorite-card');
 }
 
+/** The favorite star button in the recipe header. */
+export function getFavoriteStarButton(page: Page) {
+	return page.getByTestId('recipe-favorite-star');
+}
+
+/** Author attribution badge on a recipe card or header. */
+export function getRecipeAuthorBadge(page: Page) {
+	return page.getByTestId('recipe-author-badge');
+}
+
 /** A card in the home screen recent recipes dashboard. */
 export function getDashboardCard(page: Page, name: string) {
 	return page.getByTestId('recipe-dashboard-card').filter({ hasText: name });

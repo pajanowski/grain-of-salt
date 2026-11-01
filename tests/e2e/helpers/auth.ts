@@ -14,7 +14,7 @@
  * individual tests boot already authenticated.
  */
 
-import { expect, type Page } from '@playwright/test';
+import { expect, type Page, type Browser, type BrowserContext } from '@playwright/test';
 import axios from 'axios';
 import { TEST_USER_EMAIL } from './auth-shared';
 
@@ -78,21 +78,41 @@ async function pollForOtp(toEmail: string, timeoutMs = 15_000): Promise<string> 
 }
 
 /**
- * Sign a single page in via the OTP form. ~3s per call. The browser
- * context is left signed in (Supabase auth cookies set).
+ * Sign a single page in via the OTP form with a specific email address.
  */
-export async function signInAsTestUser(page: Page) {
+export async function signInAsUser(page: Page, email: string) {
 	await page.goto('/auth');
 
-	await page.getByLabel('Email').fill(TEST_USER_EMAIL);
+	await page.getByLabel('Email').fill(email);
 	await page.getByRole('button', { name: /email me a code/i }).click();
 
 	await expect(page.getByLabel(/8-digit code/i)).toBeVisible({ timeout: 10_000 });
 
-	const code = await pollForOtp(TEST_USER_EMAIL);
+	const code = await pollForOtp(email);
 
 	await page.getByLabel(/8-digit code/i).fill(code);
 	await page.getByRole('button', { name: /^Verify$/i }).click();
 
 	await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
+}
+
+/**
+ * Creates an isolated browser context logged in as a secondary test user.
+ */
+export async function createAuthenticatedContext(
+	browser: Browser,
+	email: string
+): Promise<{ context: BrowserContext; page: Page }> {
+	const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+	const page = await context.newPage();
+	await signInAsUser(page, email);
+	return { context, page };
+}
+
+/**
+ * Sign a single page in via the OTP form. ~3s per call. The browser
+ * context is left signed in (Supabase auth cookies set).
+ */
+export async function signInAsTestUser(page: Page) {
+	await signInAsUser(page, TEST_USER_EMAIL);
 }

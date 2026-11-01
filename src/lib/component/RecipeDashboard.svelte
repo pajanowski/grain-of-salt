@@ -15,10 +15,10 @@
 	{#if favorites && favorites.length > 0}
 		<div class="flex flex-col gap-4">
 			<h2 class="text-2xl font-semibold text-stone-800">Favorites</h2>
-			<div class="flex flex-col gap-3">
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
 				{#each favorites as fav (fav.id)}
 					<a
-						href="/mise/recipes/{fav.id}"
+						href={fav.urlPath ?? (fav.isOwner === false ? `/recipe/${fav.id}` : `/mise/recipes/${fav.id}`)}
 						class="group flex items-center justify-between rounded-lg border border-stone-200 bg-white p-4 shadow-sm transition hover:border-amber-400 hover:bg-stone-50"
 						data-testid="recipe-favorite-card"
 					>
@@ -42,13 +42,21 @@
 								<span class="truncate font-semibold text-stone-900 group-hover:text-amber-800">
 									{fav.name}
 								</span>
+								{#if fav.authorName}
+									<span
+										data-testid="recipe-author-badge"
+										class="shrink-0 rounded bg-stone-100 px-1.5 py-0.5 text-xs text-stone-600"
+									>
+										by {fav.authorName}
+									</span>
+								{/if}
 							</div>
 							<div class="flex items-center gap-2 text-xs text-stone-500">
 								<span>{formatRelativeTime(fav.lastEditedAt)}</span>
 							</div>
 						</div>
 						<div
-							class="text-stone-400 transition group-hover:translate-x-0.5 group-hover:text-amber-600"
+							class="shrink-0 text-stone-400 transition group-hover:translate-x-0.5 group-hover:text-amber-600"
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -73,7 +81,7 @@
 	{#if dashboard && dashboard.length > 0}
 		<div class="flex flex-col gap-4">
 			<h2 class="text-2xl font-semibold text-stone-800">Recent recipes</h2>
-			<div class="flex flex-col gap-3">
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
 				{#each dashboard as entry (entry.rootId)}
 					<a
 						href="/mise/recipes/{entry.leafId}"
@@ -93,7 +101,7 @@
 							</div>
 						</div>
 						<div
-							class="text-stone-400 transition group-hover:translate-x-0.5 group-hover:text-amber-600"
+							class="shrink-0 text-stone-400 transition group-hover:translate-x-0.5 group-hover:text-amber-600"
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"

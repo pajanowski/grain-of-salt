@@ -120,6 +120,7 @@ agent-e2e-test *extra:
 # Phase 3: tear down agent — stop preview, clean up PID. Does NOT touch supabase.
 agent-e2e-teardown:
     cat /tmp/grain-of-salt-agent-preview.pid 2>/dev/null | xargs kill 2>/dev/null || true
+    fuser -k 4173/tcp 2>/dev/null || true
     rm -f /tmp/grain-of-salt-agent-preview.pid /tmp/grain-of-salt-agent-preview.port
     pnpm db:reset
 
@@ -132,6 +133,7 @@ agent-e2e-preview:
         kill $(cat /tmp/grain-of-salt-agent-preview.pid) 2>/dev/null || true
         rm -f /tmp/grain-of-salt-agent-preview.pid /tmp/grain-of-salt-agent-preview.port
     fi
+    fuser -k 4173/tcp 2>/dev/null || true
     # Start preview and record PID
     SINGLE_USER_MODE="false" pnpm preview --port 4173 &
     echo $! > /tmp/grain-of-salt-agent-preview.pid
