@@ -12,7 +12,8 @@ import {
 	getHeaderHomeLink,
 	getRecipeHeading,
 	getRecipeLink,
-	fillAddIngredient
+	fillAddIngredient,
+	forkRecipe
 } from './helpers/page-utils';
 
 test('dashboard displays recently created recipes with links to their leaf node and header home link works', async ({
@@ -96,7 +97,7 @@ test('dashboard displays favorites above recents when recipes are favorited', as
 	await expect(page.getByRole('heading', { name: 'Recipe List' })).toBeVisible();
 });
 
-test('dashboard displays fork count and links to the newest leaf when a recipe is edited/forked', async ({
+test('dashboard displays fork count, displays the newest fork name, and links to the newest leaf when a recipe is forked', async ({
 	page
 }) => {
 	await page.goto('/mise');
@@ -108,20 +109,34 @@ test('dashboard displays fork count and links to the newest leaf when a recipe i
 	await getRecipeNameInput(page).fill(recipeName);
 	await getCreateButton(page).click();
 
-	// Navigate to home and verify it is in dashboard
+	// Navigate to home and verify root recipe is in dashboard
 	await page.goto('/mise');
 	const card = getDashboardCard(page, recipeName);
 	await expect(card).toBeVisible();
 
-	// Navigate into the recipe and add an ingredient (which creates/updates nodes)
+	// Navigate into the recipe
 	await card.click();
 	await expect(getRecipeHeading(page, recipeName)).toBeVisible();
-	await fillAddIngredient(page, 'Sugar', '1', 'cup');
+
+	// Fork the recipe to create a child fork with a distinct name
+	const forkedName = await forkRecipe(page, () => `Forked ${uuidv4()}`);
 
 	// Return to home page
 	await page.goto('/mise');
-	const updatedCard = getDashboardCard(page, recipeName);
-	await expect(updatedCard).toBeVisible();
+
+	// The dashboard should now display the forked recipe's name instead of the root recipe name
+	const forkedCard = getDashboardCard(page, forkedName);
+	await expect(forkedCard).toBeVisible();
+	await expect(forkedCard).toContainText('1 fork');
+
+	// The root recipe name card should not be directly visible in the dashboard cards
+	const rootCard = getDashboardCard(page, recipeName);
+	await expect(rootCard).not.toBeVisible();
+
+	// Clicking the forked recipe card links directly to the forked leaf node
+	await forkedCard.click();
+	await expect(page).toHaveURL(/\/mise\/recipes\/[0-9a-f-]+/);
+	await expect(getRecipeHeading(page, forkedName)).toBeVisible();
 });
 
 test('dashboard limits recent recipes section to at most 5 recipes', async ({ page }) => {

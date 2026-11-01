@@ -1604,7 +1604,7 @@ describe('computeRecipeDashboard', () => {
 		expect(result).toHaveLength(1);
 		expect(result[0]).toEqual({
 			rootId: 'root-1',
-			name: 'Omelette',
+			name: 'Spicy Denver Omelette',
 			forkCount: 2, // child1 and child2
 			lastEditedAt: new Date('2026-01-04T10:00:00Z'),
 			leafId: 'grandchild-1'

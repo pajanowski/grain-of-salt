@@ -882,22 +882,22 @@ export function computeRecipeDashboard(
 		}
 
 		let maxDate = extractNodeDate(group.root);
-		let leafId = group.root.id;
+		let leafNode = group.root;
 
 		for (const node of group.nodes) {
 			const d = extractNodeDate(node);
 			if (d.getTime() >= maxDate.getTime()) {
 				maxDate = d;
-				leafId = node.id;
+				leafNode = node;
 			}
 		}
 
 		entries.push({
 			rootId: group.root.id,
-			name: group.root.name,
+			name: leafNode.name,
 			forkCount: directChildrenCount,
 			lastEditedAt: maxDate,
-			leafId
+			leafId: leafNode.id
 		});
 	}
 
