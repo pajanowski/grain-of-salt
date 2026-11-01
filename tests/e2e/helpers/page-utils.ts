@@ -39,7 +39,11 @@ export function getCancelButton(page: Page) {
 
 /** A recipe link in the recipe tree, matched by exact accessible name. */
 export function getRecipeLink(page: Page, name: string) {
-	return page.getByRole('link', { name, exact: true });
+	return page
+		.getByTestId('recipe-tree-link')
+		.filter({ hasText: name })
+		.or(page.getByRole('link', { name, exact: true }))
+		.first();
 }
 
 /** The "Grain of Salt" home link in the header/sidebar. */

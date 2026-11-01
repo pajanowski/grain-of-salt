@@ -27,6 +27,15 @@ export default defineConfig({
   outputDir: 'pw-test-results',
   testIgnore: IGNORE_PATTERNS,
 
+  webServer: {
+    command: 'SINGLE_USER_MODE="false" pnpm preview --port 4173',
+    url: 'http://localhost:4173',
+    reuseExistingServer: !process.env.PLAYWRIGHT_NO_REUSE,
+    timeout: 60_000,
+    stdout: 'pipe',
+    stderr: 'pipe'
+  },
+
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,

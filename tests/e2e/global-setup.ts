@@ -9,14 +9,15 @@
  * it from .env inside this script — .env points at 127.0.0.1 which
  * resolves to the container itself, not the host.
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { execSync } from 'node:child_process';
 import postgres from 'postgres';
+import axios from 'axios';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { chromium } from '@playwright/test';
 import { v4 as uuidv4 } from 'uuid';
 
-import { signInAsTestUser } from './helpers/auth';
 export { TEST_USER_ID, TEST_USER_EMAIL } from './helpers/auth-shared';
 import { TEST_USER_ID, TEST_USER_EMAIL } from './helpers/auth-shared';
 import {
@@ -26,13 +27,41 @@ import {
 
 /**
  * Cached Supabase auth cookies shared across every test in the suite.
- * Captured once at the end of globalSetup; consumed by the chromium
- * project via `use.storageState` so individual tests boot already
- * signed in instead of paying ~3s per test for an OTP round-trip.
- *
- * The directory is project-ignored; tests never read it directly.
+ * Captured directly via Supabase Auth API at the end of globalSetup;
+ * consumed by the chromium project via `use.storageState` so individual
+ * tests boot already signed in instantly.
  */
 const STORAGE_STATE_PATH = '.auth/test-user.json';
+const TEST_PASSWORD = 'e2e-test-password-12345';
+const DEFAULT_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+
+async function verifyServicesReady(dbUrl: string, supabaseUrl: string) {
+  try {
+    const testClient = postgres(dbUrl, { connect_timeout: 2, max: 1 });
+    await testClient`select 1`;
+    await testClient.end();
+  } catch {
+    console.log('[e2e global-setup] Database not responding, attempting to start Supabase services...');
+    try {
+      execSync('pnpm db:start', { stdio: 'inherit' });
+    } catch {
+      throw new Error(
+        `Failed to connect to database at ${dbUrl} and unable to start Supabase services automatically. Please ensure Supabase is running with 'pnpm db:start' or 'just setup-dev'.`
+      );
+    }
+  }
+
+  try {
+    await axios.get(`${supabaseUrl}/auth/v1/health`, { timeout: 3000 });
+  } catch {
+    try {
+      await axios.get(`${supabaseUrl}/`, { timeout: 3000 });
+    } catch {
+      console.warn(`[e2e global-setup] Warning: Supabase endpoint ${supabaseUrl} did not respond promptly.`);
+    }
+  }
+}
 
 async function ensureUser(
   db: ReturnType<typeof drizzle>,
@@ -54,7 +83,7 @@ async function ensureUser(
 			'authenticated',
 			'authenticated',
 			${email},
-			crypt('test-password-not-used', gen_salt('bf')),
+			crypt(${TEST_PASSWORD}, gen_salt('bf')),
 			now(),
 			'{"provider":"email","providers":["email"]}'::jsonb,
 			${`{"display_name":"${displayName}"}`}::jsonb,
@@ -65,7 +94,10 @@ async function ensureUser(
 			'',
 			''
 		)
-		on conflict (id) do nothing
+		on conflict (id) do update set
+			encrypted_password = crypt(${TEST_PASSWORD}, gen_salt('bf')),
+			email_confirmed_at = coalesce(auth.users.email_confirmed_at, now()),
+			raw_user_meta_data = ${`{"display_name":"${displayName}"}`}::jsonb
 	`);
 }
 
@@ -115,11 +147,87 @@ async function cloneDemoRecipesToTestUser(
   }
 }
 
+async function captureTestUserStorageStateDirectly(supabaseUrl: string, anonKey: string) {
+  const tokenUrl = `${supabaseUrl}/auth/v1/token?grant_type=password`;
+  const response = await axios.post(
+    tokenUrl,
+    {
+      email: TEST_USER_EMAIL,
+      password: TEST_PASSWORD
+    },
+    {
+      headers: {
+        apikey: anonKey,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  const session = response.data;
+  const sessionStr = JSON.stringify(session);
+  const base64Session = `base64-${Buffer.from(sessionStr).toString('base64')}`;
+
+  const expires = session.expires_at ? Number(session.expires_at) + 86400 * 365 : Math.floor(Date.now() / 1000) + 86400 * 365;
+
+  const cookies = [
+    {
+      name: 'sb-127-auth-token',
+      value: base64Session,
+      domain: 'localhost',
+      path: '/',
+      expires,
+      httpOnly: false,
+      secure: false,
+      sameSite: 'Lax' as const
+    },
+    {
+      name: 'sb-localhost-auth-token',
+      value: base64Session,
+      domain: 'localhost',
+      path: '/',
+      expires,
+      httpOnly: false,
+      secure: false,
+      sameSite: 'Lax' as const
+    },
+    {
+      name: 'sb-127-auth-token',
+      value: base64Session,
+      domain: '127.0.0.1',
+      path: '/',
+      expires,
+      httpOnly: false,
+      secure: false,
+      sameSite: 'Lax' as const
+    },
+    {
+      name: 'sb-localhost-auth-token',
+      value: base64Session,
+      domain: '127.0.0.1',
+      path: '/',
+      expires,
+      httpOnly: false,
+      secure: false,
+      sameSite: 'Lax' as const
+    }
+  ];
+
+  const storageState = {
+    cookies,
+    origins: []
+  };
+
+  fs.mkdirSync(path.dirname(STORAGE_STATE_PATH), { recursive: true });
+  fs.writeFileSync(STORAGE_STATE_PATH, JSON.stringify(storageState, null, 2));
+}
+
 export default async function globalSetup() {
-  const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl) {
-    throw new Error('DATABASE_URL must be set for e2e tests to run');
-  }
+  const dbUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:54322/postgres';
+  const supabaseUrl = process.env.PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
+  const anonKey = process.env.PUBLIC_SUPABASE_ANON_KEY ?? DEFAULT_SUPABASE_ANON_KEY;
+
+  console.log('[e2e global-setup] Checking service readiness');
+  await verifyServicesReady(dbUrl, supabaseUrl);
 
   const client = postgres(dbUrl, { prepare: false });
   const db = drizzle(client);
@@ -152,29 +260,6 @@ export default async function globalSetup() {
     await client.end();
   }
 
-  console.log('[e2e global-setup] Capturing shared test-user storage state');
-  await captureTestUserStorageState();
-}
-
-/**
- * Launch a headless browser, sign in once as the test user, and persist
- * the resulting auth cookies + localStorage to disk. Playwright loads
- * this into every test's browser context via `use.storageState`, so
- * individual tests skip the OTP round-trip entirely.
- *
- * `baseURL` must match the value the tests use (see
- * playwright.config.ts); `signInAsTestUser` navigates to relative URLs.
- */
-async function captureTestUserStorageState() {
-  const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:4173';
-
-  const browser = await chromium.launch();
-  try {
-    const context = await browser.newContext({ baseURL });
-    const page = await context.newPage();
-    await signInAsTestUser(page);
-    await context.storageState({ path: STORAGE_STATE_PATH });
-  } finally {
-    await browser.close();
-  }
+  console.log('[e2e global-setup] Generating shared test-user storage state directly via Supabase Auth');
+  await captureTestUserStorageStateDirectly(supabaseUrl, anonKey);
 }
