@@ -5,6 +5,7 @@ import type {
 	RecipeDashboardItem,
 	RecipeFavoriteItem,
 	RecipeDetailView,
+	RecipeGraphView,
 	RecipeSummary
 } from './recipe-store';
 import type { RecipeNode, IngredientChange, DirectionChange } from './obj/RecipeNode.svelte';
@@ -94,6 +95,86 @@ function getDescendantIds(nodes: Map<string, RecipeNode>, rootId: string): Set<s
 		}
 	}
 	return result;
+}
+
+export function computeGraphView(
+	nodesInput: Map<string, RecipeNode> | RecipeNode[],
+	targetNodeId: string
+): RecipeGraphView {
+	const nodeMap =
+		nodesInput instanceof Map
+			? nodesInput
+			: new Map(nodesInput.map((n) => [n.id, n]));
+
+	const treeNodes = new Map<string, RecipeTreeNode>();
+
+	for (const [id, node] of nodeMap.entries()) {
+		treeNodes.set(id, {
+			id,
+			name: node.name,
+			parentId: node.parentId,
+			children: []
+		});
+	}
+
+	for (const item of treeNodes.values()) {
+		if (item.parentId && treeNodes.has(item.parentId)) {
+			treeNodes.get(item.parentId)!.children.push(item);
+		}
+	}
+
+	const currentSubtree = treeNodes.get(targetNodeId) ?? null;
+	if (!currentSubtree) {
+		return { subtree: null, subtreeNodes: [] };
+	}
+
+	function cloneTreeNode(n: RecipeTreeNode): RecipeTreeNode {
+		return {
+			id: n.id,
+			name: n.name,
+			parentId: n.parentId,
+			children: n.children.map(cloneTreeNode)
+		};
+	}
+
+	const lineage: RecipeTreeNode[] = [cloneTreeNode(currentSubtree)];
+	let cursor: RecipeTreeNode | undefined = currentSubtree;
+	while (cursor?.parentId) {
+		const parent = treeNodes.get(cursor.parentId);
+		if (!parent) break;
+		lineage.push({
+			id: parent.id,
+			name: parent.name,
+			parentId: parent.parentId,
+			children: []
+		});
+		cursor = parent;
+	}
+
+	for (let i = 0; i < lineage.length - 1; i++) {
+		lineage[i + 1].children = [lineage[i]];
+	}
+
+	const subtree = lineage[lineage.length - 1];
+
+	function collectSubtreeIds(node: RecipeTreeNode): string[] {
+		const ids: string[] = [node.id];
+		for (const child of node.children) ids.push(...collectSubtreeIds(child));
+		return ids;
+	}
+
+	const allIds = collectSubtreeIds(subtree);
+	const subtreeNodes = allIds
+		.map((id) => nodeMap.get(id))
+		.filter((n): n is RecipeNode => Boolean(n))
+		.map((n) => ({
+			...n,
+			timestamp: new Date(n.timestamp),
+			ingredientChanges: JSON.parse(JSON.stringify(n.ingredientChanges)),
+			directionChanges: JSON.parse(JSON.stringify(n.directionChanges))
+		}));
+
+	return { subtree, subtreeNodes };
 }
 
 export const demoStore: RecipeStore = {
@@ -221,6 +302,11 @@ export const demoStore: RecipeStore = {
 				directions: {}
 			}
 		};
+	},
+
+	async getGraphView(nodeId: string): Promise<RecipeGraphView> {
+		const nodes = get(demoNodes);
+		return computeGraphView(nodes, nodeId);
 	},
 
 	async create(name: string): Promise<{ id: string }> {

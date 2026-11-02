@@ -43,6 +43,34 @@ test.describe('Demo Mode (demo.localhost / demo subdomain)', () => {
 		await expect(frenchOmelette).toBeVisible();
 	});
 
+	test('renders recipe graph canvas without sign in prompt in demo mode', async ({ page }) => {
+		await page.goto('http://demo.localhost:4173/mise');
+
+		// Click into Simple Omelette
+		const simpleOmelette = getRecipeLink(page, 'Simple Omelette');
+		await simpleOmelette.click();
+		await expect(page).toHaveURL(/\/mise\/recipes\/[0-9a-f-]+$/);
+
+		// Click Graph tab
+		const graphTab = page.getByTestId('tab-graph');
+		await expect(graphTab).toBeVisible();
+		await graphTab.click();
+
+		await expect(page).toHaveURL(/\/mise\/recipes\/[0-9a-f-]+\/graph$/);
+
+		// Must not prompt to sign in
+		await expect(page.getByText('Sign in to view the recipe graph.')).not.toBeVisible();
+
+		// SvelteFlow canvas and graph heading should be visible
+		await expect(page.getByRole('heading', { name: 'Recipe Graph', level: 1 })).toBeVisible();
+		const canvas = page.locator('.svelte-flow');
+		await expect(canvas).toBeVisible({ timeout: 10_000 });
+
+		// Should render the recipe DAG nodes (Simple Omelette, French, Cheese, Denver, Spicy Denver)
+		const nodes = page.locator('.svelte-flow__node');
+		await expect(nodes).toHaveCount(5, { timeout: 10_000 });
+	});
+
 	test('persists custom recipe creation and edits across reloads, and resets on demand', async ({ page }) => {
 		await page.goto('http://demo.localhost:4173/mise');
 

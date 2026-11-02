@@ -84,6 +84,27 @@ describe('demoStore (client-side in-memory localStorage adapter)', () => {
 		expect(ingNames).toContain('Jalapeño');
 	});
 
+	it('computes DAG lineage and subtree for recipe graph via getGraphView', async () => {
+		// Graph for root (Simple Omelette) should include root + all children
+		const rootGraph = await demoStore.getGraphView(SEED_SIMPLE_ID);
+		expect(rootGraph.subtree).not.toBeNull();
+		expect(rootGraph.subtree?.id).toBe(SEED_SIMPLE_ID);
+		expect(rootGraph.subtreeNodes.length).toBe(5); // Simple, French, Cheese, Denver, Spicy Denver
+
+		// Graph for descendant (Cheese Omelette) should have root as ancestor and Cheese's descendants
+		const cheeseGraph = await demoStore.getGraphView(SEED_CHEESE_ID);
+		expect(cheeseGraph.subtree).not.toBeNull();
+		// Root is top of subtree
+		expect(cheeseGraph.subtree?.id).toBe(SEED_SIMPLE_ID);
+		// Root should only point down to Cheese (French sibling is omitted in lineage view)
+		expect(cheeseGraph.subtree?.children.length).toBe(1);
+		expect(cheeseGraph.subtree?.children[0].id).toBe(SEED_CHEESE_ID);
+		// Cheese should still have Denver
+		expect(cheeseGraph.subtree?.children[0].children[0].id).toBe(SEED_DENVER_ID);
+		// Subtree nodes: Simple, Cheese, Denver, Spicy Denver (4 nodes)
+		expect(cheeseGraph.subtreeNodes.length).toBe(4);
+	});
+
 	it('supports creating, renaming, and removing recipes', async () => {
 		// Create
 		const { id: newId } = await demoStore.create('Pancakes');
