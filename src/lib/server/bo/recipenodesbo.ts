@@ -1,18 +1,11 @@
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/index';
-import { recipeNodes } from '../db/schema';
+import { recipeNodes, userRecipeFavorites, profiles } from '../db/schema';
 import type { InsertRecipeNode, SelectRecipeNode } from '../db/schema';
 import type { Ingredient, Direction } from '$lib/obj/Recipe.svelte';
 import type { RecipeNode, IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
-
-/**
- * Materialized state derived by replaying every node in a recipe's history,
- * oldest first.
- */
-export interface RecipeState {
-	ingredients: Ingredient[];
-	directions: Direction[];
-}
+import { applyNodes, type RecipeState } from '$lib/recipe-apply';
+export { applyNodes, type RecipeState };
 
 export async function createRootRecipeNode(
 	name: string,
@@ -147,182 +140,6 @@ export async function getRootRecipeNode(nodeId: string): Promise<RecipeNode | nu
 		cursorId = row.parentId;
 	}
 	return cursor;
-}
-
-/**
- * Pure function: replay an ordered list of nodes against an empty state.
- * Exported for testing and for callers who already have the nodes in hand.
- */
-export function applyNodes(nodes: RecipeNode[]): RecipeState {
-	const ingredients = new Map<string, Ingredient>();
-	const directions = new Map<string, Direction>();
-	// Track the latest note per item from add/edit changes; deleted on remove.
-	const ingredientNotes = new Map<string, string | null>();
-	const directionNotes = new Map<string, string | null>();
-	// Track the latest imagePaths per item from add/edit changes. Per the
-	// imagePaths replay contract: body.imagePaths === null (or missing)
-	// means "fall through to ancestor's set"; body.imagePaths === []
-	// means "cleared by this change"; body.imagePaths === [...] means
-	// "replace with this set". We only touch the map when the body
-	// explicitly carries the field.
-	const ingredientImages = new Map<string, string[]>();
-	const directionImages = new Map<string, string[]>();
-
-	for (const node of nodes) {
-		for (const change of node.ingredientChanges) {
-			applyIngredientChange(ingredients, ingredientNotes, ingredientImages, change);
-		}
-		for (const change of node.directionChanges) {
-			applyDirectionChange(directions, directionNotes, directionImages, change);
-		}
-	}
-
-	const ingredientList = Array.from(ingredients.values()).map((ing) => ({
-		...ing,
-		note: ingredientNotes.get(ing.id) ?? null,
-		// Final imagePaths comes from the per-row image map; if absent
-		// (e.g. an add without body.imagePaths), the row renders
-		// without images.
-		imagePaths: ingredientImages.get(ing.id) ?? null
-	}));
-	const directionList = Array.from(directions.values()).map((dir) => ({
-		...dir,
-		note: directionNotes.get(dir.id) ?? null,
-		imagePaths: directionImages.get(dir.id) ?? null
-	}));
-
-	return {
-		ingredients: ingredientList,
-		directions: directionList
-	};
-}
-
-/**
- * Apply the imagePaths replay rule to the per-row image map. Called
- * from both applyIngredientChange and applyDirectionChange for any
- * change that carries a body. Skips when body.imagePaths is null or
- * undefined (fall-through) or when the change has no body at all
- * (e.g. remove).
- */
-function applyImagePaths<T extends { id: string; imagePaths?: string[] | null }>(
-	state: Map<string, T>,
-	images: Map<string, string[]>,
-	body: T | null | undefined
-): void {
-	if (!body || !('imagePaths' in body)) return;
-	// explicit null = fall through (preserve ancestor's set)
-	if (body.imagePaths === null || body.imagePaths === undefined) return;
-	images.set(body.id, body.imagePaths);
-}
-
-function applyIngredientChange(
-	state: Map<string, Ingredient>,
-	notes: Map<string, string | null>,
-	images: Map<string, string[]>,
-	change: IngredientChange
-): void {
-	switch (change.changeType) {
-		case 'add': {
-			if (!change.body) return; // malformed: add requires a body
-			const id = change.body.id || change.id;
-			if (change.targetId !== null) {
-				// Reorder-only claim: an ancestor already owns the body for
-				// this row; the leaf just wants to move it to the end of
-				// insertion order. Move-then-set with the existing body so a
-				// later parent edit survives a fork-side reorder.
-				if (state.has(id)) {
-					const existing = state.get(id)!;
-					state.delete(id);
-					state.set(id, { ...existing, id });
-				}
-				return;
-			}
-			// Leaf owns the body (fresh add or reclaim). Delete-then-set:
-			// when the same id is being re-added by a later node, `Map.set`
-			// alone would leave the key at its original insertion position.
-			// Deleting first moves the key to the end so leaf-emitted
-			// additions control the final display order.
-			if (state.has(id)) state.delete(id);
-			if (notes.has(id)) notes.delete(id);
-			state.set(id, { ...change.body, id });
-			notes.set(id, change.note ?? null);
-			applyImagePaths(state, images, change.body);
-			return;
-		}
-		case 'edit':
-		case 'substitute': {
-			// 'substitute' is syntactic sugar over 'edit': same wire shape
-			// (targetId + body), same materialize behavior. UI surfaces use
-			// the changeType to pick a distinct color (blue vs amber), but
-			// replay treats them identically.
-			if (!change.targetId || !change.body) return; // malformed
-			if (state.has(change.targetId)) {
-				state.set(change.targetId, { ...change.body, id: change.targetId });
-				notes.set(change.targetId, change.note ?? null);
-				applyImagePaths(state, images, change.body);
-			}
-			return;
-		}
-		case 'remove': {
-			if (change.targetId) {
-				state.delete(change.targetId);
-				notes.delete(change.targetId);
-				images.delete(change.targetId);
-			}
-			return;
-		}
-	}
-}
-
-function applyDirectionChange(
-	state: Map<string, Direction>,
-	notes: Map<string, string | null>,
-	images: Map<string, string[]>,
-	change: DirectionChange
-): void {
-	switch (change.changeType) {
-		case 'add': {
-			if (!change.body) return;
-			const id = change.body.id || change.id;
-			if (change.targetId !== null) {
-				// See applyIngredientChange above: reorder-only claim.
-				if (state.has(id)) {
-					const existing = state.get(id)!;
-					state.delete(id);
-					state.set(id, { ...existing, id });
-				}
-				return;
-			}
-			// Leaf owns the body.
-			if (state.has(id)) state.delete(id);
-			if (notes.has(id)) notes.delete(id);
-			state.set(id, { ...change.body, id });
-			notes.set(id, change.note ?? null);
-			applyImagePaths(state, images, change.body);
-			return;
-		}
-		case 'edit':
-		case 'substitute': {
-			// See applyIngredientChange: 'substitute' is syntactic sugar over
-			// 'edit', same wire shape and same materialize behavior. UI uses
-			// changeType for color only.
-			if (!change.targetId || !change.body) return;
-			if (state.has(change.targetId)) {
-				state.set(change.targetId, { ...change.body, id: change.targetId });
-				notes.set(change.targetId, change.note ?? null);
-				applyImagePaths(state, images, change.body);
-			}
-			return;
-		}
-		case 'remove': {
-			if (change.targetId) {
-				state.delete(change.targetId);
-				notes.delete(change.targetId);
-				images.delete(change.targetId);
-			}
-			return;
-		}
-	}
 }
 
 export function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
@@ -882,22 +699,22 @@ export function computeRecipeDashboard(
 		}
 
 		let maxDate = extractNodeDate(group.root);
-		let leafId = group.root.id;
+		let leafNode = group.root;
 
 		for (const node of group.nodes) {
 			const d = extractNodeDate(node);
 			if (d.getTime() >= maxDate.getTime()) {
 				maxDate = d;
-				leafId = node.id;
+				leafNode = node;
 			}
 		}
 
 		entries.push({
 			rootId: group.root.id,
-			name: group.root.name,
+			name: leafNode.name,
 			forkCount: directChildrenCount,
 			lastEditedAt: maxDate,
-			leafId
+			leafId: leafNode.id
 		});
 	}
 
@@ -921,6 +738,9 @@ export interface RecipeFavoriteEntry {
 	id: string;
 	name: string;
 	lastEditedAt: Date;
+	authorName?: string | null;
+	isOwner?: boolean;
+	urlPath?: string;
 }
 
 export function computeRecipeFavorites(allRows: SelectRecipeNode[]): RecipeFavoriteEntry[] {
@@ -929,16 +749,147 @@ export function computeRecipeFavorites(allRows: SelectRecipeNode[]): RecipeFavor
 		.map((row) => ({
 			id: row.id,
 			name: row.name,
-			lastEditedAt: extractNodeDate(row)
+			lastEditedAt: extractNodeDate(row),
+			authorName: null,
+			isOwner: true,
+			urlPath: `/mise/recipes/${row.id}`
 		}))
 		.sort((a, b) => b.lastEditedAt.getTime() - a.lastEditedAt.getTime());
 }
 
-export async function getRecipeFavorites(ownerId: string): Promise<RecipeFavoriteEntry[]> {
-	const allRows: SelectRecipeNode[] = await db
-		.select()
-		.from(recipeNodes)
-		.where(eq(recipeNodes.ownerId, ownerId));
+export async function isRecipeFavorited(userId: string, recipeNodeId: string): Promise<boolean> {
+	const rows = await db
+		.select({ recipeNodeId: userRecipeFavorites.recipeNodeId })
+		.from(userRecipeFavorites)
+		.where(
+			and(
+				eq(userRecipeFavorites.userId, userId),
+				eq(userRecipeFavorites.recipeNodeId, recipeNodeId)
+			)
+		)
+		.limit(1);
+	return rows.length > 0;
+}
 
-	return computeRecipeFavorites(allRows);
+export async function getFavoritesBatch(
+	userId: string,
+	recipeNodeIds: string[]
+): Promise<Record<string, boolean>> {
+	const result: Record<string, boolean> = {};
+	for (const id of recipeNodeIds) {
+		result[id] = false;
+	}
+	if (recipeNodeIds.length === 0) {
+		return result;
+	}
+	const rows = await db
+		.select({ recipeNodeId: userRecipeFavorites.recipeNodeId })
+		.from(userRecipeFavorites)
+		.where(
+			and(
+				eq(userRecipeFavorites.userId, userId),
+				inArray(userRecipeFavorites.recipeNodeId, recipeNodeIds)
+			)
+		);
+	for (const row of rows) {
+		result[row.recipeNodeId] = true;
+	}
+	return result;
+}
+
+export async function toggleRecipeFavorite(
+	userId: string,
+	recipeNodeId: string
+): Promise<{ isFavorite: boolean }> {
+	const nodeRows = await db
+		.select({ ownerId: recipeNodes.ownerId, isPublic: recipeNodes.isPublic })
+		.from(recipeNodes)
+		.where(eq(recipeNodes.id, recipeNodeId))
+		.limit(1);
+
+	if (nodeRows.length === 0) {
+		const err = new Error('Recipe node not found');
+		(err as { status?: number }).status = 404;
+		throw err;
+	}
+
+	const node = nodeRows[0];
+	if (node.ownerId !== userId && !node.isPublic) {
+		const err = new Error('Forbidden');
+		(err as { status?: number }).status = 403;
+		throw err;
+	}
+
+	const isCurrentlyFavorited = await isRecipeFavorited(userId, recipeNodeId);
+
+	if (isCurrentlyFavorited) {
+		await db
+			.delete(userRecipeFavorites)
+			.where(
+				and(
+					eq(userRecipeFavorites.userId, userId),
+					eq(userRecipeFavorites.recipeNodeId, recipeNodeId)
+				)
+			);
+		if (node.ownerId === userId) {
+			await db
+				.update(recipeNodes)
+				.set({ isFavorite: false })
+				.where(eq(recipeNodes.id, recipeNodeId));
+		}
+		return { isFavorite: false };
+	} else {
+		await db
+			.insert(userRecipeFavorites)
+			.values({ userId, recipeNodeId })
+			.onConflictDoNothing();
+		if (node.ownerId === userId) {
+			await db
+				.update(recipeNodes)
+				.set({ isFavorite: true })
+				.where(eq(recipeNodes.id, recipeNodeId));
+		}
+		return { isFavorite: true };
+	}
+}
+
+export async function getRecipeFavorites(
+	userId: string,
+	limit?: number,
+	offset?: number
+): Promise<RecipeFavoriteEntry[]> {
+	const rows = await db
+		.select({
+			recipeNodeId: userRecipeFavorites.recipeNodeId,
+			createdAt: userRecipeFavorites.createdAt,
+			nodeId: recipeNodes.id,
+			name: recipeNodes.name,
+			ownerId: recipeNodes.ownerId,
+			author: recipeNodes.author,
+			updatedAt: recipeNodes.updatedAt,
+			timestamp: recipeNodes.timestamp,
+			displayName: profiles.displayName
+		})
+		.from(userRecipeFavorites)
+		.innerJoin(recipeNodes, eq(userRecipeFavorites.recipeNodeId, recipeNodes.id))
+		.leftJoin(profiles, eq(recipeNodes.ownerId, profiles.id))
+		.where(eq(userRecipeFavorites.userId, userId))
+		.orderBy(desc(userRecipeFavorites.createdAt));
+
+	const sliced = typeof limit === 'number' ? rows.slice(offset ?? 0, (offset ?? 0) + limit) : rows;
+
+	return sliced.map((row) => {
+		const isOwner = row.ownerId === userId;
+		const authorName = isOwner ? null : (row.displayName || row.author || 'Community Chef');
+		const urlPath = isOwner ? `/mise/recipes/${row.nodeId}` : `/recipe/${row.nodeId}`;
+		const lastEditedAt = row.updatedAt ?? row.timestamp;
+		return {
+			id: row.nodeId,
+			name: row.name,
+			lastEditedAt: lastEditedAt instanceof Date ? lastEditedAt : new Date(lastEditedAt),
+			authorName,
+			isOwner,
+			urlPath
+		};
+	});
 }

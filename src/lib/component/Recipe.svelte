@@ -28,7 +28,15 @@
 	} from '$lib/obj/directionMask';
 	import { normalizeUnit } from '$lib/unit';
 	import { invalidateAll, goto, invalidate } from '$app/navigation';
-	import { api, errorMessage } from '$lib/api';
+	import {
+		toggleRecipeFavorite,
+		setRecipeNodePublic,
+		renameRecipe,
+		forkRecipe,
+		saveRecipeNode,
+		deleteRecipe,
+		errorMessage
+	} from '$lib/api';
 
 	const { data } = $props();
 
@@ -789,17 +797,12 @@
 
 	function performSave() {
 		if (!hasUnsavedChanges) return;
-		api
-			.put(`/mise/api/recipe-node/${currentNode.id}`, {
-				nodeId: currentNode.id,
-				ingredientChanges: leafIngredientChanges,
-				directionChanges: leafDirectionChanges
-			})
+		saveRecipeNode(currentNode.id, leafIngredientChanges, leafDirectionChanges)
 			.then(async () => {
 				await invalidateAll();
 				syncedNodeId = null;
 			})
-			.catch((e) => {
+			.catch((e: unknown) => {
 				alert(`Save failed: ${errorMessage(e)}`);
 			});
 	}
@@ -823,7 +826,7 @@
 		if (!trimmed || renameBusy) return;
 		renameBusy = true;
 		try {
-			await api.patch(`/mise/api/recipe/${rootNodeId}`, { name: trimmed });
+			await renameRecipe(rootNodeId, trimmed);
 			await invalidate('app:recipe-tree');
 			showRenameModal = false;
 		} catch (e) {
@@ -847,10 +850,7 @@
 		if (!trimmed || forkBusy) return;
 		forkBusy = true;
 		try {
-			const { data: newRecipe } = await api.post<{ id: string }>(
-				`/mise/api/recipe/${currentNode.id}/fork`,
-				{ name: trimmed }
-			);
+			const newRecipe = await forkRecipe(currentNode.id, trimmed);
 			showForkModal = false;
 			await invalidate('app:recipe-tree');
 			await goto(`/mise/recipes/${newRecipe.id}`);
@@ -863,32 +863,39 @@
 
 	async function confirmDelete() {
 		if (!confirm(`Delete "${recipe.name}"? This cannot be undone.`)) return;
-		const res = await fetch(`/mise/api/recipe/${rootNodeId}`, { method: 'DELETE' });
-		if (!res.ok) {
-			alert(`Delete failed: ${res.status} ${res.statusText}`);
-			return;
+		try {
+			await deleteRecipe(rootNodeId);
+			await invalidate('app:recipe-tree');
+			await goto('/mise');
+		} catch (e) {
+			alert(`Delete failed: ${errorMessage(e)}`);
 		}
-		await invalidate('app:recipe-tree');
-		await goto('/mise');
 	}
 
 	let shareLinkCopied = $state(false);
+	let isFavorite = $state(false);
+
+	$effect(() => {
+		isFavorite = Boolean(data.currentNode?.isFavorite);
+	});
+
 	async function togglePublic() {
 		const next = !currentNode.isPublic;
 		try {
-			await api.patch(`/mise/api/recipe-node/${currentNode.id}/public`, {
-				isPublic: next
-			});
+			await setRecipeNodePublic(currentNode.id, next);
 			await invalidateAll();
 		} catch (e) {
 			alert(`Failed to update visibility: ${errorMessage(e)}`);
 		}
 	}
 	async function toggleFavorite() {
+		const prev = isFavorite;
+		isFavorite = !prev;
 		try {
-			await api.patch(`/mise/api/recipe-node/${currentNode.id}/favorite`);
+			isFavorite = await toggleRecipeFavorite(currentNode.id);
 			await invalidateAll();
 		} catch (e) {
+			isFavorite = prev;
 			alert(`Failed to update favorite: ${errorMessage(e)}`);
 		}
 	}
@@ -957,7 +964,7 @@
 		{ label: 'Fork recipe', onSelect: openFork },
 		{ label: currentNode.isPublic ? 'Make private' : 'Make public', onSelect: togglePublic },
 		{
-			label: currentNode.isFavorite ? 'Unfavorite' : 'Favorite',
+			label: isFavorite ? 'Unfavorite' : 'Favorite',
 			onSelect: toggleFavorite
 		},
 		{ label: 'Delete recipe', onSelect: confirmDelete, danger: true }
@@ -969,14 +976,16 @@
 	<div class="flex items-start justify-between gap-4">
 		<div class="flex-1 min-w-0">
 			<h1 class="flex items-center gap-2 text-2xl font-bold">
-				{#if data.currentNode.isFavorite}
+				<button
+					type="button"
+					onclick={toggleFavorite}
+					class="p-0.5 rounded transition hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+					aria-label={isFavorite ? 'Unfavorite recipe' : 'Favorite recipe'}
+					data-testid="recipe-favorite-star"
+				>
 					<svg
-						data-testid="recipe-favorite-star"
-						aria-label="Favorite"
-						class="h-5 w-5 fill-amber-400 stroke-amber-500"
+						class="h-6 w-6 transition-colors {isFavorite ? 'fill-amber-400 stroke-amber-500' : 'fill-none stroke-stone-400 hover:stroke-amber-400'}"
 						viewBox="0 0 24 24"
-						fill="currentColor"
-						stroke="currentColor"
 						stroke-width="1.5"
 						stroke-linecap="round"
 						stroke-linejoin="round"
@@ -985,8 +994,8 @@
 							points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
 						/>
 					</svg>
-				{/if}
-				{recipe.name}
+				</button>
+				<span>{recipe.name}</span>
 			</h1>
 			{#if data.currentNode.author}
 				<p class="text-sm text-stone-500">by {data.currentNode.author}</p>

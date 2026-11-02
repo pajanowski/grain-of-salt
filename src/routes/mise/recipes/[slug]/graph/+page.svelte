@@ -2,11 +2,31 @@
 	import { browser } from '$app/environment';
 	import type { RecipeTreeNode } from '$lib/server/bo/recipenodesbo';
 	import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
+	import { isDemoMode } from '$lib/demo-init';
+	import { demoStore, demoNodes } from '$lib/recipe-store.demo';
+	import { page } from '$app/state';
 
 	const { data } = $props();
 
-	let subtree = $derived(data.subtree as RecipeTreeNode | null);
-	let subtreeNodes = $derived(data.subtreeNodes as RecipeNode[]);
+	let demoGraph = $state<{ subtree: RecipeTreeNode | null; subtreeNodes: RecipeNode[] } | null>(null);
+
+	$effect(() => {
+		if (data.demoMode || isDemoMode) {
+			const slug = page.params.slug;
+			if (slug) {
+				const unsub = demoNodes.subscribe(async () => {
+					const graph = await demoStore.getGraphView(slug);
+					if (graph) {
+						demoGraph = graph;
+					}
+				});
+				return () => unsub();
+			}
+		}
+	});
+
+	let subtree = $derived((demoGraph ? demoGraph.subtree : data.subtree) as RecipeTreeNode | null);
+	let subtreeNodes = $derived((demoGraph ? demoGraph.subtreeNodes : data.subtreeNodes) as RecipeNode[]);
 	let currentId = $derived(data.currentId as string);
 </script>
 
@@ -34,6 +54,8 @@
 				<span class="text-stone-400">Loading graph…</span>
 			</div>
 		{/if}
+	{:else if data.demoMode || isDemoMode}
+		<p class="text-stone-500">Recipe graph not found.</p>
 	{:else}
 		<p class="text-stone-500">Sign in to view the recipe graph.</p>
 	{/if}

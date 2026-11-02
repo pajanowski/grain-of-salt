@@ -3,12 +3,14 @@ import {
 	getRecipeTree,
 	getRecipeNodesByRecipeIdV2,
 	toUiRecipeNode,
-	type RecipeTreeNode,
+	type RecipeTreeNode
 } from '$lib/server/bo/recipenodesbo';
 import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
 import { db } from '$lib/server/db';
 import { recipeNodes } from '$lib/server/db/schema';
 import { inArray } from 'drizzle-orm';
+import { SEED_NODES } from '$lib/demo-seed';
+import { computeGraphView } from '$lib/recipe-store.demo';
 
 /**
  * Recursively collect every node id in a subtree (root + all descendants).
@@ -40,11 +42,16 @@ function collectSubtreeIds(node: RecipeTreeNode): string[] {
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const { user } = await locals.safeGetSession();
 	const ownerId = user?.id ?? null;
+	const demoMode = Boolean((locals as any).demoMode);
 
 	let subtree: RecipeTreeNode | null = null;
 	let subtreeNodes: RecipeNode[] = [];
 
-	if (ownerId) {
+	if (demoMode) {
+		const graph = computeGraphView(SEED_NODES, params.slug);
+		subtree = graph.subtree;
+		subtreeNodes = graph.subtreeNodes;
+	} else if (ownerId) {
 		const fullTree = await getRecipeTree(ownerId);
 
 		// Index every node by id for O(1) ancestor lookups.
@@ -94,5 +101,5 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		}
 	}
 
-	return { subtree, subtreeNodes, currentId: params.slug };
+	return { subtree, subtreeNodes, currentId: params.slug, demoMode };
 };

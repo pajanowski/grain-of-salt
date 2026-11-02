@@ -39,7 +39,11 @@ export function getCancelButton(page: Page) {
 
 /** A recipe link in the recipe tree, matched by exact accessible name. */
 export function getRecipeLink(page: Page, name: string) {
-	return page.getByRole('link', { name, exact: true });
+	return page
+		.getByTestId('recipe-tree-link')
+		.filter({ hasText: name })
+		.or(page.getByRole('link', { name, exact: true }))
+		.first();
 }
 
 /** The "Grain of Salt" home link in the header/sidebar. */
@@ -55,6 +59,16 @@ export function getFavoriteCard(page: Page, name: string) {
 /** All cards in the home screen favorites dashboard. */
 export function getFavoriteCards(page: Page) {
 	return page.getByTestId('recipe-favorite-card');
+}
+
+/** The favorite star button in the recipe header. */
+export function getFavoriteStarButton(page: Page) {
+	return page.getByTestId('recipe-favorite-star');
+}
+
+/** Author attribution badge on a recipe card or header. */
+export function getRecipeAuthorBadge(page: Page) {
+	return page.getByTestId('recipe-author-badge');
 }
 
 /** A card in the home screen recent recipes dashboard. */

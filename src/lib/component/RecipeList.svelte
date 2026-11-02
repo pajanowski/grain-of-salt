@@ -171,6 +171,7 @@
 									</span>
 								</button>
 								<a
+									data-testid="recipe-tree-link"
 									href="/mise/recipes/{node.id}"
 									class="flex-1 truncate rounded px-1.5 py-0.5 hover:underline"
 								>

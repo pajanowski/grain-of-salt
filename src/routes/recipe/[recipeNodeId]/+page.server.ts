@@ -1,48 +1,55 @@
 import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
-import { applyNodes } from '$lib/server/bo/recipenodesbo';
+import { applyNodes, isRecipeFavorited } from '$lib/server/bo/recipenodesbo';
 import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
 import type { SelectRecipeNode } from '$lib/server/db/schema';
+import { SEED_NODES } from '$lib/demo-seed';
 
 /**
  * Load a public recipe node by its UUID.
- *
- * Uses event.locals.supabase for the starting-node RLS check so anon
- * callers 404 immediately when the requested node isn't public. The full
- * parent chain is then walked with the `get_recipe_chain` SQL function
- * (security definer, anon-granted) because the public page must render
- * the *compiled* recipe — every ancestor's ingredients and directions —
- * even when some of those ancestors are themselves private. RLS alone
- * would stop the walk at the first private ancestor and silently drop
- * its content.
- *
- * If the starting node is absent or private → throw 404.
- *
- * Cache headers ensure shared links don't hammer the DB.
  */
 export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 	const recipeNodeId = params.recipeNodeId;
+	const demoMode = Boolean((locals as any).demoMode);
 
 	if (!recipeNodeId || recipeNodeId.trim().length === 0) {
 		throw error(404, 'Recipe not found');
 	}
 
-	// RLS-gated check that the starting node is public. Without this, an
-	// anon caller could probe whether a private node id exists by
-	// comparing the compiled response against a 404. The full chain is
-	// fetched separately via the security-definer RPC.
-	const { data: startRow } = await locals.supabase
-		.from('recipe_nodes')
-		.select('id,is_public')
-		.eq('id', recipeNodeId)
-		.eq('is_public', true)
-		.limit(1);
+	let history: RecipeNode[] = [];
 
-	if (!startRow || startRow.length === 0) {
-		throw error(404, 'Recipe not found');
+	if (demoMode) {
+		const seedMap = new Map(SEED_NODES.map((n) => [n.id, n]));
+		const target = seedMap.get(recipeNodeId);
+		if (target && target.isPublic) {
+			const chain: RecipeNode[] = [];
+			let cursor: RecipeNode | undefined = target;
+			const visited = new Set<string>();
+			while (cursor && !visited.has(cursor.id)) {
+				visited.add(cursor.id);
+				chain.push(cursor);
+				if (!cursor.parentId) break;
+				cursor = seedMap.get(cursor.parentId);
+			}
+			history = chain.reverse();
+		}
 	}
 
-	const history = await walkChain(recipeNodeId, locals.supabase);
+	if (history.length === 0) {
+		// RLS-gated check that the starting node is public.
+		const { data: startRow } = await locals.supabase
+			.from('recipe_nodes')
+			.select('id,is_public')
+			.eq('id', recipeNodeId)
+			.eq('is_public', true)
+			.limit(1);
+
+		if (!startRow || startRow.length === 0) {
+			throw error(404, 'Recipe not found');
+		}
+
+		history = await walkChain(recipeNodeId, locals.supabase);
+	}
 
 	if (history.length === 0) {
 		throw error(404, 'Recipe not found');
@@ -59,9 +66,19 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 		.slice(0, -1)
 		.map((node: RecipeNode) => ({ id: node.id, name: node.name }));
 
-	setHeaders({
-		'cache-control': 'public, s-maxage=60, stale-while-revalidate=300'
-	});
+	const viewerId = locals.user?.id ?? null;
+	const isFavoritedByViewer =
+		viewerId && !demoMode ? await isRecipeFavorited(viewerId, recipeNodeId) : current.isFavorite;
+
+	if (!viewerId) {
+		setHeaders({
+			'cache-control': 'public, s-maxage=60, stale-while-revalidate=300'
+		});
+	} else {
+		setHeaders({
+			'cache-control': 'private, no-cache'
+		});
+	}
 
 	return {
 		recipe: {
@@ -70,7 +87,11 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 			ingredients: state.ingredients,
 			directions: state.directions
 		},
-		currentNode: { ...current },
+		currentNode: {
+			...current,
+			isFavorite: isFavoritedByViewer
+		},
+		isSignedIn: Boolean(viewerId),
 		history,
 		parentChain
 	};
@@ -78,19 +99,6 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 
 type SupabaseClient = NonNullable<ReturnType<typeof import('$lib/server/supabase').createRequestClient>>;
 
-/**
- * Walk the parent_id chain via the `get_recipe_chain` RPC.
- *
- * The RPC is security-definer and anon-granted (see migration
- * 20260909100000_public_recipe.sql), so it returns ancestors regardless
- * of their own is_public flag. That is intentional: a user who marks a
- * descendant node public expects the public page to render the full
- * compiled recipe — not just the descendant's own deltas. The starting
- * node's public-ness is already enforced by the RLS-gated SELECT above
- * before this walk runs.
- *
- * Returns oldest-first (root → current).
- */
 async function walkChain(
 	startId: string,
 	supabase: SupabaseClient
@@ -106,25 +114,22 @@ async function walkChain(
 		return [];
 	}
 
-	// The RPC returns rows leaf-first (depth 0 = start node, increasing
-	// depth = walking up the parent chain). Replay needs oldest-first
-	// (root → current), so reverse before mapping.
 	const rows = (data as SelectRecipeNode[]).slice().reverse();
 	return rows.map(toUiRecipeNode);
 }
 
-function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
+function toUiRecipeNode(row: Record<string, unknown>): RecipeNode {
 	return {
-		id: row.id,
-		name: row.name,
-		parentId: row.parent_id,
-		timestamp: row.timestamp instanceof Date ? row.timestamp : new Date(row.timestamp),
-		ingredientChanges: row.ingredient_changes as RecipeNode['ingredientChanges'],
-		directionChanges: row.direction_changes as RecipeNode['directionChanges'],
-		author: row.author ?? null,
-		source: row.source ?? null,
-		isPublic: row.is_public,
-		isFavorite: row.is_favorite ?? false,
-		imagePath: row.image_path ?? null
+		id: row.id as string,
+		name: row.name as string,
+		parentId: (row.parentId ?? row.parent_id ?? null) as string | null,
+		timestamp: row.timestamp instanceof Date ? row.timestamp : new Date(row.timestamp as string | number),
+		ingredientChanges: (row.ingredientChanges ?? row.ingredient_changes ?? []) as RecipeNode['ingredientChanges'],
+		directionChanges: (row.directionChanges ?? row.direction_changes ?? []) as RecipeNode['directionChanges'],
+		author: (row.author ?? null) as string | null,
+		source: (row.source ?? null) as string | null,
+		isPublic: Boolean(row.isPublic ?? row.is_public),
+		isFavorite: Boolean(row.isFavorite ?? row.is_favorite),
+		imagePath: (row.imagePath ?? row.image_path ?? null) as string | null
 	};
 }

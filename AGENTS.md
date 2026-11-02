@@ -24,7 +24,7 @@ Direct writes to the database should be avoided where manual changes through the
 
 When errors occur in `auth.ts` or `global-setup.ts`, stop and wait for further instruction. Don't attempt to fix the issue. This requires manual intervention.
 
-If global-setup's OTP lookup hangs (`getByLabel(/8-digit code/i)` never appears), the preview server is almost certainly not running on 4173 — `auth.ts` sends the code request through the SvelteKit auth page which only exists when preview is up. Check with `ss -tnlp | grep 4173`; restart with `just preview` if missing.
+If database connection errors occur, verify local Supabase is running with `pnpm db:status` or start it with `pnpm db:start`.
 
 ## Documentation
 

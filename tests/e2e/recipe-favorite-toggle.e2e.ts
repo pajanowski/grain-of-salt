@@ -14,10 +14,11 @@ import {
 	openCreateForm,
 	getRecipeNameInput,
 	getCreateButton,
-	getRecipeLink
+	getRecipeLink,
+	getFavoriteStarButton
 } from './helpers/page-utils';
 
-test('owner can favorite and unfavorite a recipe node from the actions menu', async ({ page }) => {
+test('owner can favorite and unfavorite a recipe node from the actions menu and header star', async ({ page }) => {
 	const recipeName = crypto.randomUUID();
 
 	// Create the recipe through the UI (AGENTS.md: avoid direct DB writes).
@@ -30,26 +31,31 @@ test('owner can favorite and unfavorite a recipe node from the actions menu', as
 	await link.click();
 	await expect(page).toHaveURL(/\/mise\/recipes\/[0-9a-f-]+/);
 
-	// Favorite via the actions menu.
+	const starButton = getFavoriteStarButton(page);
+	await expect(starButton).toBeVisible();
+
+	// Favorite via the header star button.
 	const favoriteResponse = page.waitForResponse(
 		(r) => r.url().includes('/mise/api/recipe-node/') && r.url().endsWith('/favorite') && r.request().method() === 'PATCH'
 	);
-	await page.getByRole('button', { name: 'Recipe actions' }).click();
-	await page.getByRole('menuitem', { name: 'Favorite' }).click();
+	await starButton.click();
 	await favoriteResponse;
 
-	// Reopen the menu — the item should now read "Unfavorite", which is the
-	// user-visible proof the flag flipped.
+	// Verify star aria-label updates
+	await expect(starButton).toHaveAttribute('aria-label', 'Unfavorite recipe');
+
+	// Verify context menu reflects the favorited state.
 	await page.getByRole('button', { name: 'Recipe actions' }).click();
 	await expect(page.getByRole('menuitem', { name: 'Unfavorite' })).toBeVisible();
 
-	// Toggle back.
+	// Toggle back via actions menu.
 	const unfavoriteResponse = page.waitForResponse(
 		(r) => r.url().includes('/mise/api/recipe-node/') && r.url().endsWith('/favorite') && r.request().method() === 'PATCH'
 	);
 	await page.getByRole('menuitem', { name: 'Unfavorite' }).click();
 	await unfavoriteResponse;
 
+	await expect(starButton).toHaveAttribute('aria-label', 'Favorite recipe');
 	await page.getByRole('button', { name: 'Recipe actions' }).click();
 	await expect(page.getByRole('menuitem', { name: 'Favorite' })).toBeVisible();
 });

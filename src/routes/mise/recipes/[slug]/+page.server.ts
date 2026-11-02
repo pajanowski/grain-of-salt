@@ -8,6 +8,7 @@ import {
 } from '$lib/server/bo/recipenodesbo';
 import type { DescendantSubstitutes } from '$lib/server/bo/recipenodesbo';
 import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
+import { SEED_NODES } from '$lib/demo-seed';
 
 /**
  * The page URL is `/recipes/[slug]`, where `slug` is any recipe node id.
@@ -15,24 +16,59 @@ import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
  * We walk up the parentId chain to the root, then replay all nodes forward
  * (root → ... → current) to build the materialized recipe state. The
  * `parentChain` shows ancestor recipes for breadcrumb navigation.
- *
- * `descendantSubstitutes` is the list of substitute changes authored by
- * any later node in the chain (a fork-off that swaps one of this
- * node's rows for a different value). Rendered as a per-row "Subs"
- * chip on the leaf, plus a slide-out sidebar listing each entry.
  */
 export const load: PageServerLoad = async (event) => {
 	event.depends('app:recipe');
 	const user = await requireUser(event);
 	const recipeNodeId = event.params.slug;
+	const demoMode = Boolean((event.locals as any).demoMode);
 
 	// Fetch the chain from current node back to root.
-	const chainBackwards = await getRecipeNodesByRecipeIdV2(recipeNodeId);
+	let chainBackwards = await getRecipeNodesByRecipeIdV2(recipeNodeId);
+
+	if (chainBackwards.length === 0 && demoMode) {
+		const seedMap = new Map(SEED_NODES.map((n) => [n.id, n]));
+		let cursor = seedMap.get(recipeNodeId);
+		const visited = new Set<string>();
+		while (cursor && !visited.has(cursor.id)) {
+			visited.add(cursor.id);
+			chainBackwards.push(cursor);
+			if (!cursor.parentId) break;
+			cursor = seedMap.get(cursor.parentId);
+		}
+	}
 
 	// Reverse so we have root → ... → current (oldest first, needed for replay).
 	const history = [...chainBackwards].reverse();
 
 	if (history.length === 0) {
+		if (demoMode) {
+			return {
+				recipe: {
+					id: recipeNodeId,
+					name: 'Recipe',
+					ingredients: [],
+					directions: []
+				},
+				currentNode: {
+					id: recipeNodeId,
+					name: 'Recipe',
+					parentId: null,
+					timestamp: new Date(),
+					author: 'Demo User',
+					source: null,
+					isPublic: false,
+					isFavorite: false,
+					imagePath: null,
+					ingredientChanges: [],
+					directionChanges: []
+				},
+				history: [],
+				parentChain: [],
+				descendantSubstitutes: { flat: [], byRowId: {}, byRowKind: {} },
+				inheritedImages: { ingredients: {}, directions: {} }
+			};
+		}
 		throw error(404, 'Recipe not found');
 	}
 
@@ -43,59 +79,31 @@ export const load: PageServerLoad = async (event) => {
 
 	// Materialize the full recipe state by replaying all nodes.
 	const state = applyNodes(history);
-
-	// `inheritedImages` is computed from the same materialized state.
-	// Edit forms surface whatever's currently displayed on each row
-	// (full chain replay, including the leaf's own change), and the
-	// "Inherit images from parent" button captures that set onto the
-	// change record. For a fresh fork with no edits, the ancestor's
-	// images surface naturally; for a leaf with existing edits, the
-	// leaf's staged set surfaces — both consistent with the user-
-	// visible row.
 	const inheritedState = state;
 
 	// Build the parent breadcrumb chain: ancestor recipes (not including self).
-	// Skip the first entry (root) — we don't include the recipe itself in the chain.
-	// Then skip the last entry (current) — that's the page we're on.
 	const parentChain = history
 		.slice(1) // drop root
 		.slice(0, -1) // drop current
 		.map((node: RecipeNode) => ({ id: node.id, name: node.name }));
 
-	// Find every substitute authored by a descendant of the current
-	// node. Only meaningful when the user is signed in — unauthenticated
-	// browsers see an empty list and the panel renders nothing.
 	const ownerId = user?.id ?? null;
-	const descendantSubstitutes: DescendantSubstitutes = ownerId
-		? await findDescendantSubstitutes(current.id, ownerId)
-		: { flat: [], byRowId: {}, byRowKind: {} };
+	const descendantSubstitutes: DescendantSubstitutes =
+		ownerId && !demoMode
+			? await findDescendantSubstitutes(current.id, ownerId)
+			: { flat: [], byRowId: {}, byRowKind: {} };
 
 	return {
 		recipe: {
-			// Recipe identity is the root node, not the node currently being
-			// viewed/edited. save/rename APIs walk the chain forward from
-			// this id via `parentId`, so it must be the root.
 			id: root.id,
 			name: current.name,
 			ingredients: state.ingredients,
 			directions: state.directions
 		},
-		// Editing happens on the leaf. The client uses its full change arrays
-		// to distinguish Case A (leaf owns a change referencing this row's
-		// add-id) from Case B (inherited from ancestor). See ADR 0001.
 		currentNode: { ...current, author: current.author, source: current.source },
-		history, // full node chain for the history UI
+		history,
 		parentChain,
 		descendantSubstitutes,
-		/**
-		 * Per-row imagePaths as materialized by the chain. Edit forms
-		 * consume this to:
-		 *   - decide whether to render the "Inherit images from parent"
-		 *     button (visible only when the inherited set is non-empty)
-		 *   - populate the local preview when the user clicks the
-		 *     button (explicit copy of the inherited set onto the
-		 *     change record)
-		 */
 		inheritedImages: {
 			ingredients: Object.fromEntries(
 				inheritedState.ingredients

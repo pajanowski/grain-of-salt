@@ -45,8 +45,10 @@ test('favorited recipe shows a star next to its name on the recipe header', asyn
 	const heading = page.getByRole('heading', { name: recipeName, level: 1 });
 	await expect(heading).toBeVisible();
 
-	// Before favoriting: no star next to the heading.
-	await expect(page.getByTestId('recipe-favorite-star')).toHaveCount(0);
+	// Before favoriting: star button exists with outlined / inactive label.
+	const star = page.getByTestId('recipe-favorite-star');
+	await expect(star).toBeVisible();
+	await expect(star).toHaveAttribute('aria-label', 'Favorite recipe');
 
 	// Favorite via the actions menu.
 	const favoriteResponse = page.waitForResponse(
@@ -59,11 +61,10 @@ test('favorited recipe shows a star next to its name on the recipe header', asyn
 	await page.getByRole('menuitem', { name: 'Favorite' }).click();
 	await favoriteResponse;
 
-	// After favoriting: a star appears next to the recipe name.
-	const star = page.getByTestId('recipe-favorite-star');
-	await expect(star).toBeVisible();
+	// After favoriting: the star button reflects favorited state.
+	await expect(star).toHaveAttribute('aria-label', 'Unfavorite recipe');
 
-	// Unfavorite via the menu — the star should disappear again.
+	// Unfavorite via the menu — the star button should reflect unfavorited state again.
 	const unfavoriteResponse = page.waitForResponse(
 		(r) =>
 			r.url().includes('/mise/api/recipe-node/') &&
@@ -74,5 +75,5 @@ test('favorited recipe shows a star next to its name on the recipe header', asyn
 	await page.getByRole('menuitem', { name: 'Unfavorite' }).click();
 	await unfavoriteResponse;
 
-	await expect(page.getByTestId('recipe-favorite-star')).toHaveCount(0);
+	await expect(star).toHaveAttribute('aria-label', 'Favorite recipe');
 });

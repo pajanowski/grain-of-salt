@@ -2,10 +2,12 @@
 	import '../../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import MobileFloatingButtons from '$lib/component/MobileFloatingButtons.svelte';
-	import { api, errorMessage } from '$lib/api';
+	import { api, createRecipe as apiCreateRecipe, errorMessage } from '$lib/api';
 	import { enhance } from '$app/forms';
 	import { afterNavigate, invalidateAll } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import { isDemoMode } from '$lib/demo-init';
+	import { resetDemoState } from '$lib/recipe-store.demo';
 
 	let { data, children } = $props();
 	let sidebarCollapsed = $state(false);
@@ -52,18 +54,21 @@
 		}
 	});
 
-	function handleCreate() {
+	async function handleCreate() {
 		if (!newRecipeName.trim()) return;
-		api
-			.post('/mise/api/save', new URLSearchParams({ recipeName: newRecipeName }))
-			.then(() => {
-				newRecipeName = '';
-				createRecipe = false;
-				invalidateAll();
-			})
-			.catch((e) => {
-				alert(`Create failed: ${errorMessage(e)}`);
-			});
+		try {
+			await apiCreateRecipe(newRecipeName.trim());
+			newRecipeName = '';
+			createRecipe = false;
+			await invalidateAll();
+		} catch (e) {
+			alert(`Create failed: ${errorMessage(e)}`);
+		}
+	}
+
+	async function handleResetDemo() {
+		resetDemoState();
+		await invalidateAll();
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -335,7 +340,21 @@
 
 			<!-- Auth footer -->
 			<div class="border-t border-stone-200 p-4 pb-[calc(1rem+48px)] md:pb-4">
-				{#if data.user}
+				{#if data.demoMode || isDemoMode}
+					<div class="flex flex-col gap-2">
+						<div class="flex items-center justify-between">
+							<span class="text-xs font-semibold text-amber-800">Demo User</span>
+							<span class="text-[10px] uppercase font-bold tracking-wider bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded">Demo</span>
+						</div>
+						<button
+							data-testid="sidebar-reset-demo-button"
+							class="btn-amber secondary w-full text-xs"
+							onclick={handleResetDemo}
+						>
+							Reset Demo State
+						</button>
+					</div>
+				{:else if data.user}
 					<div class="flex flex-col gap-2">
 						<span class="text-xs text-stone-500">Signed in as {data.user.email}</span>
 						<a
@@ -389,8 +408,29 @@
 		</aside>
 
 	<!-- Main content -->
-	<main class="min-w-0 flex-1 overflow-y-auto bg-white pb-[calc(1rem+48px)] md:pb-0">
-		{@render children()}
+	<main class="min-w-0 flex-1 overflow-y-auto bg-white pb-[calc(1rem+48px)] md:pb-0 flex flex-col">
+		{#if data.demoMode || isDemoMode}
+			<div
+				data-testid="demo-mode-banner"
+				class="bg-amber-100 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-xs text-amber-900 shrink-0"
+			>
+				<div class="flex items-center gap-2">
+					<span class="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+					<span class="font-semibold uppercase tracking-wider text-[10px] bg-amber-200 px-1.5 py-0.5 rounded text-amber-800">Demo</span>
+					<span class="text-amber-800">Browsing in demo mode. Edits persist in local storage.</span>
+				</div>
+				<button
+					data-testid="reset-demo-button"
+					class="btn-amber secondary text-xs px-2.5 py-1 rounded border border-amber-300 bg-white hover:bg-amber-50 font-medium transition-colors"
+					onclick={handleResetDemo}
+				>
+					Reset Demo
+				</button>
+			</div>
+		{/if}
+		<div class="flex-1 overflow-y-auto">
+			{@render children()}
+		</div>
 	</main>
 	<style>
 		/* Override global button { padding: 0.5rem } for expand/collapse — icon fills the button */

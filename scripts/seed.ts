@@ -4,7 +4,12 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { v4 as uuidv4 } from 'uuid';
 import { sql } from 'drizzle-orm';
 import { profiles, recipeNodes } from '../src/lib/server/db/schema.js';
-import { DEMO_USER_ID } from '../src/lib/server/db/schema.js';
+import {
+  DEMO_USER_ID,
+  SEED_COMMUNITY_USER_ID,
+  SEED_COMMUNITY_PUBLIC_RECIPE_ID,
+  SEED_COMMUNITY_PRIVATE_RECIPE_ID
+} from '../src/lib/server/db/schema.js';
 import type { IngredientChange, DirectionChange } from '../src/lib/obj/RecipeNode.svelte.js';
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -77,6 +82,45 @@ async function ensureDemoUser() {
   await db
     .insert(profiles)
     .values({ id: DEMO_USER_ID, displayName: 'Demo User' })
+    .onConflictDoNothing();
+}
+
+/**
+ * Ensure foreign community user ("Chef Auguste") exists for deterministic
+ * cross-user recipe favoriting and privacy testing.
+ */
+async function ensureCommunityUser() {
+  await db.execute(sql`
+    insert into auth.users (
+      instance_id, id, aud, role, email,
+      encrypted_password, email_confirmed_at,
+      raw_app_meta_data, raw_user_meta_data,
+      created_at, updated_at, confirmation_token,
+      email_change, email_change_token_new, recovery_token
+    )
+    values (
+      '00000000-0000-0000-0000-000000000000',
+      ${SEED_COMMUNITY_USER_ID}::uuid,
+      'authenticated',
+      'authenticated',
+      'auguste@grain-of-salt.local',
+      crypt('auguste-password-not-used', gen_salt('bf')),
+      now(),
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"display_name":"Chef Auguste"}'::jsonb,
+      now(),
+      now(),
+      '',
+      '',
+      '',
+      ''
+    )
+    on conflict (id) do nothing
+  `);
+
+  await db
+    .insert(profiles)
+    .values({ id: SEED_COMMUNITY_USER_ID, displayName: 'Chef Auguste' })
     .onConflictDoNothing();
 }
 
@@ -205,6 +249,57 @@ async function seed() {
 
   console.log(
     `✅ Seeded 4 recipes (Simple / French / Cheese / Denver) with correct parent-child relationships.`,
+  );
+
+  // -------------------------------------------------------------------------
+  // Auguste's Bouillabaisse (Public) & Secret Sauce (Private) — Foreign User
+  // -------------------------------------------------------------------------
+  await ensureCommunityUser();
+
+  const bouillabaisseIngredientFish = uuidv4();
+  const bouillabaisseIngredientSaffron = uuidv4();
+  const bouillabaisseDirectionSaute = uuidv4();
+  const bouillabaisseDirectionSimmer = uuidv4();
+
+  await db.insert(recipeNodes).values({
+    id: SEED_COMMUNITY_PUBLIC_RECIPE_ID,
+    parentId: null,
+    ownerId: SEED_COMMUNITY_USER_ID,
+    name: "Auguste's Bouillabaisse",
+    label: 'traditional provenance recipe',
+    author: 'Chef Auguste',
+    isPublic: true,
+    ingredientChanges: [
+      ingredientAdd(bouillabaisseIngredientFish, { name: 'White fish fillets', amount: 500, unit: 'g' }),
+      ingredientAdd(bouillabaisseIngredientSaffron, { name: 'Saffron threads', amount: 1, unit: 'pinch' })
+    ],
+    directionChanges: [
+      directionAdd(bouillabaisseDirectionSaute, 'Sauté aromatics with saffron and olive oil.'),
+      directionAdd(bouillabaisseDirectionSimmer, 'Add fish stock and simmer fish until tender.')
+    ]
+  });
+
+  const sauceIngredientButter = uuidv4();
+  const sauceDirectionWhisk = uuidv4();
+
+  await db.insert(recipeNodes).values({
+    id: SEED_COMMUNITY_PRIVATE_RECIPE_ID,
+    parentId: null,
+    ownerId: SEED_COMMUNITY_USER_ID,
+    name: "Auguste's Secret Sauce",
+    label: 'confidential house blend',
+    author: 'Chef Auguste',
+    isPublic: false,
+    ingredientChanges: [
+      ingredientAdd(sauceIngredientButter, { name: 'Cultured butter', amount: 100, unit: 'g' })
+    ],
+    directionChanges: [
+      directionAdd(sauceDirectionWhisk, 'Whisk secret herbs into warm butter.')
+    ]
+  });
+
+  console.log(
+    `✅ Seeded foreign public and private recipes for Chef Auguste.`
   );
 }
 

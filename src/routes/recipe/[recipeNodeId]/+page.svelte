@@ -4,4 +4,8 @@
 	const { data } = $props();
 </script>
 
-<PublicRecipe recipe={data.recipe} currentNode={data.currentNode} />
+<PublicRecipe
+	recipe={data.recipe}
+	currentNode={data.currentNode}
+	isSignedIn={data.isSignedIn}
+/>
