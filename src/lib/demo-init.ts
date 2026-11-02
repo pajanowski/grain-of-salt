@@ -11,6 +11,39 @@ export function isDemoHost(hostname: string): boolean {
 }
 
 /**
+ * Returns the URL for jumping into demo mode from any origin or current URL.
+ */
+export function getDemoUrl(currentUrl: URL | Location | { hostname: string; protocol?: string; port?: string }): string {
+	const hostname = currentUrl.hostname || '';
+	const protocol = currentUrl.protocol || 'http:';
+	const port = currentUrl.port ? `:${currentUrl.port}` : '';
+
+	if (isDemoHost(hostname)) {
+		return '/mise';
+	}
+
+	if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+		return `${protocol}//demo.localhost${port}/mise`;
+	}
+
+	if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+		return `${protocol}//demo.localhost${port}/mise`;
+	}
+
+	const parts = hostname.split('.');
+	if (parts.length > 2) {
+		parts[0] = 'demo';
+		return `${protocol}//${parts.join('.')}${port}/mise`;
+	}
+
+	if (parts.length === 2) {
+		return `${protocol}//demo.${hostname}${port}/mise`;
+	}
+
+	return `${protocol}//demo.${hostname}${port}/mise`;
+}
+
+/**
  * Client-side detection flag.
  */
 export const isDemoMode =

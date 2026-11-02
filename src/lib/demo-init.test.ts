@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isDemoHost } from './demo-init';
+import { isDemoHost, getDemoUrl } from './demo-init';
 import { SEED_RECIPES, SEED_NODES, DEMO_USER_ID, SEED_SIMPLE_ID } from './demo-seed';
 import { makeStubSupabase } from './supabase-stub';
 
@@ -11,6 +11,15 @@ describe('demo-init & seed & stub', () => {
 		expect(isDemoHost('app.grainofsalt.app')).toBe(false);
 		expect(isDemoHost('localhost')).toBe(false);
 		expect(isDemoHost('')).toBe(false);
+	});
+
+	it('computes demo url appropriately for various hosts', () => {
+		expect(getDemoUrl(new URL('http://localhost:5173/'))).toBe('http://demo.localhost:5173/mise');
+		expect(getDemoUrl(new URL('http://127.0.0.1:4173/'))).toBe('http://demo.localhost:4173/mise');
+		expect(getDemoUrl(new URL('https://grainofsalt.app/'))).toBe('https://demo.grainofsalt.app/mise');
+		expect(getDemoUrl(new URL('https://app.grainofsalt.app/'))).toBe('https://demo.grainofsalt.app/mise');
+		expect(getDemoUrl(new URL('http://demo.localhost:5173/'))).toBe('/mise');
+		expect(getDemoUrl(new URL('https://demo.grainofsalt.app/'))).toBe('/mise');
 	});
 
 	it('provides valid canonical seed recipes and nodes', () => {

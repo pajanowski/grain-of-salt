@@ -6,6 +6,7 @@ Client-side sandbox environment allowing visitors to explore, create, edit, fork
 
 - **Subdomain & Flag Activation:** Activated on any hostname starting with `demo.` (such as `demo.grainofsalt.app` or `demo.local:5173`) or when `VITE_DEMO_MODE=1` is set.
 - **Zero-Login Access:** Direct access to `/mise` and `/mise/recipes/[slug]` without auth gates or OTP emails.
+- **Home Screen Entry:** Direct "Try Demo" option on the landing page next to the Sign in action.
 - **Full DAG & Mutation Capabilities:** Supports creating recipes, replaying materialized ingredient/direction changes, forking revisions, renaming roots, deleting recipe trees, and toggling favorite bookmarks.
 - **Local Persistence:** All mutations persist in browser `localStorage` under `demo:recipes` and `demo:nodes`, surviving browser refreshes and tab reloads.
 - **Reset Demo State:** Clicking "Reset Demo" in the top banner or sidebar restores the canonical demo seed fixtures immediately.

@@ -10,6 +10,23 @@ test.describe('Demo Mode (demo.localhost / demo subdomain)', () => {
 	// Use an isolated context without cookies/storage state
 	test.use({ storageState: undefined });
 
+	test('allows jumping to demo mode from the home screen', async ({ page }) => {
+		await page.goto('/');
+
+		// Should show Sign in / Open the App and Try Demo button
+		const demoButton = page.getByTestId('home-demo-button');
+		await expect(demoButton).toBeVisible();
+		await expect(demoButton).toHaveText('Try Demo');
+
+		// Clicking the button should navigate into the demo environment
+		await demoButton.click();
+
+		await expect(page).toHaveURL(/.*\/mise/);
+		const banner = page.getByTestId('demo-mode-banner');
+		await expect(banner).toBeVisible();
+		await expect(getRecipeLink(page, 'Simple Omelette')).toBeVisible();
+	});
+
 	test('loads seeded recipes without login on demo subdomain', async ({ page }) => {
 		await page.goto('http://demo.localhost:4173/mise');
 
