@@ -4,7 +4,8 @@
  *
  * Exports `seedForUser(ownerId)` which wipes the user's existing nodes and
  * inserts the four sample omelette recipes (Simple / French / Cheese / Denver)
- * forming a parent-child DAG.
+ * forming a parent-child DAG. Directions use `#<ingredient-uuid>` ingredient
+ * references so the demo exercises the direction ingredient-refs feature.
  */
 import { v4 as uuidv4 } from 'uuid';
 import { db } from './db/index.js';
@@ -37,6 +38,11 @@ const DENVER_INGREDIENT_IDS = {
 const FRENCH_INGREDIENT_IDS = {
 	chives: uuidv4(),
 };
+
+/** Format an ingredient reference for embedding in a direction body. */
+function ref(ingredientId: string): string {
+	return `#${ingredientId}`;
+}
 
 // ─── Change helpers ─────────────────────────────────────────────────────────
 
@@ -94,9 +100,18 @@ export async function seedForUser(ownerId: string): Promise<void> {
 			ingredientAdd(SIMPLE_INGREDIENT_IDS.salt, { name: 'Salt', amount: 1, unit: 'pinch' }),
 		],
 		directionChanges: [
-			directionAdd(SIMPLE_DIRECTION_IDS.beatEggs, 'Beat eggs with salt.'),
-			directionAdd(SIMPLE_DIRECTION_IDS.meltButter, 'Melt butter in a pan over medium heat.'),
-			directionAdd(SIMPLE_DIRECTION_IDS.cookEggs, 'Pour in eggs, cook, stirring gently until set.'),
+			directionAdd(
+				SIMPLE_DIRECTION_IDS.beatEggs,
+				`Beat ${ref(SIMPLE_INGREDIENT_IDS.eggs)} with ${ref(SIMPLE_INGREDIENT_IDS.salt)}.`
+			),
+			directionAdd(
+				SIMPLE_DIRECTION_IDS.meltButter,
+				`Melt ${ref(SIMPLE_INGREDIENT_IDS.butter)} in a pan over medium heat.`
+			),
+			directionAdd(
+				SIMPLE_DIRECTION_IDS.cookEggs,
+				`Pour in ${ref(SIMPLE_INGREDIENT_IDS.eggs)}, cook, stirring gently until set.`
+			),
 			directionAdd(SIMPLE_DIRECTION_IDS.foldServe, 'Fold in half and serve.'),
 		],
 	});
@@ -112,14 +127,17 @@ export async function seedForUser(ownerId: string): Promise<void> {
 			ingredientAdd(FRENCH_INGREDIENT_IDS.chives, { name: 'Chives', amount: 1, unit: 'tbsp' }),
 		],
 		directionChanges: [
-			directionEdit(SIMPLE_DIRECTION_IDS.meltButter, 'Melt butter over low heat until foamy.'),
+			directionEdit(
+				SIMPLE_DIRECTION_IDS.meltButter,
+				`Melt ${ref(SIMPLE_INGREDIENT_IDS.butter)} over low heat until foamy.`
+			),
 			directionEdit(
 				SIMPLE_DIRECTION_IDS.cookEggs,
-				'Pour in eggs and stir constantly with the flat of a fork, keeping the curds moving. Do not brown.'
+				`Pour in ${ref(SIMPLE_INGREDIENT_IDS.eggs)} and stir constantly with the flat of a fork, keeping the curds moving. Do not brown.`
 			),
 			directionEdit(
 				SIMPLE_DIRECTION_IDS.foldServe,
-				'When surface is just set and still creamy, fold in thirds and slide onto a plate.'
+				`When surface is just set and still creamy, fold in thirds and slide onto a plate. Top with ${ref(FRENCH_INGREDIENT_IDS.chives)}.`
 			),
 		],
 	});
@@ -137,7 +155,7 @@ export async function seedForUser(ownerId: string): Promise<void> {
 		directionChanges: [
 			directionEdit(
 				SIMPLE_DIRECTION_IDS.foldServe,
-				'When almost set, sprinkle cheese over half, fold and serve.'
+				`When almost set, sprinkle ${ref(CHEESE_INGREDIENT_ID)} over half, fold and serve.`
 			),
 		],
 	});
@@ -156,11 +174,11 @@ export async function seedForUser(ownerId: string): Promise<void> {
 		directionChanges: [
 			directionEdit(
 				SIMPLE_DIRECTION_IDS.meltButter,
-				'Sauté diced onion and bell pepper in butter until soft.'
+				`Sauté diced ${ref(DENVER_INGREDIENT_IDS.onion)} and ${ref(DENVER_INGREDIENT_IDS.pepper)} in ${ref(SIMPLE_INGREDIENT_IDS.butter)} until soft.`
 			),
 			directionEdit(
 				SIMPLE_DIRECTION_IDS.cookEggs,
-				'Add diced ham, then pour in beaten eggs and cook gently.'
+				`Add diced ${ref(DENVER_INGREDIENT_IDS.ham)}, then pour in beaten ${ref(SIMPLE_INGREDIENT_IDS.eggs)} and cook gently.`
 			),
 		],
 	});

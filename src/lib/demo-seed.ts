@@ -68,21 +68,21 @@ export const SEED_NODES: RecipeNode[] = [
 				changeType: 'add',
 				targetId: null,
 				note: null,
-				body: { id: SIMPLE_DIR_BEAT, body: 'Beat eggs with salt.' }
+				body: { id: SIMPLE_DIR_BEAT, body: `Beat #${SIMPLE_ING_EGGS} with #${SIMPLE_ING_SALT}.` }
 			},
 			{
 				id: '00000000-0004-0000-0000-000000000002',
 				changeType: 'add',
 				targetId: null,
 				note: null,
-				body: { id: SIMPLE_DIR_MELT, body: 'Melt butter in a pan over medium heat.' }
+				body: { id: SIMPLE_DIR_MELT, body: `Melt #${SIMPLE_ING_BUTTER} in a pan over medium heat.` }
 			},
 			{
 				id: '00000000-0004-0000-0000-000000000003',
 				changeType: 'add',
 				targetId: null,
 				note: null,
-				body: { id: SIMPLE_DIR_COOK, body: 'Pour in eggs, cook, stirring gently until set.' }
+				body: { id: SIMPLE_DIR_COOK, body: `Pour in #${SIMPLE_ING_EGGS}, cook, stirring gently until set.` }
 			},
 			{
 				id: '00000000-0004-0000-0000-000000000004',
@@ -125,7 +125,7 @@ export const SEED_NODES: RecipeNode[] = [
 				changeType: 'edit',
 				targetId: SIMPLE_DIR_MELT,
 				note: 'Low heat',
-				body: { id: SIMPLE_DIR_MELT, body: 'Melt butter over low heat until foamy.' }
+				body: { id: SIMPLE_DIR_MELT, body: `Melt #${SIMPLE_ING_BUTTER} over low heat until foamy.` }
 			},
 			{
 				id: '00000000-0004-0000-0000-000000000011',
@@ -134,7 +134,7 @@ export const SEED_NODES: RecipeNode[] = [
 				note: 'Constant stirring',
 				body: {
 					id: SIMPLE_DIR_COOK,
-					body: 'Pour in eggs and stir constantly with fork flat. Do not brown.'
+					body: `Pour in #${SIMPLE_ING_EGGS} and stir constantly with fork flat. Do not brown.`
 				}
 			},
 			{
@@ -144,7 +144,7 @@ export const SEED_NODES: RecipeNode[] = [
 				note: null,
 				body: {
 					id: SIMPLE_DIR_FOLD,
-					body: 'When surface is just set and creamy, fold in thirds and roll onto plate.'
+					body: `When surface is just set and creamy, fold in thirds and roll onto plate. Top with #${FRENCH_ING_CHIVES}.`
 				}
 			}
 		]
@@ -176,7 +176,7 @@ export const SEED_NODES: RecipeNode[] = [
 				note: null,
 				body: {
 					id: SIMPLE_DIR_FOLD,
-					body: 'When almost set, sprinkle cheese over half, fold and serve.'
+					body: `When almost set, sprinkle #${CHEESE_ING_CHEDDAR} over half, fold and serve.`
 				}
 			}
 		]
@@ -222,7 +222,7 @@ export const SEED_NODES: RecipeNode[] = [
 				note: null,
 				body: {
 					id: '00000000-0002-0000-0000-000000000010',
-					body: 'Sauté ham, bell pepper, and onion in butter before adding eggs.'
+					body: `Sauté #${DENVER_ING_HAM}, #${DENVER_ING_PEPPER}, and #${DENVER_ING_ONION} in #${SIMPLE_ING_BUTTER} before adding #${SIMPLE_ING_EGGS}.`
 				}
 			}
 		]
@@ -254,7 +254,7 @@ export const SEED_NODES: RecipeNode[] = [
 				note: null,
 				body: {
 					id: '00000000-0002-0000-0000-000000000010',
-					body: 'Sauté ham, pepper, onion, and jalapeño until fragrant.'
+					body: `Sauté #${DENVER_ING_HAM}, #${DENVER_ING_PEPPER}, #${DENVER_ING_ONION}, and #${SPICY_ING_JALAPENO} until fragrant.`
 				}
 			}
 		]
