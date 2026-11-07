@@ -128,34 +128,16 @@ export function computeGraphView(
 		return { subtree: null, subtreeNodes: [] };
 	}
 
-	function cloneTreeNode(n: RecipeTreeNode): RecipeTreeNode {
-		return {
-			id: n.id,
-			name: n.name,
-			parentId: n.parentId,
-			children: n.children.map(cloneTreeNode)
-		};
-	}
-
-	const lineage: RecipeTreeNode[] = [cloneTreeNode(currentSubtree)];
+	// Walk up to the root and render the whole tree the node belongs to,
+	// keeping every branch intact (no sibling collapsing).
 	let cursor: RecipeTreeNode | undefined = currentSubtree;
 	while (cursor?.parentId) {
 		const parent = treeNodes.get(cursor.parentId);
 		if (!parent) break;
-		lineage.push({
-			id: parent.id,
-			name: parent.name,
-			parentId: parent.parentId,
-			children: []
-		});
 		cursor = parent;
 	}
 
-	for (let i = 0; i < lineage.length - 1; i++) {
-		lineage[i + 1].children = [lineage[i]];
-	}
-
-	const subtree = lineage[lineage.length - 1];
+	const subtree = cursor!;
 
 	function collectSubtreeIds(node: RecipeTreeNode): string[] {
 		const ids: string[] = [node.id];

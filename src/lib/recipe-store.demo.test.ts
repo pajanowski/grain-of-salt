@@ -91,18 +91,21 @@ describe('demoStore (client-side in-memory localStorage adapter)', () => {
 		expect(rootGraph.subtree?.id).toBe(SEED_SIMPLE_ID);
 		expect(rootGraph.subtreeNodes.length).toBe(5); // Simple, French, Cheese, Denver, Spicy Denver
 
-		// Graph for descendant (Cheese Omelette) should have root as ancestor and Cheese's descendants
+		// Graph for descendant (Cheese Omelette) should show the whole tree the
+		// node belongs to — root with every branch intact, current node highlighted
 		const cheeseGraph = await demoStore.getGraphView(SEED_CHEESE_ID);
 		expect(cheeseGraph.subtree).not.toBeNull();
 		// Root is top of subtree
 		expect(cheeseGraph.subtree?.id).toBe(SEED_SIMPLE_ID);
-		// Root should only point down to Cheese (French sibling is omitted in lineage view)
-		expect(cheeseGraph.subtree?.children.length).toBe(1);
-		expect(cheeseGraph.subtree?.children[0].id).toBe(SEED_CHEESE_ID);
+		// Root keeps ALL its children (whole tree view, no sibling collapsing)
+		expect(cheeseGraph.subtree?.children.length).toBe(2);
 		// Cheese should still have Denver
-		expect(cheeseGraph.subtree?.children[0].children[0].id).toBe(SEED_DENVER_ID);
-		// Subtree nodes: Simple, Cheese, Denver, Spicy Denver (4 nodes)
-		expect(cheeseGraph.subtreeNodes.length).toBe(4);
+		const cheeseChild = cheeseGraph.subtree?.children.find(
+			(c) => c.id === SEED_CHEESE_ID
+		);
+		expect(cheeseChild?.children[0].id).toBe(SEED_DENVER_ID);
+		// Whole tree includes every node: Simple, French, Cheese, Denver, Spicy Denver
+		expect(cheeseGraph.subtreeNodes.length).toBe(5);
 	});
 
 	it('supports creating, renaming, and removing recipes', async () => {

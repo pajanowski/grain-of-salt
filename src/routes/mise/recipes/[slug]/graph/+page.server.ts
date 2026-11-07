@@ -13,6 +13,20 @@ import { SEED_NODES } from '$lib/demo-seed';
 import { computeGraphView } from '$lib/recipe-store.demo';
 
 /**
+ * Walk parentId upward from a node to its tree root, returning the root with
+ * its full children intact — i.e. the whole tree the node belongs to.
+ */
+function findRoot(node: RecipeTreeNode, nodeMap: Map<string, RecipeTreeNode>): RecipeTreeNode {
+	let cursor: RecipeTreeNode | undefined = node;
+	while (cursor?.parentId) {
+		const parent = nodeMap.get(cursor.parentId);
+		if (!parent) break;
+		cursor = parent;
+	}
+	return cursor!;
+}
+
+/**
  * Recursively collect every node id in a subtree (root + all descendants).
  */
 function collectSubtreeIds(node: RecipeTreeNode): string[] {
@@ -24,17 +38,10 @@ function collectSubtreeIds(node: RecipeTreeNode): string[] {
 /**
  * /mise/recipes/[slug]/graph
  *
- * Loads the lineage rooted at the recipe node identified by `slug` (a nodeId):
- * ancestors (root → … → current) plus the current node's descendants. We need
- * the whole lineage because navigating here from a child node is meaningless
- * without the context of how we got here.
- *
- * The lineage is collapsed into a chain — each ancestor's `children` is
- * replaced with only the next link in the chain, so the rendered DAG is the
- * single path from root to current, then fanning out into current's subtree.
- * Siblings of the current node (other children of its parent) are intentionally
- * omitted: the graph represents the history of this recipe, not the broader
- * authoring graph.
+ * Loads the whole recipe tree containing the node identified by `slug` (a
+ * nodeId): every branch of the tree the node belongs to is rendered, with the
+ * current node highlighted client-side. This gives full context — ancestor
+ * siblings and descendant branches are all visible.
  *
  * If the slug is not part of the current user's tree we fall back to the
  * ancestor-chain loader used by the recipe page (which has no children).
@@ -68,24 +75,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		const currentSubtree = nodeMap.get(params.slug) ?? null;
 
 		if (currentSubtree) {
-			// Walk parentId upward, collecting the lineage in walk order
-			// (current → … → root). We stop if a parent isn't part of this
-			// user's tree (e.g. cross-owner ancestry edge case).
-			const lineage: RecipeTreeNode[] = [currentSubtree];
-			let cursor: RecipeTreeNode | undefined = currentSubtree;
-			while (cursor?.parentId) {
-				const parent = nodeMap.get(cursor.parentId);
-				if (!parent) break;
-				lineage.push(parent);
-				cursor = parent;
-			}
-			// Collapse siblings: each ancestor's children becomes only the next
-			// link in the chain. The leaf (current) keeps its existing subtree.
-			for (let i = 0; i < lineage.length - 1; i++) {
-				lineage[i + 1].children = [lineage[i]];
-			}
-			// lineage is current-first; root is the last element.
-			subtree = lineage[lineage.length - 1];
+			// The whole tree the node belongs to: walk up to the root and keep
+			// every branch intact so siblings of ancestors are shown too.
+			subtree = findRoot(currentSubtree, nodeMap);
 
 			// Collect root-to-leaf ids for the entire lineage subtree.
 			const allIds = collectSubtreeIds(subtree);
