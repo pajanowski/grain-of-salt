@@ -60,9 +60,10 @@
 		}
 		dagre.layout(g);
 
-		// Horizontal stagger: shift each node within its rank a little further
-		// right than its left sibling so tall cards never sit flush on top of
-		// each other vertically.
+		// Horizontal stagger: shift every node further right than its parent
+		// (offset by depth) plus a small extra nudge per sibling index, so a
+		// child never shares the same x as its parent and tall cards never sit
+		// flush on top of each other.
 		const rankOf = new Map<string, number>();
 		for (const fn of flat) {
 			rankOf.set(fn.id, fn.parentId === null ? 0 : (rankOf.get(fn.parentId!) ?? 0) + 1);
@@ -90,7 +91,11 @@
 				id: fn.id,
 				type: 'recipe',
 				position: {
-					x: pos.x - 110 + (staggerIndex.get(fn.id) ?? 0) * 60,
+					x:
+						pos.x -
+						110 +
+						(rankOf.get(fn.id) ?? 0) * 120 +
+						(staggerIndex.get(fn.id) ?? 0) * 60,
 					y: pos.y - h / 2
 				},
 				data: {
