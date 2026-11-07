@@ -4,6 +4,8 @@
  import DirectionRow from './DirectionRow.svelte';
  import { invalidateAll } from '$app/navigation';
  import { toggleRecipeFavorite, errorMessage } from '$lib/api';
+ import NoteIcon from './NoteIcon.svelte';
+ import NodeNoteSheet from './NodeNoteSheet.svelte';
 
  type Props = {
  	recipe: {
@@ -17,6 +19,8 @@
  		source: string | null;
  		isPublic: boolean;
  		isFavorite?: boolean;
+ 		description: string | null;
+ 		note: string | null;
  	};
  	isSignedIn?: boolean;
  };
@@ -24,6 +28,9 @@
  let { recipe, currentNode, isSignedIn = false }: Props = $props();
 
  let isFavorite = $state(false);
+ // Notes popout visibility. Read-only on the public page: NodeNoteSheet
+ // renders no editor unless `onsave` is passed.
+ let noteSheetOpen = $state(false);
 
  $effect(() => {
  	isFavorite = Boolean(currentNode.isFavorite);
@@ -99,6 +106,21 @@
 		{#if currentNode.source}
 			<p class="text-sm text-stone-400">via {currentNode.source}</p>
 		{/if}
+		{#if currentNode.description}
+			<p class="mt-1 text-sm text-stone-600" data-testid="public-recipe-description">
+				{currentNode.description}
+			</p>
+		{/if}
+		{#if currentNode.note}
+			<button
+				type="button"
+				class="mt-1 flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700"
+				onclick={() => (noteSheetOpen = true)}
+				data-testid="public-recipe-note-icon"
+			>
+				<NoteIcon /> Note
+			</button>
+		{/if}
 	</div>
 
 	<!-- Ingredients section -->
@@ -165,3 +187,9 @@
 		<a href="/auth" class="underline hover:text-stone-700">Sign in to fork</a> this recipe.
 	</p>
 </div>
+
+<NodeNoteSheet
+	bind:open={noteSheetOpen}
+	note={currentNode.note}
+	onclose={() => (noteSheetOpen = false)}
+/>

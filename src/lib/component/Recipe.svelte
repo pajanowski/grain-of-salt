@@ -17,6 +17,9 @@
 	import NodeChanges from './NodeChanges.svelte';
 	import Tabs from './Tabs.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
+	import NoteIcon from './NoteIcon.svelte';
+	import NodeNoteSheet from './NodeNoteSheet.svelte';
+	import Pencil from '@lucide/svelte/icons/pencil';
 	import SubstitutesPanel from './SubstitutesPanel.svelte';
 	import UnitAutocomplete from './UnitAutocomplete.svelte';
 	import ImageLightbox from './ImageLightbox.svelte';
@@ -35,6 +38,7 @@
 		forkRecipe,
 		saveRecipeNode,
 		deleteRecipe,
+		updateNodeDetails,
 		errorMessage
 	} from '$lib/api';
 
@@ -42,6 +46,13 @@
 
 	let recipe = $derived(data.recipe);
 	let currentNode = $derived(data.currentNode);
+	/**
+	 * The page load flags whether the signed-in user owns this node; only
+	 * owners get the description/note edit affordances (the server enforces
+	 * this again on the PATCH). Defaults to true so a consumer that doesn't
+	 * pass the flag keeps the single-user behavior.
+	 */
+	let isOwner = $derived(data.isOwner ?? true);
 	let rootNodeId = $derived(recipe.id);
 	/**
 	 * Per-row imagePaths as materialized by the chain without the
@@ -836,6 +847,60 @@
 		}
 	}
 
+	// --- Node-level description + note (node metadata, not per-change) ---
+
+	let showDescriptionModal = $state(false);
+	let descriptionDraft = $state('');
+	let descriptionBusy = $state(false);
+
+	function openDescription() {
+		descriptionDraft = currentNode.description ?? '';
+		showDescriptionModal = true;
+	}
+
+	async function confirmDescription() {
+		if (descriptionBusy) return;
+		descriptionBusy = true;
+		try {
+			await updateNodeDetails(currentNode.id, { description: descriptionDraft });
+			showDescriptionModal = false;
+			await invalidateAll();
+		} catch (e) {
+			alert(`Failed to save description: ${errorMessage(e)}`);
+		} finally {
+			descriptionBusy = false;
+		}
+	}
+
+	let noteSheetOpen = $state(false);
+	let noteBusy = $state(false);
+
+	async function commitNodeNote(text: string) {
+		if (noteBusy) return;
+		noteBusy = true;
+		try {
+			await updateNodeDetails(currentNode.id, { note: text || null });
+			await invalidateAll();
+		} catch (e) {
+			alert(`Failed to save note: ${errorMessage(e)}`);
+		} finally {
+			noteBusy = false;
+		}
+	}
+
+	async function deleteNodeNote() {
+		if (noteBusy) return;
+		noteBusy = true;
+		try {
+			await updateNodeDetails(currentNode.id, { note: null });
+			await invalidateAll();
+		} catch (e) {
+			alert(`Failed to delete note: ${errorMessage(e)}`);
+		} finally {
+			noteBusy = false;
+		}
+	}
+
 	let showForkModal = $state(false);
 	let forkName = $state('');
 	let forkBusy = $state(false);
@@ -1002,6 +1067,41 @@
 			{/if}
 			{#if data.currentNode.source}
 				<p class="text-sm text-stone-400">via {data.currentNode.source}</p>
+			{/if}
+			{#if currentNode.description}
+				<p class="mt-1 flex items-start gap-1 text-sm text-stone-600" data-testid="recipe-description">
+					<span>{currentNode.description}</span>
+					{#if isOwner}
+						<button
+							type="button"
+							class="p-0.5 text-stone-400 hover:text-stone-700"
+							onclick={openDescription}
+							aria-label="Edit description"
+							data-testid="edit-description-button"
+						>
+							<Pencil size={12} />
+						</button>
+					{/if}
+				</p>
+			{:else if isOwner}
+				<button
+					type="button"
+					class="mt-1 text-xs text-stone-400 hover:text-stone-600"
+					onclick={openDescription}
+					data-testid="add-description-button"
+				>
+					Add description
+				</button>
+			{/if}
+			{#if currentNode.note || isOwner}
+				<button
+					type="button"
+					class="mt-1 flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700"
+					onclick={() => (noteSheetOpen = true)}
+					data-testid="recipe-note-icon"
+				>
+					<NoteIcon /> {currentNode.note ? 'Note' : 'Add note'}
+				</button>
 			{/if}
 			{#if data.currentNode.isPublic}
 				<p class="mt-1 flex items-center gap-1.5 text-xs text-stone-400">
@@ -1441,11 +1541,48 @@
 	</Dialog.Content>
 </Dialog.Root>
 
+<Dialog.Root bind:open={showDescriptionModal}>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title>Edit description</Dialog.Title>
+		</Dialog.Header>
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				confirmDescription();
+			}}
+		>
+			<label class="flex flex-col gap-1">
+				<span class="text-sm font-medium">Short description of this change</span>
+				<input bind:value={descriptionDraft} aria-label="Recipe description" />
+			</label>
+			<Dialog.Footer>
+				<Button type="submit" disabled={descriptionBusy}>
+					{descriptionBusy ? 'Saving…' : 'Save'}
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					onclick={() => (showDescriptionModal = false)}>Cancel</Button
+				>
+			</Dialog.Footer>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>
+
 <NoteSidebar
 	note={openRowNoteEditor}
 	onclose={closeRowNote}
 	onsave={commitRowNote}
 	ondelete={deleteRowNote}
+/>
+
+<NodeNoteSheet
+	bind:open={noteSheetOpen}
+	note={currentNode.note}
+	onclose={() => (noteSheetOpen = false)}
+	onsave={isOwner ? commitNodeNote : undefined}
+	ondelete={isOwner ? deleteNodeNote : undefined}
 />
 
 <SubstitutesPanel

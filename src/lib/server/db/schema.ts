@@ -55,6 +55,10 @@ export const recipeNodes = pgTable('recipe_nodes', {
 	 * owner.
 	 */
 	imagePath: text('image_path'),
+	/** Short description of this change; shown under the recipe title. */
+	description: text('description'),
+	/** Freeform note about this node; surfaced via the notes popout. */
+	note: text('note'),
 });
 
 

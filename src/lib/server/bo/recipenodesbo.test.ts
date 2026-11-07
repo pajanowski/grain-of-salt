@@ -57,7 +57,9 @@ function node(partial: Partial<RecipeNode> & { id: string }): RecipeNode {
 		source: null,
 		isPublic: false,
 		isFavorite: false,
-		imagePath: partial.imagePath ?? null
+		imagePath: partial.imagePath ?? null,
+		description: partial.description ?? null,
+		note: partial.note ?? null
 	};
 }
 
@@ -1034,7 +1036,9 @@ function seedNode(
 		source: null,
 		isPublic: false,
 		isFavorite: false,
-		imagePath: null
+		imagePath: null,
+		description: null,
+		note: null
 	};
 }
 
@@ -1540,6 +1544,8 @@ describe('computeRecipeDashboard', () => {
 			isPublic: partial.isPublic ?? false,
 			isFavorite: partial.isFavorite ?? false,
 			imagePath: partial.imagePath ?? null,
+			description: partial.description ?? null,
+			note: partial.note ?? null,
 			timestamp: partial.timestamp ?? new Date('2026-01-01T00:00:00Z'),
 			updatedAt: partial.updatedAt ?? partial.timestamp ?? new Date('2026-01-01T00:00:00Z')
 		};
@@ -1681,6 +1687,8 @@ describe('computeRecipeFavorites', () => {
 			isPublic: partial.isPublic ?? false,
 			isFavorite: partial.isFavorite ?? false,
 			imagePath: partial.imagePath ?? null,
+			description: partial.description ?? null,
+			note: partial.note ?? null,
 			timestamp: partial.timestamp ?? new Date('2026-01-01T00:00:00Z'),
 			updatedAt: partial.updatedAt ?? partial.timestamp ?? new Date('2026-01-01T00:00:00Z')
 		};

@@ -119,6 +119,20 @@ export async function getRecipeNodesByRecipeIdV2(recipeNodeId: string): Promise<
 }
 
 /**
+ * Look up just the owner of a node. Cheap companion to the ownership gate:
+ * the UI chain loaders drop `ownerId`, but the private page needs to know
+ * whether the signed-in user may edit the node it renders.
+ */
+export async function getRecipeNodeOwnerId(nodeId: string): Promise<string | null> {
+	const rows = await db
+		.select({ ownerId: recipeNodes.ownerId })
+		.from(recipeNodes)
+		.where(eq(recipeNodes.id, nodeId))
+		.limit(1);
+	return rows[0]?.ownerId ?? null;
+}
+
+/**
  * Resolve any node id in a chain to the chain's root (the node whose
  * parentId is null). Returns null if no node with that id exists.
  */
@@ -154,7 +168,9 @@ export function toUiRecipeNode(row: SelectRecipeNode): RecipeNode {
 		source: row.source ?? null,
 		isPublic: row.isPublic ?? false,
 		isFavorite: row.isFavorite ?? false,
-		imagePath: row.imagePath ?? null
+		imagePath: row.imagePath ?? null,
+		description: row.description ?? null,
+		note: row.note ?? null
 	};
 }
 
@@ -403,6 +419,41 @@ export async function updateRecipeNode(
 	const root = await getRootRecipeNode(payload.nodeId);
 	if (!root) throw new Error('Node not found');
 	return applyNodes(await getRecipeNodesByRecipeId(root.id));
+}
+
+/**
+ * Wire payload for `PATCH /api/recipe-node/[nodeId]/details`. Only the
+ * keys present in the payload are written; absent keys keep their current
+ * value.
+ */
+export interface UpdateNodeDetailsPayload {
+	description?: string | null;
+	note?: string | null;
+}
+
+/**
+ * Set the node-level description and/or note (the metadata fields shown
+ * under the recipe title and in the notes popout). Metadata only — the
+ * replay pass ignores both, so writing them never bumps the node's
+ * `timestamp` and never forks a new node.
+ */
+export async function updateRecipeNodeDetails(
+	nodeId: string,
+	ownerId: string,
+	details: UpdateNodeDetailsPayload
+): Promise<void> {
+	await assertNodeOwnership(nodeId, ownerId);
+
+	const set: { description?: string | null; note?: string | null } = {};
+	if ('description' in details) {
+		set.description = details.description === null ? null : details.description!.trim() || null;
+	}
+	if ('note' in details) {
+		set.note = details.note === null ? null : details.note!.trim() || null;
+	}
+	if (Object.keys(set).length === 0) return;
+
+	await db.update(recipeNodes).set(set).where(eq(recipeNodes.id, nodeId));
 }
 
 /**

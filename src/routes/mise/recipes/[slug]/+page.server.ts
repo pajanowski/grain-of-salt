@@ -4,7 +4,8 @@ import { requireUser } from '$lib/server/auth-guard';
 import {
 	getRecipeNodesByRecipeIdV2,
 	applyNodes,
-	findDescendantSubstitutes
+	findDescendantSubstitutes,
+	getRecipeNodeOwnerId
 } from '$lib/server/bo/recipenodesbo';
 import type { DescendantSubstitutes } from '$lib/server/bo/recipenodesbo';
 import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
@@ -60,13 +61,16 @@ export const load: PageServerLoad = async (event) => {
 					isPublic: false,
 					isFavorite: false,
 					imagePath: null,
+					description: null,
+					note: null,
 					ingredientChanges: [],
 					directionChanges: []
 				},
 				history: [],
 				parentChain: [],
 				descendantSubstitutes: { flat: [], byRowId: {}, byRowKind: {} },
-				inheritedImages: { ingredients: {}, directions: {} }
+				inheritedImages: { ingredients: {}, directions: {} },
+				isOwner: true
 			};
 		}
 		throw error(404, 'Recipe not found');
@@ -93,6 +97,13 @@ export const load: PageServerLoad = async (event) => {
 			? await findDescendantSubstitutes(current.id, ownerId)
 			: { flat: [], byRowId: {}, byRowKind: {} };
 
+	// Edit affordances (description/note) render only for the node's owner.
+	// The chain loaders drop ownerId, so check it directly. Demo mode is
+	// single-user by construction — everything belongs to the demo user.
+	const isOwner = demoMode
+		? true
+		: ownerId !== null && (await getRecipeNodeOwnerId(current.id)) === ownerId;
+
 	return {
 		recipe: {
 			id: root.id,
@@ -104,6 +115,7 @@ export const load: PageServerLoad = async (event) => {
 		history,
 		parentChain,
 		descendantSubstitutes,
+		isOwner,
 		inheritedImages: {
 			ingredients: Object.fromEntries(
 				inheritedState.ingredients

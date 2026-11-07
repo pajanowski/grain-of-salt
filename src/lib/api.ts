@@ -100,6 +100,21 @@ export async function renameRecipe(rootNodeId: string, name: string): Promise<vo
 }
 
 /**
+ * Set the node-level description and/or note. Only provided keys are
+ * written; `null` clears the field.
+ */
+export async function updateNodeDetails(
+	nodeId: string,
+	details: { description?: string | null; note?: string | null }
+): Promise<void> {
+	if (isDemoMode) {
+		await demoStore.updateNodeDetails(nodeId, details);
+		return;
+	}
+	await api.patch(`/mise/api/recipe-node/${nodeId}/details`, details);
+}
+
+/**
  * Fork a recipe node to create a child revision.
  */
 export async function forkRecipe(nodeId: string, name: string): Promise<{ id: string }> {

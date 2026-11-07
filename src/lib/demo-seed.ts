@@ -60,6 +60,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_SIMPLE_ID,
 		name: 'Simple Omelette',
+		description: 'First version — the baseline three-ingredient omelette.',
+		note: 'The house default. Cook low and slow; the pan should never scream.',
 		parentId: null,
 		timestamp: new Date('2026-01-01T00:00:00Z'),
 		author: 'Demo Chef',
@@ -124,6 +126,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_FRENCH_ID,
 		name: 'French Omelette',
+		description: 'More butter, plus chives folded in at the end.',
+		note: null,
 		parentId: SEED_SIMPLE_ID,
 		timestamp: new Date('2026-01-01T01:00:00Z'),
 		author: 'Demo Chef',
@@ -180,6 +184,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_CHEESE_ID,
 		name: 'Cheese Omelette',
+		description: 'Adds 50 g of cheddar to the simple base.',
+		note: null,
 		parentId: SEED_SIMPLE_ID,
 		timestamp: new Date('2026-01-01T02:00:00Z'),
 		author: 'Demo Chef',
@@ -212,6 +218,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_DENVER_ID,
 		name: 'Denver Omelette',
+		description: 'Cheese base plus ham, bell pepper and onion.',
+		note: 'A diner classic — chop the ham fine so it distributes evenly.',
 		parentId: SEED_CHEESE_ID,
 		timestamp: new Date('2026-01-01T03:00:00Z'),
 		author: 'Demo Chef',
@@ -258,6 +266,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_SPICY_DENVER_ID,
 		name: 'Spicy Denver Omelette',
+		description: 'Doubled the bell pepper and added cayenne heat.',
+		note: null,
 		parentId: SEED_DENVER_ID,
 		timestamp: new Date('2026-01-01T04:00:00Z'),
 		author: 'Demo Chef',
@@ -290,6 +300,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_BOUILLABAISSE_ID,
 		name: "Auguste's Bouillabaisse",
+		description: 'Imported from marmiton.org — the full Marseillaise fish stew.',
+		note: 'Import. Saffron and orange peel are non-negotiable; everything else is negotiable.',
 		parentId: null,
 		timestamp: new Date('2026-01-02T00:00:00Z'),
 		author: 'Chef Auguste',
@@ -329,6 +341,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_BOUILL_WEEKNIGHT_ID,
 		name: 'Weeknight Bouillabaisse',
+		description: 'Frozen seafood mix and potato; simmer cut to 25 minutes.',
+		note: null,
 		parentId: SEED_BOUILLABAISSE_ID,
 		timestamp: new Date('2026-01-02T01:00:00Z'),
 		author: 'Demo Chef',
@@ -348,6 +362,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_BOUILL_ROUILLE_ID,
 		name: 'Bouillabaisse with Rouille',
+		description: 'Homemade rouille served alongside the broth.',
+		note: 'The rouille is best made while the stock simmers.',
 		parentId: SEED_BOUILL_WEEKNIGHT_ID,
 		timestamp: new Date('2026-01-02T02:00:00Z'),
 		author: 'Demo Chef',
@@ -367,6 +383,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_BOUILL_ONEPOT_ID,
 		name: 'One-Pot Bouillabaisse',
+		description: 'Dropped the rouille — fewer dishes, same broth.',
+		note: null,
 		parentId: SEED_BOUILL_ROUILLE_ID,
 		timestamp: new Date('2026-01-02T03:00:00Z'),
 		author: 'Demo Chef',
@@ -385,6 +403,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_BOUILL_SPICY_ID,
 		name: 'Spicy Bouillabaisse with Rouille',
+		description: 'Rouille kept, chili flakes added to the broth.',
+		note: null,
 		parentId: SEED_BOUILL_ROUILLE_ID,
 		timestamp: new Date('2026-01-02T04:00:00Z'),
 		author: 'Demo Chef',
@@ -402,6 +422,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_BOUILL_PROVENCAL_ID,
 		name: 'Provençal Spicy Bouillabaisse',
+		description: 'Fresh herbs and pastis bumped up for a punchier broth.',
+		note: null,
 		parentId: SEED_BOUILL_SPICY_ID,
 		timestamp: new Date('2026-01-02T05:00:00Z'),
 		author: 'Demo Chef',
@@ -419,6 +441,8 @@ export const SEED_NODES: RecipeNode[] = [
 	{
 		id: SEED_BOUILL_FOR_TWO_ID,
 		name: 'Provençal Bouillabaisse for Two',
+		description: 'Halved everything — a dinner-party stew for two.',
+		note: null,
 		parentId: SEED_BOUILL_PROVENCAL_ID,
 		timestamp: new Date('2026-01-02T06:00:00Z'),
 		author: 'Demo Chef',

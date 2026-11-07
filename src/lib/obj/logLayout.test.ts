@@ -14,7 +14,9 @@ function makeNode(id: string, parentId: string | null, timestamp: number): Recip
 		source: null,
 		isPublic: false,
 		isFavorite: false,
-		imagePath: null
+		imagePath: null,
+		description: null,
+		note: null
 	};
 }
 

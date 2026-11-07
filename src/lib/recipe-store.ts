@@ -72,4 +72,9 @@ export interface RecipeStore {
 	): Promise<void>;
 	toggleFavorite(nodeId: string): Promise<boolean>;
 	setPublic(nodeId: string, isPublic: boolean): Promise<void>;
+	/** Set node-level description and/or note; only provided keys are written. */
+	updateNodeDetails(
+		nodeId: string,
+		details: { description?: string | null; note?: string | null }
+	): Promise<void>;
 }

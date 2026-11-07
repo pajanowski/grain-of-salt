@@ -67,4 +67,8 @@ export interface RecipeNode {
 	 * directionChanges cascade down the chain.
 	 */
 	imagePath: string | null;
+	/** Short description of this change; shown under the recipe title. */
+	description: string | null;
+	/** Freeform note about this node; surfaced via the notes popout. */
+	note: string | null;
 }

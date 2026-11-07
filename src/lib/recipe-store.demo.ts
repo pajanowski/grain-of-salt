@@ -303,6 +303,8 @@ export const demoStore: RecipeStore = {
 			isPublic: false,
 			isFavorite: false,
 			imagePath: null,
+			description: null,
+			note: null,
 			ingredientChanges: [],
 			directionChanges: []
 		};
@@ -351,6 +353,8 @@ export const demoStore: RecipeStore = {
 			isPublic: false,
 			isFavorite: false,
 			imagePath: null,
+			description: null,
+			note: null,
 			ingredientChanges: [],
 			directionChanges: []
 		};
@@ -429,6 +433,27 @@ export const demoStore: RecipeStore = {
 				next.set(nodeId, {
 					...existing,
 					isPublic
+				});
+			}
+			return next;
+		});
+		persist(get(demoRecipes), get(demoNodes));
+	},
+
+	async updateNodeDetails(
+		nodeId: string,
+		details: { description?: string | null; note?: string | null }
+	): Promise<void> {
+		demoNodes.update((ns) => {
+			const next = new Map(ns);
+			const existing = next.get(nodeId);
+			if (existing) {
+				next.set(nodeId, {
+					...existing,
+					...(details.description !== undefined
+						? { description: details.description?.trim() || null }
+						: {}),
+					...(details.note !== undefined ? { note: details.note?.trim() || null } : {})
 				});
 			}
 			return next;

@@ -130,6 +130,8 @@ function toUiRecipeNode(row: Record<string, unknown>): RecipeNode {
 		source: (row.source ?? null) as string | null,
 		isPublic: Boolean(row.isPublic ?? row.is_public),
 		isFavorite: Boolean(row.isFavorite ?? row.is_favorite),
-		imagePath: (row.imagePath ?? row.image_path ?? null) as string | null
+		imagePath: (row.imagePath ?? row.image_path ?? null) as string | null,
+		description: (row.description ?? null) as string | null,
+		note: (row.note ?? null) as string | null
 	};
 }

@@ -129,6 +129,8 @@ async function seedBouillabaisse(ownerId: string): Promise<void> {
 		parentId: null,
 		ownerId,
 		name: "Auguste's Bouillabaisse",
+		description: 'Imported from marmiton.org — the full Marseillaise fish stew.',
+		note: null,
 		source: 'marmiton.org',
 		ingredientChanges: bouillabaisseIngredientChanges(),
 		directionChanges: bouillabaisseDirectionChanges(),
@@ -141,6 +143,8 @@ async function seedBouillabaisse(ownerId: string): Promise<void> {
 		parentId: rootId,
 		ownerId,
 		name: 'Weeknight Bouillabaisse',
+		description: 'Frozen seafood mix and potato; simmer cut to 25 minutes.',
+		note: null,
 		ingredientChanges: [
 			ingredientAdd(B_INGREDIENT_IDS.frozen, { name: 'Frozen Seafood Mix', amount: 700, unit: 'g' }),
 			ingredientAdd(B_INGREDIENT_IDS.potato, { name: 'Yukon Gold Potato', amount: 2, unit: '' }),
@@ -164,6 +168,8 @@ async function seedBouillabaisse(ownerId: string): Promise<void> {
 		parentId: weeknightId,
 		ownerId,
 		name: 'Bouillabaisse with Rouille',
+		description: 'Homemade rouille served alongside the broth.',
+		note: null,
 		ingredientChanges: [
 			ingredientAdd(B_INGREDIENT_IDS.baguette, { name: 'Baguette', amount: 1, unit: '' }),
 			ingredientAdd(B_INGREDIENT_IDS.mayo, { name: 'Mayonnaise', amount: 3, unit: 'tbsp' }),
@@ -186,6 +192,8 @@ async function seedBouillabaisse(ownerId: string): Promise<void> {
 		parentId: rouilleId,
 		ownerId,
 		name: 'One-Pot Bouillabaisse',
+		description: 'Dropped the rouille — fewer dishes, same broth.',
+		note: null,
 		ingredientChanges: [ingredientRemove(B_INGREDIENT_IDS.mayo, 'Skip the rouille — fewer dishes')],
 		directionChanges: [
 			directionRemove(B_DIRECTION_IDS.makeRouille, null),
@@ -203,6 +211,8 @@ async function seedBouillabaisse(ownerId: string): Promise<void> {
 		parentId: rouilleId,
 		ownerId,
 		name: 'Spicy Bouillabaisse with Rouille',
+		description: 'Rouille kept, chili flakes added to the broth.',
+		note: null,
 		ingredientChanges: [
 			ingredientAdd(B_INGREDIENT_IDS.flakes, { name: 'Red Pepper Flakes', amount: 1, unit: 'tsp' }),
 		],
@@ -221,6 +231,8 @@ async function seedBouillabaisse(ownerId: string): Promise<void> {
 		parentId: spicyId,
 		ownerId,
 		name: 'Provençal Spicy Bouillabaisse',
+		description: 'Fresh herbs and pastis bumped up for a punchier broth.',
+		note: null,
 		ingredientChanges: [
 			ingredientAdd(B_INGREDIENT_IDS.herbs, { name: 'Herbes de Provence', amount: 1, unit: 'tsp' }),
 		],
@@ -238,6 +250,8 @@ async function seedBouillabaisse(ownerId: string): Promise<void> {
 		parentId: provencalId,
 		ownerId,
 		name: 'Provençal Bouillabaisse for Two',
+		description: 'Halved everything — a dinner-party stew for two.',
+		note: null,
 		ingredientChanges: [
 			ingredientEdit(B_INGREDIENT_IDS.fish, { name: 'Mixed Fish & Shellfish (lingcod, sea bream)', amount: 400, unit: 'g' }),
 			ingredientEdit(B_INGREDIENT_IDS.stock, { name: 'Fish Stock', amount: 750, unit: 'ml' }),
@@ -301,6 +315,8 @@ export async function seedForUser(ownerId: string): Promise<void> {
 		parentId: null,
 		ownerId,
 		name: 'Simple Omelette',
+		description: 'First version — the baseline three-ingredient omelette.',
+		note: null,
 		ingredientChanges: [
 			ingredientAdd(SIMPLE_INGREDIENT_IDS.eggs, { name: 'Eggs', amount: 3, unit: '' }),
 			ingredientAdd(SIMPLE_INGREDIENT_IDS.butter, { name: 'Butter', amount: 1, unit: 'tbsp' }),
@@ -329,6 +345,8 @@ export async function seedForUser(ownerId: string): Promise<void> {
 		parentId: simpleNodeId,
 		ownerId,
 		name: 'French Omelette',
+		description: 'More butter, plus chives folded in at the end.',
+		note: null,
 		ingredientChanges: [
 			ingredientEdit(SIMPLE_INGREDIENT_IDS.butter, { name: 'Butter', amount: 2, unit: 'tbsp' }),
 			ingredientAdd(FRENCH_INGREDIENT_IDS.chives, { name: 'Chives', amount: 1, unit: 'tbsp' }),
@@ -356,6 +374,8 @@ export async function seedForUser(ownerId: string): Promise<void> {
 		parentId: simpleNodeId,
 		ownerId,
 		name: 'Cheese Omelette',
+		description: 'Adds 50 g of cheddar to the simple base.',
+		note: null,
 		ingredientChanges: [
 			ingredientAdd(CHEESE_INGREDIENT_ID, { name: 'Cheddar', amount: 50, unit: 'g' }),
 		],
@@ -373,6 +393,8 @@ export async function seedForUser(ownerId: string): Promise<void> {
 		parentId: cheeseNodeId,
 		ownerId,
 		name: 'Denver Omelette',
+		description: 'Cheese base plus ham, bell pepper and onion.',
+		note: null,
 		ingredientChanges: [
 			ingredientAdd(DENVER_INGREDIENT_IDS.ham, { name: 'Ham', amount: 50, unit: 'g' }),
 			ingredientAdd(DENVER_INGREDIENT_IDS.pepper, { name: 'Bell pepper', amount: 1, unit: '' }),
