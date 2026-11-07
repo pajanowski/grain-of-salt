@@ -7,7 +7,7 @@ Interactive directed-acyclic-graph (DAG) visualisation of a recipe node and its 
 - **Route**: `/mise/recipes/[nodeId]/graph`
 - **Link**: "View graph →" on the recipe page and at the bottom of the graph page
 - **Graph**: SvelteFlow renders the whole tree the current node belongs to — every branch (ancestor siblings included) is shown, with the current node highlighted in blue
-- **Layout**: dagre top-down layout with per-node heights estimated from each node's change count (so change-heavy cards don't overlap), and same-rank siblings staggered horizontally
+- **Layout**: dagre top-down layout with per-node heights measured after rendering (initial placeholder uses estimates from change counts); same-rank siblings staggered horizontally. Vertical positions are post-processed (`resolveTops`) so every child's top edge is strictly below its parent's bottom edge — a tall card can never overlap its children. The two‑phase measurement ensures the invariant holds against actual rendered card heights.
 - **Interaction**: Tap any node to navigate to its recipe page
 - **Unauthenticated**: Shows a sign-in prompt instead of the graph
 

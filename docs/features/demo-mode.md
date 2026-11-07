@@ -15,7 +15,14 @@ Client-side sandbox environment allowing visitors to explore, create, edit, fork
 ## Files
 
 - `src/lib/demo-init.ts` — Client/server hostname and environment detection
-- `src/lib/demo-seed.ts` — Canonical recipe and node seed fixtures
+- `src/lib/demo-seed.ts` — Canonical recipe and node seed fixtures: the omelette
+  family (Simple → French/Cheese → Denver → Spicy Denver) plus a deep
+  bouillabaisse tree — an imported root ("Auguste's Bouillabaisse", source
+  `marmiton.org`, 16 ingredients / 8 directions) with 5 descendant levels:
+  Weeknight → with Rouille → {One-Pot, Spicy} → Provençal → for Two. The fork
+  gives the graph and log views a branch shape, and several direction bodies
+  use `#ingredient-uuid` references so the demo exercises the ingredient-refs
+  feature.
 - `src/lib/recipe-store.ts` — `RecipeStore` interface definition
 - `src/lib/recipe-store.demo.ts` — Client-side localStorage adapter
 - `src/lib/supabase-stub.ts` — Stub Supabase client for SSR

@@ -2,12 +2,14 @@
 	import { page } from '$app/state';
 	import GitForkIcon from '@lucide/svelte/icons/git-fork';
 	import ScrollTextIcon from '@lucide/svelte/icons/scroll-text';
+	import HistoryIcon from '@lucide/svelte/icons/history';
 
 	const { children } = $props();
 
 	// The route slug is the recipe (node) id; both tabs navigate to it.
 	let slug = $derived(page.params.slug ?? '');
 	let isGraph = $derived(page.url.pathname.endsWith('/graph'));
+	let isLog = $derived(page.url.pathname.endsWith('/log'));
 </script>
 
 <nav
@@ -40,6 +42,19 @@
 		>
 			<GitForkIcon class="h-4 w-4" />
 			Graph
+		</a>
+		<a
+			role="tab"
+			aria-selected={isLog}
+			aria-current={isLog ? 'page' : undefined}
+			data-testid="tab-log"
+			href="/mise/recipes/{slug}/log"
+			class="flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors {isLog
+				? 'border-amber-400 font-semibold text-stone-900'
+				: 'border-transparent text-stone-500 hover:border-stone-300 hover:text-stone-700'}"
+		>
+			<HistoryIcon class="h-4 w-4" />
+			Log
 		</a>
 	</div>
 </nav>

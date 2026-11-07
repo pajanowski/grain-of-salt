@@ -19,6 +19,7 @@ and [ADR 0002](../adr/0002-fork-as-chain-extension.md).
 - [Direction ingredient refs](./direction-ingredient-refs.md) — `#ingredient-id` references inside directions, rendered as inline chips with amount/unit
 - [Autocomplete dropdown keyboard & insertion behavior](./autocomplete-dropdown-keyboard.md) — Tab/Shift+Tab navigate-only, Enter selects, picker splices `#<filter>` on select
 - [Recipe history](./recipe-history.md) — Chain of nodes with color-coded diffs
+- [Recipe log](./recipe-log.md) — Git-style magit-like log with SVG lane rail (no graph library) for the whole recipe tree
 - [Forking](./forking.md) — Append a new node to a recipe's chain (ADR 0002)
 - [Recipe management](./recipe-management.md) — Rename and delete a recipe
 - [Public recipe](./public-recipe.md) — Mark a node public; read-only view at `/recipe/[id]` without auth

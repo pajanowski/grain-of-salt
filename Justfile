@@ -60,7 +60,7 @@ db-seed:
 db-reset:
     pnpm db:reset
     pnpm db:push
-    pnpm db:seed
+    # pnpm db:seed
 
 db-status:
     pnpm db:status
