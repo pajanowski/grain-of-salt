@@ -141,7 +141,7 @@
 					if (map.has(c.body.id)) map.delete(c.body.id);
 					map.set(c.body.id, c.body);
 				}
-			} else if (c.changeType === 'edit' && c.body && c.targetId) {
+			} else if ((c.changeType === 'edit' || c.changeType === 'substitute') && c.body && c.targetId) {
 				// Preserve fall-through semantics for imagePaths (and any
 				// future fall-through body field): an `undefined` value
 				// means "this change does not touch the field" — leave
@@ -175,7 +175,7 @@
 					if (map.has(c.body.id)) map.delete(c.body.id);
 					map.set(c.body.id, c.body);
 				}
-			} else if (c.changeType === 'edit' && c.body && c.targetId) {
+			} else if ((c.changeType === 'edit' || c.changeType === 'substitute') && c.body && c.targetId) {
 				const existing = map.get(c.targetId);
 				if (existing) {
 					const merged = applyFallThrough(existing, c.body);
@@ -312,7 +312,7 @@
 		const idx = leafIngredientChanges.findIndex(
 			(c) =>
 				(c.changeType === 'add' && c.body?.id === rowId) ||
-				(c.changeType === 'edit' && c.targetId === rowId)
+				((c.changeType === 'edit' || c.changeType === 'substitute') && c.targetId === rowId)
 		);
 		if (idx >= 0) {
 			leafIngredientChanges.splice(idx, 1);
@@ -416,7 +416,7 @@
 		const idx = leafDirectionChanges.findIndex(
 			(c) =>
 				(c.changeType === 'add' && c.body?.id === rowId) ||
-				(c.changeType === 'edit' && c.targetId === rowId)
+				((c.changeType === 'edit' || c.changeType === 'substitute') && c.targetId === rowId)
 		);
 		if (idx >= 0) {
 			leafDirectionChanges.splice(idx, 1);
@@ -718,7 +718,7 @@
 		const c = leafIngredientChanges.find(
 			(x) =>
 				(x.changeType === 'add' && x.body?.id === rowId) ||
-				((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
+				((x.changeType === 'edit' || x.changeType === 'substitute' || x.changeType === 'remove') && x.targetId === rowId)
 		);
 		return c?.note ?? null;
 	}
@@ -727,7 +727,7 @@
 		const c = leafDirectionChanges.find(
 			(x) =>
 				(x.changeType === 'add' && x.body?.id === rowId) ||
-				((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
+				((x.changeType === 'edit' || x.changeType === 'substitute' || x.changeType === 'remove') && x.targetId === rowId)
 		);
 		return c?.note ?? null;
 	}
@@ -744,7 +744,7 @@
 		const c = arr.find(
 			(x) =>
 				(x.changeType === 'add' && x.body?.id === rowId) ||
-				((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
+				((x.changeType === 'edit' || x.changeType === 'substitute' || x.changeType === 'remove') && x.targetId === rowId)
 		);
 		if (!c) return;
 		openRowNoteEditor = {
@@ -785,7 +785,7 @@
 		const c = arr.find(
 			(x) =>
 				(x.changeType === 'add' && x.body?.id === rowId) ||
-				((x.changeType === 'edit' || x.changeType === 'remove') && x.targetId === rowId)
+				((x.changeType === 'edit' || x.changeType === 'substitute' || x.changeType === 'remove') && x.targetId === rowId)
 		);
 		if (c) c.note = note;
 	}
@@ -1284,6 +1284,10 @@
 			{#if addingIngredient}
 				<form
 					class="mt-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3"
+					onsubmit={(e) => {
+						e.preventDefault();
+						doAddIngredient();
+					}}
 					onkeydown={(e) => {
 						if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
 							e.preventDefault();
@@ -1332,7 +1336,7 @@
 							bind:value={addIngredientNote}></textarea>
 					{/if}
 					<div class="flex gap-2">
-						<button class="btn-amber" onclick={doAddIngredient}>Add</button>
+						<button type="button" class="btn-amber" onclick={doAddIngredient}>Add</button>
 						<button
 							type="button"
 							class="btn-amber secondary"
@@ -1420,6 +1424,10 @@
 			{#if addingDirection}
 				<form
 					class="mt-3 flex flex-col gap-2 rounded border border-stone-200 bg-stone-50 p-3"
+					onsubmit={(e) => {
+						e.preventDefault();
+						doAddDirection();
+					}}
 					onkeydown={(e) => {
 						if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
 							e.preventDefault();
@@ -1465,7 +1473,7 @@
 							bind:value={addDirectionNote}></textarea>
 					{/if}
 					<div class="flex gap-2">
-						<button class="btn-amber" onclick={doAddDirection}>Add</button>
+						<button type="button" class="btn-amber" onclick={doAddDirection}>Add</button>
 						<button
 							type="button"
 							class="btn-amber secondary"
