@@ -9,7 +9,7 @@ import type {
 	RecipeSummary
 } from './recipe-store';
 import type { RecipeNode, IngredientChange, DirectionChange } from './obj/RecipeNode.svelte';
-import { SEED_RECIPES, SEED_NODES } from './demo-seed';
+import { SEED_RECIPES, SEED_NODES, DEMO_SEED_VERSION } from './demo-seed';
 import { applyNodes } from './recipe-apply';
 
 function cloneSeedNodes(): Map<string, RecipeNode> {
@@ -25,16 +25,17 @@ function cloneSeedNodes(): Map<string, RecipeNode> {
 	return map;
 }
 
-function loadInitialState(): { recipes: RecipeSummary[]; nodes: Map<string, RecipeNode> } {
+export function loadInitialState(): { recipes: RecipeSummary[]; nodes: Map<string, RecipeNode> } {
 	if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
 		return { recipes: [...SEED_RECIPES], nodes: cloneSeedNodes() };
 	}
 
 	try {
+		const version = localStorage.getItem('demo:version');
 		const rawRecipes = localStorage.getItem('demo:recipes');
 		const rawNodes = localStorage.getItem('demo:nodes');
 
-		if (rawRecipes && rawNodes) {
+		if (version === DEMO_SEED_VERSION && rawRecipes && rawNodes) {
 			const parsedRecipes: RecipeSummary[] = JSON.parse(rawRecipes);
 			const parsedNodeEntries: [string, RecipeNode][] = JSON.parse(rawNodes);
 			const nodeMap = new Map<string, RecipeNode>();
@@ -63,6 +64,7 @@ function loadInitialState(): { recipes: RecipeSummary[]; nodes: Map<string, Reci
 function persist(recipes: RecipeSummary[], nodes: Map<string, RecipeNode>) {
 	if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
 	try {
+		localStorage.setItem('demo:version', DEMO_SEED_VERSION);
 		localStorage.setItem('demo:recipes', JSON.stringify(recipes));
 		localStorage.setItem('demo:nodes', JSON.stringify(Array.from(nodes.entries())));
 	} catch {

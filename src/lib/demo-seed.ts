@@ -1,6 +1,8 @@
 import type { RecipeNode, IngredientChange, DirectionChange } from './obj/RecipeNode.svelte';
 import type { RecipeSummary } from './server/bo/recipenodesbo';
 
+export const DEMO_SEED_VERSION = '2026-11-08';
+
 export const DEMO_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 export const SEED_SIMPLE_ID = '00000000-0000-0000-0000-000000000010';

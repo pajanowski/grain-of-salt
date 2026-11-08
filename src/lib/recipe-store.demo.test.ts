@@ -1,11 +1,20 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { demoStore, resetDemoState, demoNodes, demoRecipes } from './recipe-store.demo';
+import { demoStore, resetDemoState, demoNodes, demoRecipes, loadInitialState } from './recipe-store.demo';
 import {
 	SEED_SIMPLE_ID,
 	SEED_FRENCH_ID,
 	SEED_CHEESE_ID,
 	SEED_DENVER_ID,
-	SEED_SPICY_DENVER_ID
+	SEED_SPICY_DENVER_ID,
+	SEED_BOUILLABAISSE_ID,
+	SEED_BOUILL_WEEKNIGHT_ID,
+	SEED_BOUILL_ROUILLE_ID,
+	SEED_BOUILL_ONEPOT_ID,
+	SEED_BOUILL_SPICY_ID,
+	SEED_BOUILL_PROVENCAL_ID,
+	SEED_BOUILL_FOR_TWO_ID,
+	SEED_RECIPES,
+	DEMO_SEED_VERSION
 } from './demo-seed';
 import { get } from 'svelte/store';
 
@@ -169,5 +178,72 @@ describe('demoStore (client-side in-memory localStorage adapter)', () => {
 
 		tree = await demoStore.listTree();
 		expect(tree.some((t) => t.name === 'Temporary Recipe')).toBe(false);
+	});
+
+	it('loads full bouillabaisse branch hierarchy in initial seed tree', async () => {
+		const tree = await demoStore.listTree();
+		const bouillRoot = tree.find((t) => t.id === SEED_BOUILLABAISSE_ID);
+		expect(bouillRoot).toBeDefined();
+		expect(bouillRoot?.name).toBe("Auguste's Bouillabaisse");
+
+		// Weeknight Bouillabaisse
+		const weeknight = bouillRoot?.children.find((c) => c.id === SEED_BOUILL_WEEKNIGHT_ID);
+		expect(weeknight).toBeDefined();
+
+		// Bouillabaisse with Rouille
+		const rouille = weeknight?.children.find((c) => c.id === SEED_BOUILL_ROUILLE_ID);
+		expect(rouille).toBeDefined();
+		expect(rouille?.children.length).toBe(2); // One-Pot and Spicy
+
+		// One-Pot branch
+		const onePot = rouille?.children.find((c) => c.id === SEED_BOUILL_ONEPOT_ID);
+		expect(onePot).toBeDefined();
+
+		// Spicy branch -> Provençal -> For Two
+		const spicy = rouille?.children.find((c) => c.id === SEED_BOUILL_SPICY_ID);
+		expect(spicy).toBeDefined();
+
+		const provencal = spicy?.children.find((c) => c.id === SEED_BOUILL_PROVENCAL_ID);
+		expect(provencal).toBeDefined();
+
+		const forTwo = provencal?.children.find((c) => c.id === SEED_BOUILL_FOR_TWO_ID);
+		expect(forTwo).toBeDefined();
+	});
+
+	it('refreshes stale localStorage seed data when demo:version is missing or outdated', () => {
+		const store = new Map<string, string>();
+		const mockLocalStorage = {
+			getItem: (key: string) => store.get(key) ?? null,
+			setItem: (key: string, val: string) => store.set(key, val),
+			removeItem: (key: string) => store.delete(key),
+			clear: () => store.clear(),
+			key: (i: number) => Array.from(store.keys())[i] ?? null,
+			length: 0
+		};
+
+		const origWindow = globalThis.window;
+		const origLocalStorage = globalThis.localStorage;
+		try {
+			(globalThis as any).window = {};
+			(globalThis as any).localStorage = mockLocalStorage;
+
+			// Simulate old localStorage with only the 6 original recipes and no version key
+			const oldRecipes = SEED_RECIPES.slice(0, 6);
+			const oldNodes = Array.from(get(demoNodes).entries()).filter(([id]) =>
+				oldRecipes.some((r) => r.id === id)
+			);
+
+			mockLocalStorage.setItem('demo:recipes', JSON.stringify(oldRecipes));
+			mockLocalStorage.setItem('demo:nodes', JSON.stringify(oldNodes));
+
+			// loadInitialState should detect missing/outdated version and re-seed
+			const state = loadInitialState();
+			expect(state.recipes.length).toBe(SEED_RECIPES.length);
+			expect(state.nodes.size).toBe(SEED_RECIPES.length);
+			expect(mockLocalStorage.getItem('demo:version')).toBe(DEMO_SEED_VERSION);
+		} finally {
+			(globalThis as any).window = origWindow;
+			(globalThis as any).localStorage = origLocalStorage;
+		}
 	});
 });

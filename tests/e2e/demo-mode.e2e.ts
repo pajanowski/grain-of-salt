@@ -41,6 +41,15 @@ test.describe('Demo Mode (demo.localhost / demo subdomain)', () => {
 
 		const frenchOmelette = getRecipeLink(page, 'French Omelette');
 		await expect(frenchOmelette).toBeVisible();
+
+		const bouillabaisse = getRecipeLink(page, "Auguste's Bouillabaisse");
+		await expect(bouillabaisse).toBeVisible();
+
+		const weeknightBouill = getRecipeLink(page, 'Weeknight Bouillabaisse');
+		await expect(weeknightBouill).toBeVisible();
+
+		const bouillForTwo = getRecipeLink(page, 'Provençal Bouillabaisse for Two');
+		await expect(bouillForTwo).toBeVisible();
 	});
 
 	test('renders recipe graph canvas without sign in prompt in demo mode', async ({ page }) => {
@@ -116,5 +125,31 @@ test.describe('Demo Mode (demo.localhost / demo subdomain)', () => {
 
 		// Canonical seed recipes should still be present
 		await expect(getRecipeLink(page, 'Simple Omelette')).toBeVisible();
+	});
+
+	test('auto-upgrades and shows all seeded recipes when localStorage has stale unversioned cache', async ({ page }) => {
+		// Populate localStorage with stale 6-recipe data and no demo:version before navigating
+		await page.goto('http://demo.localhost:4173/');
+		await page.evaluate(() => {
+			localStorage.removeItem('demo:version');
+			localStorage.setItem('demo:recipes', JSON.stringify([
+				{ id: '00000000-0000-0000-0000-000000000010', name: 'Simple Omelette', parentId: null },
+				{ id: '00000000-0000-0000-0000-000000000020', name: 'French Omelette', parentId: '00000000-0000-0000-0000-000000000010' },
+				{ id: '00000000-0000-0000-0000-000000000030', name: 'Cheese Omelette', parentId: '00000000-0000-0000-0000-000000000010' },
+				{ id: '00000000-0000-0000-0000-000000000040', name: 'Denver Omelette', parentId: '00000000-0000-0000-0000-000000000030' },
+				{ id: '00000000-0000-0000-0000-000000000050', name: 'Spicy Denver Omelette', parentId: '00000000-0000-0000-0000-000000000040' },
+				{ id: '00000000-0000-0000-0000-000000000101', name: "Auguste's Bouillabaisse", parentId: null }
+			]));
+			localStorage.setItem('demo:nodes', JSON.stringify([]));
+		});
+
+		await page.goto('http://demo.localhost:4173/mise');
+
+		// All seeded recipes including new Bouillabaisse variants should be visible
+		await expect(getRecipeLink(page, 'Simple Omelette')).toBeVisible();
+		await expect(getRecipeLink(page, "Auguste's Bouillabaisse")).toBeVisible();
+		await expect(getRecipeLink(page, 'Weeknight Bouillabaisse')).toBeVisible();
+		await expect(getRecipeLink(page, 'Bouillabaisse with Rouille')).toBeVisible();
+		await expect(getRecipeLink(page, 'Provençal Bouillabaisse for Two')).toBeVisible();
 	});
 });
