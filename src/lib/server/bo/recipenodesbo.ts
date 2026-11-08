@@ -5,6 +5,7 @@ import type { InsertRecipeNode, SelectRecipeNode } from '../db/schema';
 import type { Ingredient, Direction } from '$lib/obj/Recipe.svelte';
 import type { RecipeNode, IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
 import { applyNodes, type RecipeState } from '$lib/recipe-apply';
+import { displayDirectionBody } from '$lib/obj/recipeDiff';
 export { applyNodes, type RecipeState };
 
 export async function createRootRecipeNode(
@@ -567,6 +568,9 @@ export async function findDescendantSubstitutes(
 	const visible = applyNodes(chain);
 	const visibleIngredientIds = new Set(visible.ingredients.map((i) => i.id));
 	const visibleDirectionIds = new Set(visible.directions.map((d) => d.id));
+	// Compiled ingredients used to resolve `#<uuid>` refs when the
+	// substitute's direction body is formatted for display below.
+	const visibleIngredients = visible.ingredients;
 
 	// 2. Walk every descendant of rootNodeId via a recursive CTE on
 	//    parent_id. Each descendant carries its full change arrays.
@@ -628,7 +632,7 @@ export async function findDescendantSubstitutes(
 				nodeName: row.name,
 				nodeSlug: row.id,
 				changeType: 'direction',
-				text: 'SUB ' + formatDirectionChangeText(c.body),
+				text: 'SUB ' + formatDirectionChangeText(c.body, visibleIngredients),
 				targetId: c.targetId
 			};
 			flat.push(entry);
@@ -655,8 +659,14 @@ function formatIngredientChangeText(body: {
 	return parts.filter(Boolean).join(' ').trim() || 'ingredient';
 }
 
-function formatDirectionChangeText(body: { body: string }): string {
-	return body.body || '(empty)';
+function formatDirectionChangeText(
+	body: { body: string },
+	ingredients: Ingredient[]
+): string {
+	if (!body.body) return '(empty)';
+	// Resolve `#<uuid>` ingredient references against the ingredients
+	// visible at the node the panel is opened from; unknown ids stay raw.
+	return displayDirectionBody(body.body, ingredients);
 }
 
 export async function getRecipeTree(ownerId: string): Promise<RecipeTreeNode[]> {

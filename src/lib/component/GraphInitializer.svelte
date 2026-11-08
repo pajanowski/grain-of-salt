@@ -3,8 +3,10 @@
 	import { useStore, type Node, type Edge } from '@xyflow/svelte';
 	import * as dagre from '@dagrejs/dagre';
 	import { resolveTops } from '$lib/obj/graphLayout';
+	import { formatChain } from '$lib/obj/recipeDiff';
 	import type { RecipeTreeNode } from '$lib/server/bo/recipenodesbo';
 	import type { RecipeNode } from '$lib/obj/RecipeNode.svelte';
+	import type { Direction, Ingredient } from '$lib/obj/Recipe.svelte';
 
 	interface Props {
 		subtree: RecipeTreeNode;
@@ -44,9 +46,9 @@
 
 	/**
 	 * Estimate a node card's rendered height from its change counts. A lower
-	 * bound: direction bodies (with raw #<uuid> ingredient refs) wrap into far
-	 * more lines than this assumes, so real cards run much taller. Used only
-	 * for the off-screen measurement placeholder and as a fallback if the
+	 * bound: direction bodies wrap into more lines than this assumes, so
+	 * real cards run much taller. Used only for the off-screen measurement
+	 * placeholder and as a fallback if the
 	 * cards never render.
 	 */
 	function estimateHeight(fn: FlatNode): number {
@@ -56,6 +58,30 @@
 		let h = 80 + ing * 22 + dir * 22;
 		if (ing > 0 && dir > 0) h += 18; // extra for section headers
 		return h;
+	}
+
+	/**
+	 * Replay a node's ancestor chain (root → … → node, inclusive) so the
+	 * node card can render direction bodies with resolved `#<uuid>`
+	 * ingredient references. Returns the compiled ingredients AFTER the
+	 * node's own changes (a direction may reference an ingredient added by
+	 * the same node) and the direction state BEFORE them (REMOVE changes
+	 * carry no body; the removed row only exists pre-change).
+	 */
+	function nodeCompileState(chain: RecipeNode[]): {
+		ingredients: Ingredient[];
+		priorDirections: Map<string, Direction>;
+	} {
+		if (chain.length === 0) {
+			return { ingredients: [], priorDirections: new Map() };
+		}
+		const entries = formatChain(chain);
+		const last = entries[entries.length - 1];
+		const prior = entries.length > 1 ? entries[entries.length - 2] : null;
+		return {
+			ingredients: Array.from(last.stateAfter.ingredients.values()),
+			priorDirections: prior ? prior.stateAfter.directions : new Map()
+		};
 	}
 
 	function _compute(
@@ -105,6 +131,7 @@
 		const flowNodes: Node[] = flat.map((fn) => {
 			// The leaf of the chain holds this node's own changes
 			const leaf = fn.chain[fn.chain.length - 1];
+			const { ingredients, priorDirections } = nodeCompileState(fn.chain);
 			return {
 				id: fn.id,
 				type: 'recipe',
@@ -116,7 +143,9 @@
 					name: fn.name,
 					isCurrent: fn.id === currentId,
 					ingredientChanges: leaf.ingredientChanges,
-					directionChanges: leaf.directionChanges
+					directionChanges: leaf.directionChanges,
+					ingredients,
+					priorDirections
 				}
 			};
 		});

@@ -495,3 +495,105 @@ describe('substitute', () => {
 		expect(subEntries[1].changes[0].text).toMatch(/^SUB /);
 	});
 });
+
+// ===========================================================================
+// Direction ingredient references (#<uuid>) in change formatting
+// ===========================================================================
+
+describe('direction ingredient references', () => {
+	const OIL_UUID = 'e730720e-32b8-4e76-9236-5b6a3fa6a604';
+
+	it('formats a direction add that references an ingredient added by the SAME node', () => {
+		// Seeded-recipe case: the node adds both the ingredient and a
+		// direction whose body references it. The formatter must compile
+		// the ref against the node's POST-change ingredient state, not
+		// just the pre-state.
+		const nodes: RecipeNode[] = [
+			node({
+				id: 'n1',
+				ingredientChanges: [
+					ingredientAdd(OIL_UUID, { name: 'Olive oil', amount: 2, unit: 'tbsp' })
+				],
+				directionChanges: [
+					directionAdd('d1', `Heat #${OIL_UUID} in a large pot over medium heat.`)
+				]
+			})
+		];
+		const [entry] = formatChain(nodes);
+		// changes[0] is the node's ingredient add; changes[1] is the direction.
+		expect(entry.changes[1].text).toBe('ADD "Heat Olive oil (2 tbsp) in a large pot over medium heat."');
+	});
+
+	it('still formats a direction add on a later node against ancestor ingredients', () => {
+		const nodes: RecipeNode[] = [
+			node({
+				id: 'n1',
+				ingredientChanges: [
+					ingredientAdd(OIL_UUID, { name: 'Olive oil', amount: 2, unit: 'tbsp' })
+				]
+			}),
+			node({
+				id: 'n2',
+				parentId: 'n1',
+				directionChanges: [
+					directionAdd('d1', `Heat #${OIL_UUID} gently.`)
+				]
+			})
+		];
+		const entries = formatChain(nodes);
+		expect(entries[1].changes[0].text).toBe('ADD "Heat Olive oil (2 tbsp) gently."');
+	});
+
+	it('keeps an unknown ref as raw #uuid text', () => {
+		const nodes: RecipeNode[] = [
+			node({
+				id: 'n1',
+				directionChanges: [directionAdd('d1', `Heat #${OIL_UUID} gently.`)]
+			})
+		];
+		const [entry] = formatChain(nodes);
+		expect(entry.changes[0].text).toBe(`ADD "Heat #${OIL_UUID} gently."`);
+	});
+
+	it('resolves refs in a REMOVE entry via the pre-node direction state', () => {
+		const nodes: RecipeNode[] = [
+			node({
+				id: 'n1',
+				ingredientChanges: [
+					ingredientAdd(OIL_UUID, { name: 'Olive oil', amount: 2, unit: 'tbsp' })
+				],
+				directionChanges: [
+					directionAdd('d1', `Heat #${OIL_UUID} gently.`)
+				]
+			}),
+			node({
+				id: 'n2',
+				parentId: 'n1',
+				directionChanges: [directionRemove('d1')]
+			})
+		];
+		const entries = formatChain(nodes);
+		expect(entries[1].changes[0].text).toBe('REMOVE "Heat Olive oil (2 tbsp) gently."');
+	});
+
+	it('resolves refs in an EDIT before/after pair (before against pre-state, after against post-state)', () => {
+		const nodes: RecipeNode[] = [
+			node({
+				id: 'n1',
+				ingredientChanges: [
+					ingredientAdd(OIL_UUID, { name: 'Olive oil', amount: 2, unit: 'tbsp' })
+				],
+				directionChanges: [directionAdd('d1', `Heat #${OIL_UUID} gently.`)]
+			}),
+			node({
+				id: 'n2',
+				parentId: 'n1',
+				directionChanges: [directionEdit('d1', `Heat #${OIL_UUID} vigorously.`)]
+			})
+		];
+		const entries = formatChain(nodes);
+		expect(entries[1].changes[0].text).toBe(
+			'EDIT "Heat Olive oil (2 tbsp) gently." → "Heat Olive oil (2 tbsp) vigorously."'
+		);
+	});
+});

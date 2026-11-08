@@ -33,6 +33,7 @@ import {
   fillAddDirectionWithIngredient,
   submitAddDirection,
   clickPageSave,
+  getNodeChangesPanel,
   openEditDirectionForm,
   submitEditDirection,
   openAddDirectionForm
@@ -161,9 +162,22 @@ test.describe('direction ingredient references', () => {
     await submitAddDirection(page);
     await clickPageSave(page);
 
+    // The "Changes on this node" panel must show the compiled body too —
+    // not the raw #uuid the change stores.
+    const nodeChanges = getNodeChangesPanel(page);
+    await expect(nodeChanges).toContainText(
+      `ADD DIRECTION ${SUGAR_NAME} (${SUGAR_AMOUNT} ${SUGAR_UNIT}) to the bowl.`
+    );
+    await expect(nodeChanges).not.toContainText(/#[0-9a-f-]{36}/i);
+
     // Reload and verify the chip is rendered, not the raw #uuid.
     await page.reload();
     await expect(getRecipeHeading(page, RECIPE_NAME)).toBeVisible();
+
+    // The saved change entry survives reload with the compiled body.
+    await expect(getNodeChangesPanel(page)).toContainText(
+      `ADD DIRECTION ${SUGAR_NAME} (${SUGAR_AMOUNT} ${SUGAR_UNIT}) to the bowl.`
+    );
 
     // The compiled chip shows the ingredient name and amount.
     // The chip text format is "Ingredient (amount unit)" when both are present.

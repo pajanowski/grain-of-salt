@@ -1,12 +1,18 @@
 <script lang="ts">
 	import { Handle, Position, type NodeProps } from '@xyflow/svelte';
 	import type { IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
+	import type { Direction, Ingredient } from '$lib/obj/Recipe.svelte';
+	import { displayDirectionBody } from '$lib/obj/recipeDiff';
 
 	type NodeData = {
 		name: string;
 		isCurrent: boolean;
 		ingredientChanges: IngredientChange[];
 		directionChanges: DirectionChange[];
+		/** Compiled ingredients at this node — resolves `#<uuid>` refs in direction bodies. */
+		ingredients: Ingredient[];
+		/** Direction state before this node's changes — resolves REMOVE targets (no body). */
+		priorDirections: Map<string, Direction>;
 	};
 
 	type Props = NodeProps & { data: NodeData };
@@ -33,7 +39,11 @@
 	}
 
 	function directionText(c: DirectionChange): string {
-		return c.body?.body ?? '';
+		// add/edit/substitute carry the full body; compile `#<uuid>` refs.
+		// REMOVE carries no body — look the row up in the pre-change state.
+		if (c.body) return displayDirectionBody(c.body.body, data.ingredients);
+		const prior = c.targetId !== null ? data.priorDirections.get(c.targetId) : undefined;
+		return prior ? displayDirectionBody(prior.body, data.ingredients) : '';
 	}
 </script>
 

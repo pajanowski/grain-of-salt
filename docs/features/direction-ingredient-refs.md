@@ -53,7 +53,7 @@ persisted.
 
 ## Read sites
 
-Three surfaces render compiled output instead of raw bodies:
+Surfaces render compiled output instead of raw bodies:
 
 1. **Public recipe view** — `src/lib/component/PublicRecipe.svelte`
    replaces `{direction.body}` with `<DirectionBody>`.
@@ -62,6 +62,29 @@ Three surfaces render compiled output instead of raw bodies:
 3. **History / node-changes diff** — `formatDirectionChangeFull` in
    `src/lib/obj/recipeDiff.ts` compiles against the recipe's known
    ingredients so the diff view shows chips consistently.
+4. **"Changes on this node" panel** — `NodeChanges.svelte` compiles the
+   direction body of `add` / `edit` / `substitute` entries via
+   `displayDirectionBody` (`recipeDiff.ts`) against the compiled
+   ingredient list, and resolves `remove` entries by looking the target
+   row up in a prior-directions map prop (`Recipe.svelte` builds it from
+   the pre-node chain state ∪ the materialized recipe ∪ the leaf's local
+   adds).
+5. **Recipe graph cards** — `GraphInitializer.svelte` replays each
+   node's ancestor chain (`formatChain`) and passes the node's compiled
+   ingredients plus its pre-change direction state into the node data;
+   `RecipeNodeCard.svelte` compiles bodies and resolves remove targets.
+6. **Descendant-substitutes panel** — `findDescendantSubstitutes`
+   (`src/lib/server/bo/recipenodesbo.ts`) compiles the substitute's
+   direction body against the ingredients visible at the node the panel
+   is opened from.
+
+### Compile state in history diffs
+
+`formatChain` formats a node's direction bodies against the **merge of
+the node's pre- and post-change ingredient state** (post wins), so a
+direction added on the same node as the ingredient it references still
+resolves. Ingredient edit/remove *row lookups* still use the pre-change
+state, so `EDIT x → y` / `REMOVE x` before/after labels are unaffected.
 
 ## Display mask
 
@@ -222,7 +245,24 @@ picker; new directions are saved through the existing
 - `src/lib/obj/recipeDiff.ts` — `formatDirectionChangeFull`
   imports `compileMaskedDirection` from `directionMask` (the
   compile API is identical to the legacy `compileDirection`,
-  so the call sites are unchanged).
+  so the call sites are unchanged). Exports
+  `displayDirectionBody(body, ingredients)` for change-list surfaces;
+  `formatChain` formats direction bodies against the merged pre/post
+  ingredient state so same-node refs resolve.
+- `src/lib/component/NodeChanges.svelte` — compiles direction change
+  bodies (`add`/`edit`/`substitute`) via `displayDirectionBody` and
+  resolves `remove` targets from a `priorDirections` map prop.
+- `src/lib/component/Recipe.svelte` — builds that map
+  (`changeDirections`: pre-node chain replay ∪ materialized recipe ∪
+  leaf local adds) and passes `displayedIngredients` +
+  `priorDirections` into `<NodeChanges>`.
+- `src/lib/component/GraphInitializer.svelte` /
+  `src/lib/component/RecipeNodeCard.svelte` — per-node replay
+  (`nodeCompileState`) feeds the graph cards compiled ingredients and
+  pre-change directions so card change rows render compiled bodies.
+- `src/lib/server/bo/recipenodesbo.ts` —
+  `findDescendantSubstitutes` compiles direction substitute text
+  against the ingredients visible at the opening node.
 - `tests/e2e/helpers/page-utils.ts` — adds `getIngredientPicker`,
   `pickIngredientFromDirection` helpers.
 - `tests/e2e/direction-ingredient-ref.e2e.ts` — the chip-overlay

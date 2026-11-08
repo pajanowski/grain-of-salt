@@ -2,7 +2,8 @@
 	import type { IngredientChange, DirectionChange } from '$lib/obj/RecipeNode.svelte';
 	import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
-	import type { Ingredient } from '$lib/obj/Recipe.svelte';
+	import type { Ingredient, Direction } from '$lib/obj/Recipe.svelte';
+	import { displayDirectionBody } from '$lib/obj/recipeDiff';
 
 	/**
 	 * The current node's changes, rendered inline beneath the recipe editor.
@@ -32,6 +33,19 @@
 		/** Server-stored snapshot at page load — used to compute saved/unsaved. */
 		savedIngredientChanges: IngredientChange[];
 		savedDirectionChanges: DirectionChange[];
+		/**
+		 * Compiled recipe ingredients (the list the editing view displays,
+		 * including the leaf's own adds/edits) used to resolve `#<uuid>`
+		 * ingredient references in direction bodies for display.
+		 */
+		ingredients: Ingredient[];
+		/**
+		 * Direction rows findable by id when formatting REMOVE entries —
+		 * a remove change carries no body, so its target row is looked up
+		 * here. Union of the pre-node chain state, the server-materialized
+		 * recipe, and the leaf's local adds.
+		 */
+		priorDirections: Map<string, Direction>;
 		onRemoveIngredient: (changeId: string) => void;
 		onRemoveDirection: (changeId: string) => void;
 		onSetNote: (kind: 'ingredient' | 'direction', changeId: string, note: string | null) => void;
@@ -42,6 +56,8 @@
 		leafDirectionChanges,
 		savedIngredientChanges,
 		savedDirectionChanges,
+		ingredients,
+		priorDirections,
 		onRemoveIngredient,
 		onRemoveDirection,
 		onSetNote
@@ -110,10 +126,16 @@
       return parts.join(' ');
     }       
 		if (item.kind === 'direction') {
-      const dir = c.body as { body: string };
-      const body = dir.body || '(empty)'
-      return `DIRECTION ${body}`
-    }
+			// add/edit/substitute carry the full body; compile `#<uuid>` refs
+			// against the compiled ingredients. REMOVE carries no body — the
+			// row's last known body comes from priorDirections.
+			const dir = c.body as Direction | null;
+			if (dir) {
+				return `DIRECTION ${displayDirectionBody(dir.body, ingredients)}`;
+			}
+			const prior = c.targetId !== null ? priorDirections.get(c.targetId) : undefined;
+			return `DIRECTION ${prior ? displayDirectionBody(prior.body, ingredients) : '(empty)'}`;
+		}
     return "";
 	}
 

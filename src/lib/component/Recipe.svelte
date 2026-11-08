@@ -18,6 +18,7 @@
 	import Tabs from './Tabs.svelte';
 	import NoteSidebar, { type SidebarChange } from './NoteSidebar.svelte';
 	import NoteIcon from './NoteIcon.svelte';
+	import { formatChain } from '$lib/obj/recipeDiff';
 	import NodeNoteSheet from './NodeNoteSheet.svelte';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import SubstitutesPanel from './SubstitutesPanel.svelte';
@@ -187,6 +188,29 @@
 			}
 		}
 		return Array.from(map.values());
+	});
+
+	/**
+	 * Direction rows findable by id when NodeChanges formats REMOVE
+	 * entries (a remove change carries no body). Union of:
+	 *  - the state BEFORE the current node's changes (replayed from
+	 *    `data.history` minus the leaf) — covers saved removes, whose
+	 *    target row is gone from the materialized recipe;
+	 *  - the server-materialized recipe — covers unsaved removes of
+	 *    ancestor- or leaf-owned rows;
+	 *  - the leaf's local adds — covers add-then-remove in one session.
+	 */
+	let changeDirections = $derived.by(() => {
+		const hist = (data.history ?? []).slice(0, -1);
+		const entries = formatChain(hist);
+		const map = new Map(
+			entries.length ? entries[entries.length - 1].stateAfter.directions : []
+		);
+		for (const dir of recipe.directions) map.set(dir.id, dir);
+		for (const c of leafDirectionChanges) {
+			if (c.changeType === 'add' && c.body) map.set(c.body.id, c.body);
+		}
+		return map;
 	});
 
 	/**
@@ -1471,6 +1495,8 @@
 		{leafDirectionChanges}
 		savedIngredientChanges={currentNode.ingredientChanges}
 		savedDirectionChanges={currentNode.directionChanges}
+		ingredients={displayedIngredients}
+		priorDirections={changeDirections}
 		onRemoveIngredient={(id) => {
 			const idx = leafIngredientChanges.findIndex((c) => c.id === id);
 			if (idx >= 0) leafIngredientChanges.splice(idx, 1);

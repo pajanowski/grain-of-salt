@@ -127,8 +127,15 @@ function formatIngredientChangeFull(
 	};
 }
 
-// Internal: format a single direction change to the full FormattedChange shape.
-function buildDisplayBody(body: string, ingredients: Ingredient[]): string {
+/**
+ * Compile a stored direction body into plain display text: each
+ * `#<ingredient-uuid>` token becomes `Name (amount unit)` when the id
+ * resolves against `ingredients`; unknown ids stay as the raw `#uuid`
+ * text. Shared by every change-list surface that renders direction
+ * bodies as text (history diff, node-changes panel, graph cards,
+ * descendant-substitute panel).
+ */
+export function displayDirectionBody(body: string, ingredients: Ingredient[]): string {
 	const compiled = compileDirection(body, ingredients);
 	return compiled.compiled
 		.map((seg) => (seg.type === 'text' ? seg.value : seg.displayText))
@@ -143,7 +150,7 @@ function formatDirectionChangeFull(
 	let displayBody = body ? directionLabel(body) : '(empty)';
 
 	if (body) {
-		displayBody = buildDisplayBody(body.body, Array.from(recipeState.ingredients.values()));
+		displayBody = displayDirectionBody(body.body, Array.from(recipeState.ingredients.values()));
 	}
 
 	const label = body ? `"${displayBody}"` : '(empty)';
@@ -159,7 +166,7 @@ function formatDirectionChangeFull(
 	if (change.changeType === 'remove') {
 		const before = change.targetId ? recipeState.directions.get(change.targetId) : undefined;
 		const beforeBody = before
-			? buildDisplayBody(before.body, Array.from(recipeState.ingredients.values()))
+			? displayDirectionBody(before.body, Array.from(recipeState.ingredients.values()))
 			: '';
 		const text = before ? `REMOVE "${beforeBody}"` : `REMOVE ${label}`;
 		return { kind: 'direction', changeType: 'remove', text, segments: null, note: change.note };
@@ -169,7 +176,7 @@ function formatDirectionChangeFull(
 	// (substitute → blue, edit → amber).
 	const before = change.targetId ? recipeState.directions.get(change.targetId) : undefined;
 	const beforeBody = before
-		? buildDisplayBody(before.body, Array.from(recipeState.ingredients.values()))
+		? displayDirectionBody(before.body, Array.from(recipeState.ingredients.values()))
 		: '';
 	const beforeQuoted = before ? `"${beforeBody}"` : '';
 	const badge = change.changeType === 'substitute' ? 'SUB' : 'EDIT';
@@ -210,8 +217,18 @@ export function formatDirectionChange(
  * Format the changes within a single node, given the state BEFORE this
  * node's changes were applied. The caller is responsible for providing
  * that pre-state — see `formatChain` for the typical way to compute it.
+ *
+ * `compileIngredients` is used ONLY to resolve `#<uuid>` ingredient
+ * references inside direction bodies. `formatChain` passes the merge of
+ * the node's pre- and post-change ingredient state, so a direction added
+ * on the same node as the ingredient it references still resolves.
+ * Defaults to `priorState.ingredients`.
  */
-export function formatNode(node: RecipeNode, priorState: RecipeStateMaps): FormattedChange[] {
+export function formatNode(
+	node: RecipeNode,
+	priorState: RecipeStateMaps,
+	compileIngredients: Map<string, Ingredient> = priorState.ingredients
+): FormattedChange[] {
 	const out: FormattedChange[] = [];
 	for (const c of node.ingredientChanges) {
 		// 'substitute' is treated as 'edit' by the formatter (same before/after
@@ -225,7 +242,12 @@ export function formatNode(node: RecipeNode, priorState: RecipeStateMaps): Forma
 	}
 	for (const c of node.directionChanges) {
 		if (c.changeType === 'add' && c.targetId !== null) continue;
-		out.push(formatDirectionChangeFull(c, priorState));
+		out.push(
+			formatDirectionChangeFull(c, {
+				ingredients: compileIngredients,
+				directions: priorState.directions
+			})
+		);
 	}
 	return out;
 }
@@ -266,16 +288,29 @@ export function formatChain(nodes: RecipeNode[]): FormattedChainEntry[] {
 			directions: new Map(directions)
 		};
 
-		const changes = formatNode(node, priorState);
-
-		// Now actually apply the changes to advance the state.
+		// Advance the state first, so direction bodies can resolve
+		// `#<uuid>` refs against ingredients added by this same node.
 		for (const c of node.ingredientChanges) applyIngredientChange(ingredients, c);
 		for (const c of node.directionChanges) applyDirectionChange(directions, c);
+
+		const stateAfter: RecipeStateMaps = {
+			ingredients: new Map(ingredients),
+			directions: new Map(directions)
+		};
+
+		// Ref-resolution-only view: pre ∪ post ingredient state. Pre keeps
+		// refs to ingredients this node removed; post adds refs to
+		// ingredients this node added. Row lookups for edit/remove diffs
+		// still use the pre-state (`priorState`), so before/after labels
+		// are unaffected.
+		const compileIngredients = new Map([...priorState.ingredients, ...stateAfter.ingredients]);
+
+		const changes = formatNode(node, priorState, compileIngredients);
 
 		out.push({
 			node,
 			changes,
-			stateAfter: { ingredients: new Map(ingredients), directions: new Map(directions) }
+			stateAfter
 		});
 	}
 
